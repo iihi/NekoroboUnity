@@ -92,10 +92,18 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Player.cs` | ロボ1台ぶんの記録と見た目 |
 | `Scripts/Game/Looks.cs` | 客・家具・看板の見た目（仮） |
 | `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
-| `Scripts/Game/Hud.cs` | 画面の表示（仮）と面選び |
+| `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
+| `Scripts/Game/HudTop.cs` | 上の帯（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards |
+| `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState） |
+| `Scripts/Game/UiKit.cs` | 画面の部品（丸い札・枠・影）。CSS の数字をそのまま写すため |
+| `Editor/BackgroundStep.cs` | 確かめる用：Unity が裏にあっても遊びを進める（既定は切） |
 | `Editor/NekoroboSetup.cs` | シーンを作る |
 
 ## 確かめる用
+
+**Unity が前に出ていないと、遊んでいる途中でも1フレームも進みません。**
+外からコマンドで動かして確かめるときは、メニューの「Nekorobo → 裏でも遊びを進める（確かめる用）」を入にすると、
+裏にあるあいだ1フレームずつ送って進めます（Unity を前に戻すと、ふつうの再生に戻ります）。
 
 `Game.autoPlay = true` にすると、受け取り → 配達を自動でくり返します（まっすぐ向かうだけで、池に落ちたら跳んで上がる）。
 NPC を移すまでのつなぎです。遊ぶときは使いません。

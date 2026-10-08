@@ -15,8 +15,9 @@ namespace Nekorobo
         public Game game;
         Canvas canvas;
         RectTransform root;
-        Text title, time, orders, sales, status, center, help;
-        Image dmgBar, dishBar;
+        Text center, help;
+        HudTop top;
+        float readyAnim; string readyShown = "";
         GameObject resultPanel, menuPanel;
         Text resultText, menuText;
         readonly List<PopItem> pops = new List<PopItem>();
@@ -38,20 +39,10 @@ namespace Nekorobo
             sc.referenceResolution = new Vector2(1280, 720);
             sc.matchWidthOrHeight = 0.5f;
             root = cg.GetComponent<RectTransform>();
-            over = new Overhead(root, game ?? GetComponent<Game>());
+            over = new Overhead(root, GetComponent<Game>());
 
-            // ---- 上の帯
-            var bar = Panel(root, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -54), Vector2.zero, new Color(0.1f, 0.12f, 0.16f, 0.72f));
-            title = Txt(bar, "", 20, TextAnchor.MiddleLeft, new Vector2(0, 0), new Vector2(0.45f, 1), new Vector2(16, 0), new Vector2(0, 0));
-            time = Txt(bar, "0:00.00", 30, TextAnchor.MiddleCenter, new Vector2(0.4f, 0), new Vector2(0.6f, 1), Vector2.zero, Vector2.zero);
-            orders = Txt(bar, "", 20, TextAnchor.MiddleRight, new Vector2(0.6f, 0), new Vector2(0.8f, 1), Vector2.zero, Vector2.zero);
-            sales = Txt(bar, "", 20, TextAnchor.MiddleRight, new Vector2(0.8f, 0), new Vector2(1, 1), Vector2.zero, new Vector2(-16, 0));
-
-            // ---- 左下：機体と料理
-            var st = Panel(root, new Vector2(0, 0), new Vector2(0, 0), new Vector2(12, 12), new Vector2(300, 112), new Color(0.1f, 0.12f, 0.16f, 0.72f));
-            status = Txt(st, "", 17, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-12, -8));
-            dmgBar = BarImg(st, new Vector2(110, -18), new Color(1f, 0.42f, 0.3f));
-            dishBar = BarImg(st, new Vector2(110, -44), new Color(0.37f, 0.82f, 0.54f));
+            // ---- 上の帯と右の人ごとの札（JS版 #topbar / #pcards）
+            top = new HudTop(root, GetComponent<Game>());
 
             // ---- 右下：操作
             help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
@@ -60,8 +51,10 @@ namespace Nekorobo
             Object.Destroy(help.GetComponent<Outline>());
 
             // ---- まん中：3・2・1・スタート！
-            center = Txt(root, "", 96, TextAnchor.MiddleCenter, new Vector2(0, 0.3f), new Vector2(1, 0.7f), Vector2.zero, Vector2.zero);
-            center.color = new Color(1f, 0.85f, 0.2f);
+            // JS版の #ready：白い太字 110px（スタート！は金色 74px）。出るたびに大きい所から縮んで止まる
+            center = Txt(root, "", 110, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-400, -100), new Vector2(400, 100));
+            center.fontStyle = FontStyle.Bold;
+            var co = center.GetComponent<Outline>(); co.effectColor = new Color(0, 0, 0, 0.45f); co.effectDistance = new Vector2(3, -5);
 
             // ---- 結果
             resultPanel = Panel(root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-260, -230), new Vector2(520, 460), new Color(1, 1, 1, 0.96f)).gameObject;
@@ -110,29 +103,6 @@ namespace Nekorobo
             return t;
         }
 
-        Image BarImg(Transform parent, Vector2 pos, Color c)
-        {
-            var bg = new GameObject("BarBg", typeof(RectTransform), typeof(Image));
-            var r = bg.GetComponent<RectTransform>();
-            r.SetParent(parent, false);
-            r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 0.5f);
-            r.anchoredPosition = pos; r.sizeDelta = new Vector2(170, 12);
-            bg.GetComponent<Image>().color = new Color(1, 1, 1, 0.15f);
-            var fg = new GameObject("Bar", typeof(RectTransform), typeof(Image));
-            var fr = fg.GetComponent<RectTransform>();
-            fr.SetParent(r, false);
-            fr.anchorMin = Vector2.zero; fr.anchorMax = new Vector2(0, 1); fr.pivot = new Vector2(0, 0.5f);
-            fr.offsetMin = Vector2.zero; fr.offsetMax = Vector2.zero;
-            var im = fg.GetComponent<Image>(); im.color = c;
-            return im;
-        }
-
-        static void SetBar(Image im, float k)
-        {
-            var r = im.rectTransform;
-            r.anchorMax = new Vector2(Mathf.Clamp01(k), 1);
-        }
-
         // ------------------------------------------------------------ 呼び出し口
         public void OnStage()
         {
@@ -140,6 +110,8 @@ namespace Nekorobo
             foreach (var p in pops) Destroy(p.t.gameObject);
             pops.Clear();
             over.Clear();
+            top.Clear();
+            readyShown = "";
         }
 
         /// <summary>数字の吹き出し（売上・故障・コンボ）。JS版 pop。</summary>
@@ -197,28 +169,27 @@ namespace Nekorobo
             if (g == null || g.stage == null) return;
             MenuTick();
 
-            title.text = g.stageTitle;
-            time.text = Game.FmtTime(g.frames);
-            int doneN = 0; foreach (var o in g.orders) if (o.done) doneN++;
-            orders.text = "配達 " + doneN + " / " + g.orders.Count;
-            var L = g.LedgerOf(g.me);
-            sales.text = "売上 " + Game.Yen(L.sales) + "　損壊 " + Mathf.RoundToInt(g.shopDmg) + "%";
-            var P = g.me;
-            if (P != null)
-            {
-                string brk = P.broken != null ? "　<color=#ff6b6b>" + (P.broken == "left" ? "左" : "右") + "旋回 故障</color>" : "";
-                if (P.brokenDrive) brk += "　<color=#ff6b6b>駆動 故障</color>";
-                string dish = P.carried != null ? P.carried.dish.n + "　" + Mathf.RoundToInt(P.carried.integ) + "%" : "（運んでいない）";
-                status.supportRichText = true;
-                status.text = "機体　" + Mathf.RoundToInt(P.botDmg) + "%" + brk + "\n料理　\n" + dish
-                            + "\n所持金 " + Game.Yen(g.cash);
-                SetBar(dmgBar, P.botDmg / 100f);
-                SetBar(dishBar, P.carried != null ? P.carried.integ / 100f : 0f);
-            }
+            top.Tick();
             // 3・2・1・スタート！
             // JS版と同じ：3.999→3 / 2.999→2 / 1.999→1 / 0.999→スタート！（スタートの間はまだ動けない）
-            if (g.state == "ready") { int n = Mathf.CeilToInt(g.readyT) - 1; center.text = n > 0 ? n.ToString() : "スタート！"; }
-            else center.text = "";
+            string label = "";
+            if (g.state == "ready") { int n = Mathf.CeilToInt(g.readyT) - 1; label = n > 0 ? n.ToString() : "スタート！"; }
+            if (label != readyShown)
+            {
+                readyShown = label; readyAnim = 0;
+                center.text = label;
+                bool go = label == "スタート！";
+                center.fontSize = go ? 74 : 110;
+                center.color = go ? Mats.Hex(0xffd24a) : Color.white;
+            }
+            // 拡大 2.1 → 1（少し行き過ぎて戻る）、0.55秒
+            readyAnim += Time.deltaTime;
+            {
+                float k = Mathf.Clamp01(readyAnim / 0.55f);
+                float e = 1 + 2.7f * Mathf.Pow(k - 1, 3) + 1.7f * Mathf.Pow(k - 1, 2);   // 行き過ぎて戻る
+                center.rectTransform.localScale = Vector3.one * Mathf.LerpUnclamped(2.1f, 1f, e);
+                var cc = center.color; cc.a = Mathf.Clamp01(k * 2.5f); center.color = cc;
+            }
 
             var cam = g.mainCam;
             // 数字の吹き出し

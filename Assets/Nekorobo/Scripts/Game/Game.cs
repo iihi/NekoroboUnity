@@ -75,6 +75,9 @@ namespace Nekorobo
         {
             I = this;
             Application.targetFrameRate = 60;
+            // エディタが前に出ていないと、遊んでいる途中でも1フレームも進まなくなる（試作で踏んだ）。
+            // 確かめるときにエディタを裏へ回すことが多いので、裏でも動かす
+            Application.runInBackground = true;
             Time.fixedDeltaTime = 1f / 60f;            // JS版と同じ刻み
             Physics.gravity = new Vector3(0, -9.81f, 0);
             TF = TuneFile.Load();

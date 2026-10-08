@@ -152,7 +152,8 @@ namespace Nekorobo
             {
                 if (ui == null)
                     ui = Font.CreateDynamicFontFromOSFont(
-                        new[] { "Meiryo UI", "Meiryo", "Yu Gothic UI", "MS Gothic", "Arial" }, 32);
+                        // HTML版と同じ並び（英数字は Segoe UI、日本語は メイリオ）。前の名前に無い字は次の名前から取る
+                        new[] { "Segoe UI", "Meiryo", "Yu Gothic UI", "MS Gothic", "Arial" }, 32);
                 return ui;
             }
         }
