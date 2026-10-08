@@ -60,7 +60,7 @@ namespace Nekorobo
             var co = center.GetComponent<Outline>(); co.effectColor = new Color(0, 0, 0, 0.45f); co.effectDistance = new Vector2(3, -5);
 
             // ---- 結果
-            resultPanel = Panel(root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-260, -230), new Vector2(520, 460), new Color(1, 1, 1, 0.96f)).gameObject;
+            resultPanel = Panel(root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-330, -280), new Vector2(660, 560), new Color(1, 1, 1, 0.96f)).gameObject;
             resultText = Txt(resultPanel.transform, "", 20, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(28, 20), new Vector2(-28, -20));
             resultText.color = new Color(0.11f, 0.14f, 0.2f);
             Object.Destroy(resultText.GetComponent<Outline>());
@@ -157,7 +157,9 @@ namespace Nekorobo
             var g = game; var R = g.result;
             var s = new System.Text.StringBuilder();
             s.Append("<size=40><b>").Append(R.cleared ? "<color=#1a9e4b>STAGE CLEAR</color>" : "<color=#e53935>FAILED…</color>").Append("</b></size>\n");
-            s.Append(R.cleared ? "＼(^o^)／\n\n" : "ダメージ100%で動けなくなった\n\n");
+            bool many = g.players.Count > 1;
+            s.Append(R.cleared ? "＼(^o^)／\n\n" : (many ? "全員が動けなくなった\n\n" : "ダメージ100%で動けなくなった\n\n"));
+            resultText.fontSize = many && g.mode != "coop" ? 16 : 20;
             if (R.cleared)
             {
                 s.Append(Row("タイム", "<b>" + Game.FmtTime(g.frames) + "</b>" + (R.rec ? "　<color=#ff9500>NEW RECORD!</color>" : "")));
@@ -166,6 +168,20 @@ namespace Nekorobo
             }
             int doneN = 0; foreach (var o in g.orders) if (o.done) doneN++;
             s.Append(Row("配達できた料理", doneN + " / " + g.orders.Count));
+            if (many && g.mode != "coop")
+            {
+                RankRows(s);
+                s.Append("\n<size=14><color=#666>Enter：もう一度　N（パッドは A）：次の面　Esc：面を選ぶ</color></size>");
+                resultText.text = s.ToString();
+                resultPanel.SetActive(true);
+                return;
+            }
+            if (many)
+            {
+                // 協力：財布はひとつ。お店ひとつぶんの成績にして、誰がいくら売ったかを内訳に出す
+                foreach (var P in g.players)
+                    s.Append(Row(Dot(P) + Nm(P) + Out(P), P.delivered + "品　" + Game.Yen(P.sales)));
+            }
             s.Append(Row("売上", "<color=#1a9e4b>" + Game.Yen(R.sales) + "</color>"));
             if (R.best >= 2)
                 s.Append(Row("最高 " + R.best + "連鎖" + (R.wreck > 0 ? " → 大暴れボーナス" : "（" + g.T.wreckMin + "連鎖から付きます）"),
@@ -181,6 +197,65 @@ namespace Nekorobo
         }
 
         static string Row(string k, string v) { return k + "　　" + v + "\n"; }
+        static string Dot(Player P) { return "<color=" + UiKit.Hex(Mats.Hex(P.col)) + ">●</color> "; }
+        static string Nm(Player P) { return P.src.kind == "npc" ? "NPC（" + NpcLevels.Get(P.src.lv).name + "）" : P.name; }
+        static string Out(Player P) { return P.down ? "<color=#e53935>　" + (P.revT > 0 ? "復帰 " + Mathf.CeilToInt(P.revT) : "リタイア") + "</color>" : ""; }
+        static string YenC(float v) { return "<color=" + (v >= 0 ? "#1a9e4b" : "#e53935") + ">" + Game.Yen(v) + "</color>"; }
+
+        /// <summary>個人戦・チーム戦の順位（JS版 finish の順位表。見た目はあとで結果の画面ごと移す）。</summary>
+        void RankRows(System.Text.StringBuilder s)
+        {
+            var g = game;
+            if (g.mode == "team")
+            {
+                s.Append("<b>チーム順位</b>（差引＝チームの売上 − チームが壊したぶんの修理費・救急車）\n");
+                var ts = g.TeamsInPlay();
+                var tot = new Dictionary<int, Game.Ledger>();
+                foreach (var t in ts) tot[t] = g.LedgerOf(g.TeamLead(t));
+                ts.Sort((a, b) => tot[b].total.CompareTo(tot[a].total));
+                for (int i = 0; i < ts.Count; i++)
+                {
+                    var L = tot[ts[i]];
+                    var ms = g.players.FindAll(q => q.team == ts[i]);
+                    int dl = 0; foreach (var q in ms) dl += q.delivered;
+                    s.Append("<b>" + (i + 1) + "位 <color=" + UiKit.Hex(Mats.Hex(Game.TEAM_HEX[ts[i]])) + ">" + Game.TEAM_NAME[ts[i]] + "</color></b> "
+                             + ms.Count + "人　<b>" + YenC(L.total) + "</b>\n");
+                    s.Append("<size=13>　" + dl + "品 " + Game.Yen(L.sales)
+                             + (L.wreck > 0 ? " ／ 大暴れ" + L.best + "連鎖 " + Game.Yen(L.wreck) : "")
+                             + " ／ 損壊" + Mathf.RoundToInt(L.dmg) + "% " + Game.Yen(-L.repair)
+                             + (L.amb > 0 ? " ／ 救急車" + L.amb + "台 " + Game.Yen(-L.ambCost) : "") + "</size>\n");
+                    foreach (var P in ms)
+                        s.Append("<size=13>　" + Dot(P) + Nm(P) + "　" + P.delivered + "品 " + Game.Yen(P.sales)
+                                 + " ／ 壊" + Mathf.RoundToInt(P.shopDmg) + "%" + Out(P) + "</size>\n");
+                    s.Append("<size=13>　チームの所持金 " + YenC(g.wallets[ts[i]].cash) + "</size>\n");
+                }
+            }
+            else
+            {
+                s.Append("<b>順位</b>（差引＝売上 −（自分が壊したぶんの）修理費・救急車）\n");
+                var order = g.RankByTotal();
+                for (int i = 0; i < order.Count; i++)
+                {
+                    var P = order[i]; var L = g.LedgerOf(P);
+                    s.Append("<b>" + (i + 1) + "位</b> " + Dot(P) + Nm(P) + Out(P) + "　<b>" + YenC(L.total) + "</b>\n");
+                    s.Append("<size=13>　" + P.delivered + "品 " + Game.Yen(L.sales)
+                             + (L.wreck > 0 ? " ／ 大暴れ" + P.bestCombo + "連鎖 " + Game.Yen(L.wreck) : "")
+                             + " ／ 損壊" + Mathf.RoundToInt(L.dmg) + "% " + Game.Yen(-L.repair)
+                             + (L.amb > 0 ? " ／ 救急車" + L.amb + "台 " + Game.Yen(-L.ambCost) : "")
+                             + " ／ 機体" + Mathf.RoundToInt(P.botDmg) + "%　所持金 " + YenC(g.WalletOf(P).cash) + "</size>\n");
+                }
+            }
+            s.Append("<size=13>お店ぜんたい：損壊 " + Mathf.RoundToInt(g.shopDmg) + "%　倒れた客 " + g.guests.FindAll(x => x.hp <= 50).Count + "人</size>\n");
+            var R = g.result;
+            if (R.bonuses.Count > 0)
+            {
+                s.Append("<color=#ff9500><b>ステージ達成ボーナス</b></color>　");
+                foreach (var b in R.bonuses)
+                    s.Append((b.team != null ? b.rank + "位 " + Game.TEAM_NAME[b.team.Value] : b.P != null ? b.rank + "位 " + Dot(b.P) + Nm(b.P) : "")
+                             + " " + Game.Yen(b.amt) + "　");
+                s.Append("\n");
+            }
+        }
 
         // ------------------------------------------------------------ 毎フレーム
         void Update()

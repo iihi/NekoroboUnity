@@ -133,6 +133,7 @@ namespace Nekorobo
                 mesh.SetParent(stageRoot, false);
                 mesh.position = new Vector3(cx, 0, cz);
                 rafts.Add(new Raft { n = kv.Key, ent = e, mesh = mesh, rects = rects, cx = cx, cz = cz, cells = new List<Vector2Int>(kv.Value) });
+                foreach (var c in kv.Value) moverLanes.Add(c);       // NPC に「ここは待てば渡れる」と教える
             }
         }
 
@@ -232,6 +233,16 @@ namespace Nekorobo
                 var half = Props.Half(pr, W, D);
                 var e = MakeBody("prop", new Vector3(b.x, half.y, b.z), half, Quaternion.identity, true, 0, 0.7f, 0.1f);
                 objEnt[o] = e;
+                // NPC の道探しに「ここは通れない」と教える（動かない置き物だけ。いかだの上は一緒に動くので数えない）
+                if (!rt)
+                    for (int di = 0; di < W; di++)
+                        for (int dj = 0; dj < D; dj++)
+                        {
+                            var cp = new Vector3(b.x - W / 2 + di + 0.5f, 0, b.z + D / 2 - dj - 0.5f);
+                            var td = Tiles.Def(Tiles.At(map, cp));
+                            if (td != null && td.raft > 0) continue;
+                            propBlock.Add(CellOf(cp));
+                        }
             }
             // 見た目は回す前の大きさ（カタログの w×d）で作って、あとから回す
             var holder = new GameObject("PropHolder_" + pr.k).transform;
@@ -303,6 +314,8 @@ namespace Nekorobo
                 ent = e, speed = o.speed ?? 2.4f, dir = J.I(raw, "dir", 1), range = J.F(raw, "range", 4.0f),
                 axis = Mathf.Abs(d.x) > Mathf.Abs(d.z) ? 0 : 2, home = e.transform.position, routed = HasRoute(o),
             });
+            var mv = movers[movers.Count - 1];
+            AddMoverLanes(b, mv.axis, mv.range);                 // 動く床が通るマス（NPC の道探し用）
             objEnt[o] = e;
         }
 
@@ -358,7 +371,11 @@ namespace Nekorobo
                     if (rf != null)
                     {
                         AddRoute(o, rf.ent, rf.mesh, new Vector3(rf.cx, 0, rf.cz), true);
-                        if (routed.Count > 0 && routed[routed.Count - 1].ent == rf.ent) { var R = routed[routed.Count - 1]; R.raft = rf; R.mesh = rf.mesh; }
+                        if (routed.Count > 0 && routed[routed.Count - 1].ent == rf.ent)
+                        {
+                            var R = routed[routed.Count - 1]; R.raft = rf; R.mesh = rf.mesh;
+                            SweepRaftLanes(rf, R);
+                        }
                     }
                     continue;
                 }

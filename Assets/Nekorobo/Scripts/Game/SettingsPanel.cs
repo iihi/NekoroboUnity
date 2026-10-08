@@ -20,6 +20,8 @@ namespace Nekorobo
         readonly List<System.Action> refresh = new List<System.Action>();
         Text ledger, msg, presetInfo, shopName;
         readonly Dictionary<Preset, Image> presetBtn = new Dictionary<Preset, Image>();
+        readonly Dictionary<string, Image> modeBtn = new Dictionary<string, Image>(), vsBtn = new Dictionary<string, Image>();
+        Text vsInfo;
 
         static readonly Color BG = new Color(0.10f, 0.12f, 0.15f, 0.98f);
         static readonly Color SEC = Mats.Hex(0x9fd0ff), NOTE = Mats.Hex(0x8b93a0), INK = Mats.Hex(0xe6e9ee);
@@ -129,6 +131,26 @@ namespace Nekorobo
 
             var title = Label("ネコ配（仮）", 18, Color.white);
             Label("Unity 版 / クォータービュー検証用（Tab か × で閉じる）", 11, NOTE, false);
+
+            // ---- 対戦（JS版の右パネルの一番上と同じ）
+            Section("対戦");
+            var mrow = HRow();
+            foreach (var m in new[] { new[] { "versus", "個人戦" }, new[] { "coop", "協力" }, new[] { "team", "チーム戦" } })
+            {
+                var k = m[0];
+                modeBtn[k] = Button(mrow, m[1], () => { g.SetMode(k); Toast(Game.ModeName(k) + "にしました"); }).GetComponent<Image>();
+            }
+            var vrow = HRow();
+            vsBtn[""] = Button(vrow, "相手なし", () => g.SetOpponent("")).GetComponent<Image>();
+            foreach (var lv in NpcLevels.All)
+            {
+                var k = lv.k;
+                vsBtn[k] = Button(vrow, lv.name, () => g.SetOpponent(k)).GetComponent<Image>();
+            }
+            vsInfo = Label("", 11, NOTE, false);
+            Label("オーダーは取り合いです。カウンターに先に着いた方が料理を取ります。相手にぶつけて料理を乱すこともできます。"
+                + "個人戦は売上も修理費も個人ごと、協力はお店ひとつぶん、チーム戦は青と赤（枠は交互に分ける）。"
+                + "4人まで遊ぶときは、Game の participants に key,pad0,npc-normal のように書きます。", 11, NOTE, false);
 
             // ---- 遊びの調子
             Section("遊びの調子（まとめて切り替え）");
@@ -335,6 +357,12 @@ namespace Nekorobo
                         + "\nBot損壊　" + (g.me != null ? Mathf.RoundToInt(g.me.botDmg) : 0) + "%";
             shopName.text = g.shop.n + "（" + g.shop.fricLabel + "）";
             foreach (var kv in presetBtn) kv.Value.color = kv.Key == g.preset ? Mats.Hex(0x2f80b8) : Mats.Hex(0x39404c);
+            foreach (var kv in modeBtn) kv.Value.color = kv.Key == g.mode ? Mats.Hex(0x2f80b8) : Mats.Hex(0x39404c);
+            var opp = g.Opponent();
+            foreach (var kv in vsBtn) kv.Value.color = kv.Key == opp ? Mats.Hex(0x2f80b8) : Mats.Hex(0x39404c);
+            vsInfo.text = opp == null
+                ? "参加者：" + string.Join("・", g.slots.ConvertAll(s => s.Name).ToArray())
+                : opp == "" ? "" : NpcLevels.Get(opp).ds + "　NPC は人間と同じ5つのボタンだけで動きます（速く動く裏技はありません）。";
             presetInfo.text = g.preset == Preset.普通 ? "コードに書いてある内蔵の数値。企画書の想定に近い、詰めて遊ぶ調子です。"
                             : g.preset == Preset.爽快 ? "速くて壊れにくく、客がよく飛びます。見ている人も楽しい大味な調子です。"
                             : g.preset == Preset.カスタム ? "保存してある自分の数値（tune.json）。つまみで作って「既定として保存」を押すとここに入ります。"

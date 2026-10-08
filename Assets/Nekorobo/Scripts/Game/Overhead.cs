@@ -181,8 +181,8 @@ namespace Nekorobo
                 float left = Mathf.Max(0, 100 - P.botDmg);
                 Project(rp + Vector3.up * 0.82f, m.r);
                 SetFill(m.hp, left / 100f, P.down ? Mats.Hex(0x5f6672) : left > 50 ? GREEN : (left > 25 ? ORANGE : RED));
-                m.nm.text = P.down ? (P.revT > 0 ? P.name + " 復帰まで " + Mathf.CeilToInt(P.revT) : P.name + " リタイア")
-                                   : P.name + " " + Mathf.RoundToInt(left) + "%";
+                m.nm.text = P.down ? (P.revT > 0 ? P.Label + " 復帰まで " + Mathf.CeilToInt(P.revT) : P.Label + " リタイア")
+                                   : P.Label + " " + Mathf.RoundToInt(left) + "%";
                 FitPill(m.nm);
                 string bad = "";
                 if (P.broken != null) bad += P.broken == "left" ? "左" : "右";
@@ -215,7 +215,7 @@ namespace Nekorobo
             // 名前の札（丸い札に載せる。影だけだと明るい床の上で読めない）
             var pill = Img(m.r, PILL, new Vector2(60, 16));
             pill.rectTransform.anchoredPosition = new Vector2(0, 9);
-            m.nm = Label(pill.transform, P.name, 12, Mats.Hex(P.col));
+            m.nm = Label(pill.transform, P.Label, 12, Mats.Hex(P.col));
             m.hp = MakeBar(m.r, new Vector2(44, 7), Mats.Hex(0x2b313c), new Color(0, 0, 0, 0.55f));
             m.hp.r.anchoredPosition = new Vector2(0, -4);
             m.brk = Label(m.r, "", 12, Mats.Hex(0xff5252));
@@ -231,7 +231,7 @@ namespace Nekorobo
             // 配膳先の印
             var tg = Img(layer, PILL, new Vector2(96, 22));
             m.tgt = tg.rectTransform;
-            m.tgtText = Label(tg.transform, many ? "▼ " + P.name : "▼ Target!", P == g.me ? 17 : 13,
+            m.tgtText = Label(tg.transform, many ? "▼ " + P.Label : "▼ Target!", P == g.me ? 17 : 13,
                               many ? Mats.Hex(P.col) : Mats.Hex(0xffe07a));
             FitPill(m.tgtText);
             m.tgt.gameObject.SetActive(false);

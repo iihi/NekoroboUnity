@@ -12,7 +12,7 @@ namespace Nekorobo
     ///
     /// 遊べる範囲（1面ぶん）：受け取り → 配達 → 結果。ぶつかり（客の吹っ飛び・家具の損壊・
     /// 機体の故障・料理の乱れ）、池・溶岩・海・穴、凍りの床、ジャンプ台、場所ごとの床。
-    /// まだの物：アイテム・NPC・対戦・ショップ・会話と案内・車・動く床・いかだ・モデル・音。
+    /// まだの物：ショップ・会話と案内・オンライン・音。
     /// </summary>
     public partial class Game : MonoBehaviour
     {
@@ -24,6 +24,14 @@ namespace Nekorobo
         [Header("コースを使わずに面を直接選ぶとき（stages/ のファイル名。空ならコース）")]
         public string stageFile = "";
         public string shopName = "カフェ";
+        [Header("面を直接選んだときの参加者（JS版 ?p= と同じ書き方。key / pad0〜3 / npc-serious・normal・wild・easy）")]
+        public string participants = "key";
+        [Header("ルール（versus 個人戦 / coop 協力 / team チーム戦）")]
+        public string mode = "versus";
+        /// <summary>いまの操作の枠（JS版 SLOTS）。コースの面はライバルの指定で決まる。</summary>
+        [System.NonSerialized] public List<PlayerSrc> slots = new List<PlayerSrc> { new PlayerSrc() };
+        /// <summary>通算で終えた面の数。ステージボーナスの数えに使う（JS版 RUN.done）。</summary>
+        [System.NonSerialized] public int runDone;
 
         [Header("遊びの調子（JS版の右パネルと同じ3つ。F2 で切り替え）")]
         public Preset preset = Preset.普通;
@@ -71,7 +79,10 @@ namespace Nekorobo
             public bool cleared, rec;
             public float sales, repair, ambCost, dmg, wreck, total, bonus;
             public int amb, best, delivered;
+            public List<Bonus> bonuses = new List<Bonus>();
         }
+        /// <summary>ステージボーナスの1行（人・チーム・みんな）。</summary>
+        public class Bonus { public Player P; public int? team; public int rank, amt; public bool solo; }
 
         // ================================================================ 起動
         void Awake()
@@ -161,6 +172,16 @@ namespace Nekorobo
             stage = c;
             shop = Shops.Find(entry.shop) ?? Shops.All[0];
             stageTitle = "STAGE " + (courseIndex + 1) + "　" + (entry.title ?? c.n);
+            // ストーリーは1人用。ライバルが居る面だけ、NPC を足して個人戦にする（JS版 applyStage）
+            slots = new List<PlayerSrc> { new PlayerSrc() };
+            var rv = entry.raw != null ? entry.raw["rivals"] as Newtonsoft.Json.Linq.JArray : null;
+            if (rv != null)
+                foreach (var lv in rv)
+                {
+                    var k = NpcLevels.Canon((string)lv);
+                    slots.Add(new PlayerSrc { kind = "npc", lv = NpcLevels.Known(k) ? k : "normal" });
+                }
+            mode = "versus";
             Rebuild();
         }
 
@@ -173,6 +194,8 @@ namespace Nekorobo
             shop = Shops.Find(shopN) ?? Shops.All[0];
             stageTitle = c.n + "（" + shop.n + "）";
             stageFile = file;
+            slots = PlayerSrc.Parse(participants);
+            if (slots.Count == 0) slots.Add(new PlayerSrc());
             Rebuild();
         }
 
@@ -186,6 +209,8 @@ namespace Nekorobo
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
             routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
+            moverLanes.Clear(); propBlock.Clear();
+            npcRnd = new System.Random(20251115);
             warned.Clear();
             // ステージごとの数値の上書き（その面だけ）。前の面の上書きは必ず戻してから当てる（JS版 TUNE_BACK）
             if (tuneBack != null) { T.CopyFrom(tuneBack); tuneBack = null; }
@@ -194,7 +219,10 @@ namespace Nekorobo
             state = "ready"; readyT = 3.999f;
             ModelStore.ResetSeq(stage.n);                  // 人違いのモデルを配る順番を、面ごとに数え直す
             BuildStage();
-            me = players.Count > 0 ? players[0] : null;
+            // 画面の詳しい表示は1人ぶんしか出せないので、キーボードの人を優先し、
+            // 居なければ最初の人間、それも居なければ先頭の NPC（JS版と同じ）
+            me = players.Find(q => q.src.kind == "key") ?? players.Find(q => q.src.kind != "npc")
+                 ?? (players.Count > 0 ? players[0] : null);
             foreach (var P in players) Say(P, "ガンバルにゃ！", 2.2f);
             SyncCounterPlates();
             FitCamera();
@@ -202,12 +230,32 @@ namespace Nekorobo
         }
 
         // ================================================================ ロボ
+        // チームの中で人を見分けられるよう、同じ系統で濃さを変える（足元のリングと本体の色）
+        static readonly int[][] TEAM_COL = { new[] { 0x2f9bff, 0x8fd6ff, 0x1d5fd0, 0x5ec4e8 },
+                                             new[] { 0xff5a5a, 0xffa58a, 0xc8302f, 0xff7fa6 } };
+        public static readonly string[] TEAM_NAME = { "青チーム", "赤チーム" };
+        public static readonly int[] TEAM_HEX = { 0x1f7fe0, 0xe0413a };
+
         void BuildPlayers(float fr)
         {
-            // いまは1人（キーボード＋1台目のパッド）。NPC と多人数はあとで
-            var P = new Player(0);
+            foreach (var src in slots)
+            {
+                if (src == null || src.kind == "off") continue;
+                int n = players.Count;
+                var P = new Player(n);
+                P.src = src;
+                // チーム戦はチームの色（同じチームの中で濃さを変える）。枠にチームが無ければ交互に分ける
+                P.team = src.team ?? n % 2;
+                if (mode == "team") P.col = TEAM_COL[P.team][players.FindAll(q => q.team == P.team).Count % 4];
+                if (src.kind == "npc") P.npc = new NpcBrain(NpcLevels.Get(src.lv));
+                BuildRobot(P, fr);
+            }
+        }
+
+        void BuildRobot(Player P, float fr)
+        {
             Vector3 pos; float rot;
-            SpawnAt(0, out pos, out rot);
+            SpawnAt(P.idx, out pos, out rot);
             P.spawn = pos; P.spawnRot = rot;
             const float RH = 0.52f;
             var R = MakeBody("robot", pos + new Vector3(0, RH, 0), new Vector3(0.28f, RH, 0.24f), Coord.RotFace(rot),
@@ -248,7 +296,8 @@ namespace Nekorobo
         }
 
         // ================================================================ 入力
-        static BotInput ReadInput()
+        /// <summary>キーボード（＋パッドを枠に割り当てていなければ、つないである全部のパッド）。</summary>
+        BotInput ReadInput()
         {
             var i = new BotInput();
             var kb = Keyboard.current;
@@ -264,9 +313,24 @@ namespace Nekorobo
                 i.cycleBack = kb.cKey.isPressed;
                 i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
             }
-            // パッド（1台目）。A/R2＝加速、B/L2＝バック、X＝ジャンプ、Y＝アイテム（JS版と同じ割り当て）
-            var gp = Gamepad.current;
-            if (gp != null)
+            // パッドを枠に割り当てているときは、キーボードの枠にパッドを流し込まない
+            // （流すと1台目のパッドが2人ぶん動かしてしまう）。1人で遊ぶときはどのパッドでも動く
+            if (!slots.Exists(s => s.kind == "pad"))
+                foreach (var gp in Gamepad.all) ReadPad(gp, ref i);
+            return i;
+        }
+
+        /// <summary>n 台目のパッドだけ。</summary>
+        static BotInput ReadPadInput(int n)
+        {
+            var i = new BotInput();
+            if (n < Gamepad.all.Count) ReadPad(Gamepad.all[n], ref i);
+            return i;
+        }
+
+        /// <summary>A/R2＝加速、B/L2＝バック、X＝ジャンプ、Y＝アイテム、L1/R1＝持ち替え（JS版と同じ割り当て）。</summary>
+        static void ReadPad(Gamepad gp, ref BotInput i)
+        {
             {
                 const float dz = 0.35f;
                 var st = gp.leftStick.ReadValue();
@@ -281,17 +345,18 @@ namespace Nekorobo
                 if (gp.rightShoulder.isPressed) i.cycle = true;
                 if (gp.leftShoulder.isPressed) i.cycleBack = true;
             }
-            return i;
         }
 
         void Update()
         {
             if (stage == null || players.Count == 0) return;
             // 入力は毎フレーム拾う（FixedUpdate だと押した瞬間を取りこぼす）
-            var inp = ReadInput();
-            if (autoPlay && me != null) autoTarget = NextGoal();
-            if (autoTarget != null && me != null) inp = AutoDrive(me, autoTarget.Value);
-            foreach (var P in players) P.input = inp;
+            var keyIn = ReadInput();
+            foreach (var P in players)
+            {
+                if (P.npc != null) continue;                        // NPC は FixedUpdate で決める
+                P.input = P.src.kind == "pad" ? ReadPadInput(P.src.index) : keyIn;
+            }
 
             var kb = Keyboard.current;
             if (kb != null && !hud.MenuOpen)
@@ -312,34 +377,11 @@ namespace Nekorobo
             if (g != null && state == "result" && !hud.MenuOpen && g.buttonSouth.wasPressedThisFrame) NextStage();
         }
 
-        // ---- 確かめる用の自動運転。外から（エディタのコマンドで）行き先を入れると、そこへ向かって走る。
-        // 遊ぶときは使わない。NPC を移すまでのつなぎ。
-        [System.NonSerialized] public Vector3? autoTarget;
-        [System.NonSerialized] public bool autoPlay;       // 受け取り → 配達 を自動でくり返す
+        // ---- 確かめる用の自動運転。自分のロボを NPC（まじめ）に運転させる。遊ぶときは使わない
+        [System.NonSerialized] public bool autoPlay;
 
         /// <summary>受取位置（カウンターの正面）。</summary>
         public Vector3 PickupPoint() { return counterPos + counterRot * new Vector3(PickupOffset, 0, 0); }
-
-        /// <summary>いま運んでいる料理の届け先（無ければ受取位置）。</summary>
-        public Vector3 NextGoal()
-        {
-            if (me != null && me.carried != null) return me.carried.order.guest.rb.position;
-            return PickupPoint();
-        }
-
-        BotInput AutoDrive(Player P, Vector3 to)
-        {
-            var i = new BotInput();
-            var p = P.ent.rb.position;
-            var d = to - p; d.y = 0;
-            if (d.magnitude < 0.3f) return i;
-            var f = P.ent.rb.rotation * Vector3.forward; f.y = 0;
-            float ang = Vector3.SignedAngle(f, d, Vector3.up);   // 正 = 右回り
-            if (ang > 8) i.right = true; else if (ang < -8) i.left = true;
-            i.up = Mathf.Abs(ang) < 50;
-            i.jump = P.ent.wet > 0.4f;                         // 池に落ちたら跳んで上がる
-            return i;
-        }
 
         /// <summary>調子を切り替える（数値を入れ直して、面を作り直す）。</summary>
         public void SetPreset(Preset p)
@@ -361,6 +403,27 @@ namespace Nekorobo
         }
 
         public void OpenStageMenu() { hud.OpenStageMenu(); }
+
+        public static string ModeName(string m) { return m == "coop" ? "協力" : m == "team" ? "チーム戦" : "個人戦"; }
+
+        /// <summary>ルールを切り替える（右パネル。その場で作り直す）。</summary>
+        public void SetMode(string m) { mode = m; Rebuild(); }
+
+        /// <summary>相手の NPC を選ぶ（右パネル。"" なら1人）。JS版 vsSel と同じく、いまの面のまま作り直す。</summary>
+        public void SetOpponent(string lv)
+        {
+            participants = string.IsNullOrEmpty(lv) ? "key" : "key,npc-" + lv;
+            slots = PlayerSrc.Parse(participants);
+            Rebuild();
+        }
+
+        /// <summary>いまの相手（キーボード1人＋NPC1人ならその強さ、1人なら ""、それ以外は null）。</summary>
+        public string Opponent()
+        {
+            if (slots.Count == 1 && slots[0].kind == "key") return "";
+            if (slots.Count == 2 && slots[0].kind == "key" && slots[1].kind == "npc") return slots[1].lv;
+            return null;
+        }
 
         public void ApplyShadows() { if (sun != null) sun.shadows = cam.shadow ? LightShadows.Soft : LightShadows.None; }
 
@@ -448,6 +511,14 @@ namespace Nekorobo
 
             foreach (var P in players) FixSlot(P);                 // 選んでいるアイテムを全員ぶん正しく保つ
             if (state == "play") foreach (var P in players) if (P.invT > 0) P.invT = Mathf.Max(0, P.invT - dt);
+            // 確かめる用の自動運転（自分のロボを NPC にする／戻す）
+            if (me != null && me.src.kind != "npc")
+            {
+                if (autoPlay && me.npc == null) me.npc = new NpcBrain(NpcLevels.Get("serious"));
+                if (!autoPlay && me.npc != null) { me.npc = null; me.input = new BotInput(); }
+            }
+            // NPC の判断。ここで5つのフラグを立てるだけで、あとは人間と同じ道を通る
+            foreach (var P in players) if (P.npc != null && !P.down) DriveNpc(P, dt);
             if (state == "play") foreach (var P in players) Drive(P, dt);
 
             UpdateHazards(dt);
@@ -1025,13 +1096,21 @@ namespace Nekorobo
         // ================================================================ 終わり
         public struct Ledger { public float sales, repair, ambCost, dmg, wreck, total; public int amb, best; }
 
+        /// <summary>
+        /// 収支（JS版 ledger）。
+        ///   個人戦：自分の売上 − 自分が壊したぶんの修理費 − 自分が倒した客の救急車
+        ///   協力  ：お店ひとつぶん（全員の売上と、店全体の損壊）
+        ///   チーム戦：チームの全員ぶんを足したもの
+        /// </summary>
         public Ledger LedgerOf(Player P)
         {
+            if (P == null) P = me;
             var L = new Ledger();
-            L.sales = 0; L.wreck = 0; L.best = 0;
-            foreach (var q in players) { L.sales += q.sales; L.wreck += q.wreck; L.best = Mathf.Max(L.best, q.bestCombo); }
-            L.dmg = shopDmg;
-            foreach (var g in guests) if (g.hp <= 50) L.amb++;
+            bool solo = P != null && mode != "coop" && players.Count > 1;
+            var grp = !solo ? players : mode == "team" ? players.FindAll(q => q.team == P.team) : new List<Player> { P };
+            foreach (var q in grp) { L.sales += q.sales; L.wreck += q.wreck; L.best = Mathf.Max(L.best, q.bestCombo); }
+            if (solo) { foreach (var q in grp) { L.dmg += q.shopDmg; L.amb += q.hurt; } }
+            else { L.dmg = shopDmg; foreach (var g in guests) if (g.hp <= 50) L.amb++; }
             float share = 1f / (1 + T.repairShare * (players.Count - 1));
             L.repair = L.dmg * T.repairPerPct * shop.repair * share;
             L.ambCost = (T.countAmb ? L.amb * T.ambulance : 0) * share;
@@ -1049,17 +1128,89 @@ namespace Nekorobo
                 cleared = cleared, sales = L.sales, repair = L.repair, ambCost = L.ambCost, dmg = L.dmg,
                 wreck = L.wreck, total = L.total, amb = L.amb, best = L.best, delivered = me != null ? me.delivered : 0,
             };
-            cash = Mathf.Round(cash + L.total);
-            // ストーリー：クリアした面ごとに決まった額（ショップを移すまでは所持金に足すだけ）
-            if (cleared && entry != null && entry.bonus > 0) { cash += entry.bonus; result.bonus = entry.bonus; }
+            // 収支はそれぞれの財布へ。協力なら全員が同じ財布なので1回だけ入れる。赤字はそのまま引く
+            var paid = new HashSet<Wallet>();
+            foreach (var P in players)
+            {
+                var W = WalletOf(P);
+                if (!paid.Add(W)) continue;
+                W.cash = Mathf.Round(W.cash + LedgerOf(P).total);
+            }
+            // ---- ステージボーナス
+            runDone++;
+            if (entry != null && entry.raw != null && entry.raw["bonus"] != null)
+            {
+                // ストーリー：クリアした面ごとに決まった額（ライバルが居ても順位で変えない）
+                if (cleared && entry.bonus > 0)
+                {
+                    WalletOf(me).cash += entry.bonus;
+                    result.bonuses.Add(new Bonus { amt = entry.bonus, solo = true });
+                }
+            }
+            else if (T.bonusEvery > 0 && T.stageBonus > 0 && runDone % Mathf.Max(1, Mathf.RoundToInt(T.bonusEvery)) == 0)
+            {
+                // N面ごと。個人戦・チーム戦は順位で増減する（1位は 1+幅、最下位は 1−幅）
+                if (mode == "coop" || players.Count <= 1)
+                {
+                    int amt = Mathf.RoundToInt(T.stageBonus);
+                    WalletOf(players[0]).cash += amt;
+                    result.bonuses.Add(new Bonus { amt = amt });
+                }
+                else if (mode == "team")
+                {
+                    var ts = TeamsInPlay();
+                    var tot = new Dictionary<int, float>();
+                    foreach (var tm in ts) tot[tm] = LedgerOf(TeamLead(tm)).total;
+                    ts.Sort((a, b) => tot[b].CompareTo(tot[a]));
+                    for (int i = 0; i < ts.Count; i++)
+                    {
+                        float k = ts.Count > 1 ? (1 + T.bonusSpread) - (2 * T.bonusSpread) * (i / (float)(ts.Count - 1)) : 1;
+                        int amt = Mathf.RoundToInt(T.stageBonus * k);
+                        wallets[ts[i]].cash += amt;
+                        result.bonuses.Add(new Bonus { team = ts[i], rank = i + 1, amt = amt });
+                    }
+                }
+                else
+                {
+                    var order = RankByTotal();
+                    for (int i = 0; i < order.Count; i++)
+                    {
+                        float k = (1 + T.bonusSpread) - (2 * T.bonusSpread) * (i / (float)(order.Count - 1));
+                        int amt = Mathf.RoundToInt(T.stageBonus * k);
+                        WalletOf(order[i]).cash += amt;
+                        result.bonuses.Add(new Bonus { P = order[i], rank = i + 1, amt = amt });
+                    }
+                }
+            }
+            foreach (var b in result.bonuses) if (b.P == null || b.P == me) result.bonus += b.amt;
             if (cleared)
             {
                 int best = PlayerPrefs.GetInt(BestKey(), 0);
                 if (best == 0 || frames < best) { result.rec = true; PlayerPrefs.SetInt(BestKey(), frames); }
             }
-            foreach (var P in players) SetFace(P, cleared ? "happy" : "dead", 99);
+            foreach (var P in players) { SetFace(P, cleared ? "happy" : "dead", 99); if (P.aim != null) ClearAim(P); }
             hud.ShowResult();
         }
+
+        /// <summary>差引の大きい順（個人戦の順位）。同点は元の並び（JS の sort は安定）。</summary>
+        public List<Player> RankByTotal()
+        {
+            var order = new List<Player>(players);
+            var tot = new Dictionary<Player, float>();
+            foreach (var P in players) tot[P] = LedgerOf(P).total;
+            order.Sort((a, b) => { int c = tot[b].CompareTo(tot[a]); return c != 0 ? c : a.idx.CompareTo(b.idx); });
+            return order;
+        }
+        public List<int> TeamsInPlay()
+        {
+            var ts = new List<int>();
+            foreach (var P in players) if (!ts.Contains(P.team)) ts.Add(P.team);
+            ts.Sort();
+            return ts;
+        }
+        public Player TeamLead(int t) { return players.Find(q => q.team == t); }
+        /// <summary>この画面で動かしている人（キーボードとパッド）が2人以上か。</summary>
+        public bool MultiLocal() { return players.FindAll(q => q.src.kind == "key" || q.src.kind == "pad").Count > 1; }
 
         public string BestKey() { return "nekorobo.best|" + shop.n + "|" + stage.n; }
 

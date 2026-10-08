@@ -27,6 +27,53 @@ namespace Nekorobo
     }
 
     /// <summary>
+    /// 操作の枠。ロボは5つのフラグしか見ないので、その出どころを枠ごとに決める（JS版 SLOTS の1つ）。
+    ///   key … キーボード（パッドを枠に割り当てていなければ、つないである全部のパッドも）
+    ///   pad … index 台目のパッド
+    ///   npc … NPC（lv は強さ。serious / normal / wild / easy）
+    /// </summary>
+    public class PlayerSrc
+    {
+        public string kind = "key";
+        public int index;
+        public string lv;
+        public int? team;                // チーム戦の青(0)・赤(1)。無ければ交互に分ける
+
+        public string Name
+        {
+            get
+            {
+                return kind == "pad" ? "パッド" + (index + 1)
+                     : kind == "npc" ? "NPC・" + NpcLevels.Get(lv).name : "キーボード";
+            }
+        }
+
+        /// <summary>"key,pad0,npc-normal,off" を枠の並びに直す（JS版 parseSlots）。使わない枠と重なったパッドは落とす。</summary>
+        public static System.Collections.Generic.List<PlayerSrc> Parse(string str)
+        {
+            var o = new System.Collections.Generic.List<PlayerSrc>();
+            var usedPad = new System.Collections.Generic.HashSet<int>();
+            bool key = false;
+            foreach (var raw in (str ?? "").Split(','))
+            {
+                var v = raw.Trim().ToLowerInvariant();
+                if (v.Length == 0 || v == "off") continue;
+                if (v == "key") { if (key) continue; key = true; o.Add(new PlayerSrc()); continue; }
+                if (v.Length == 4 && v.StartsWith("pad") && char.IsDigit(v[3]))
+                {
+                    int i = v[3] - '0';
+                    if (!usedPad.Add(i)) continue;
+                    o.Add(new PlayerSrc { kind = "pad", index = i }); continue;
+                }
+                if (v.StartsWith("npc-") && NpcLevels.Known(v.Substring(4)))
+                    o.Add(new PlayerSrc { kind = "npc", lv = NpcLevels.Canon(v.Substring(4)) });
+            }
+            if (o.Count > 4) o.RemoveRange(4, o.Count - 4);
+            return o;
+        }
+    }
+
+    /// <summary>
     /// ロボ1台ぶんの記録。JS版 newPlayer と同じ中身（まだ使わない項目は省いてある）。
     /// </summary>
     public class Player
@@ -59,6 +106,12 @@ namespace Nekorobo
         public string slot;              // 選んでいるアイテム
         public Vector3? aim;             // 弾道ミサイルの照準（出している間だけ）
         public Transform aimMesh;
+        public PlayerSrc src = new PlayerSrc();
+        public int team;                 // チーム戦の青(0)・赤(1)
+        public NpcBrain npc;             // NPC のときだけ入る
+
+        /// <summary>頭の上・一覧に出す名前（NPC は「NPC」）。</summary>
+        public string Label { get { return src.kind == "npc" ? "NPC" : name; } }
 
         // 見た目
         public RobotLook look;

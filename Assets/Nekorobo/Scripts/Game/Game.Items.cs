@@ -76,7 +76,12 @@ namespace Nekorobo
 
         // ---- 財布（人ごと。協力・チーム戦は対戦を移すときに分ける）
         public Wallet[] wallets;
-        public Wallet WalletOf(Player P) { return wallets[P != null ? Mathf.Clamp(P.idx, 0, 3) : 0]; }
+        /// <summary>その人の財布。協力のときは全員1つ目、チーム戦はチームの番号（青＝0・赤＝1）を見る。</summary>
+        public Wallet WalletOf(Player P)
+        {
+            if (P == null || mode == "coop") return wallets[0];
+            return wallets[mode == "team" ? Mathf.Clamp(P.team, 0, 1) : Mathf.Clamp(P.idx, 0, 3)];
+        }
         void NewWallets() { wallets = new[] { new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash) }; }
 
         // ================================================================ 選ぶ・使う
@@ -337,6 +342,7 @@ namespace Nekorobo
                 foreach (var Q in players)
                 {
                     if (Q == P || Q.carried == null || Q.down) continue;
+                    if (mode == "team" && Q.team == P.team) continue;      // 味方からは取らない
                     var qp = Q.ent.rb.position;
                     if (Mathf.Abs(qp.y - m.y) > 1.3f || new Vector2(qp.x - m.x, qp.z - m.z).magnitude > T.boomR) continue;
                     b.dish = Q.carried;

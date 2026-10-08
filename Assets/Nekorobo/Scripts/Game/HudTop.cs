@@ -8,7 +8,7 @@ namespace Nekorobo
     /// 上の帯と右の人ごとの札。JS版の #topbar と #pcards（updateHUD / updatePlayerCards）を写したもの。
     ///
     ///   上の帯（高さ78px。カメラの自動調整がこのぶんを空けている）
-    ///     面の名前・店と摩擦・配膳と所持金 ／ 店舗ダメージ ／ NEXT ／ コンボ ／（空き）／ タイム ／ お金
+    ///     面の名前・店と摩擦・配膳と所持金 ／ 店舗ダメージ ／ NEXT ／ コンボ ／ 対戦の一覧 ／（空き）／ タイム ／ お金
     ///   右の札（人ごと）
     ///     名前と操作 ／ 運んでいる料理の絵と今の値段（手ぶら）／ アイテム ／ 配った数と所持金
     /// </summary>
@@ -23,12 +23,16 @@ namespace Nekorobo
 
         Text stageName, shopSub, progress, shopTxt, timeTxt, mSales, mWreck, mAmb, mCost, mTotal, combo;
         Image shopFill;
-        GameObject comboCard;
+        GameObject comboCard, shopBar, moneyCard;
+        RectTransform vsCard;
+        readonly List<VsRow> vsRows = new List<VsRow>();
+        Text vsTeam;
         readonly List<NextItem> next = new List<NextItem>();
         RectTransform pcards;
         readonly List<PCard> cards = new List<PCard>();
 
         class NextItem { public GameObject go; public CanvasGroup cg; public Image dish; public Text name; }
+        class VsRow { public Player P; public GameObject go; public Text nm, src, dl, money, sd, hpn, bag, outT; public Image hp; public GameObject hpBack; }
         class PCard
         {
             public Player P; public GameObject go; public Image border; public Text nm, src, dn, bag, dl, cash, down;
@@ -53,6 +57,7 @@ namespace Nekorobo
 
             // 店舗ダメージ
             var c2 = UiKit.Card(bar, CARD, CARD_B, 2, 15, "Bars");
+            shopBar = c2.gameObject;
             UiKit.HRow(c2.gameObject, 8, UiKit.Pad(12, 12, 9, 9));
             Image track;
             shopFill = UiKit.Bar(c2.transform, Mats.Hex(0x2b313c), Mats.Hex(0xff8a00), out track);
@@ -88,6 +93,15 @@ namespace Nekorobo
             combo = UiKit.Label(c4.transform, "", 17, Color.white);
             comboCard = c4.gameObject;
 
+            // 対戦の一覧（2人以上のとき）。1行に「色・名前・操作・配膳数・差引・壊した%・耐久・手持ち」
+            // 詳しい表示は自分のぶんしか出せないので、ここが他の人の唯一の手がかりになる
+            var c7 = UiKit.Card(bar, CARD, CARD_B, 2, 15, "Vs");
+            UiKit.VCol(c7.gameObject, 0, UiKit.Pad(10, 10, 3, 3), TextAnchor.MiddleLeft);
+            vsCard = c7.rectTransform;
+            vsTeam = UiKit.Label(c7.transform, "", 10, Color.white);
+            UiKit.Size(vsTeam, -1, 12);
+            vsCard.gameObject.SetActive(false);
+
             // あいだを空ける（タイムとお金は右端）
             var sp = UiKit.Rect(bar, "Spacer");
             UiKit.Size(sp, 0, 1, 1);
@@ -100,6 +114,7 @@ namespace Nekorobo
 
             // お金（明るい地。ここがいちばん見られる数字）
             var c6 = UiKit.Card(bar, Mats.Hex(0xfffdf6), Color.white, 2, 15, "Money");
+            moneyCard = c6.gameObject;
             UiKit.VCol(c6.gameObject, 0, UiKit.Pad(12, 12, 5, 5));
             UiKit.Size(c6, -1, -1, -1, 196);
             mSales = MoneyRow(c6.transform, "売上", out mWreck, 13);
@@ -185,10 +200,20 @@ namespace Nekorobo
             int total = g.course != null && g.entry != null ? g.course.stages.Count : 1;
             shopSub.text = (total > 1 ? "STAGE " + (g.courseIndex + 1) + "/" + total + "　" : "")
                          + g.shop.n + "（摩擦：" + g.shop.fricLabel + "）";
-            progress.text = "配膳 " + (g.me != null ? g.me.delivered : 0) + " / " + g.orders.Count
-                          + "　所持金 " + Game.Yen(g.cash);
-            UiKit.SetBar(shopFill, g.shopDmg / 100f);
-            shopTxt.text = "店舗ダメージ " + Mathf.RoundToInt(g.shopDmg) + "%";
+            // 同じ画面で2人以上なら、所持金は誰のものか分からなくなるので出さない（人ごとの札にある）
+            int doneN = 0; foreach (var o in g.orders) if (o.done) doneN++;
+            progress.text = g.MultiLocal()
+                ? "配膳 " + doneN + " / " + g.orders.Count
+                : "配膳 " + (g.me != null ? g.me.delivered : 0) + " / " + g.orders.Count
+                  + "　" + (g.players.Count > 1 && g.me != null ? g.me.name + "の" : "") + "所持金 " + Game.Yen(g.cash);
+            // 個人戦で複数人のときは1人ぶんしか出せないので畳む（一覧に全員ぶんを出す）
+            bool soloDmg = g.mode != "coop" && g.players.Count > 1;
+            shopBar.SetActive(!soloDmg);
+            float myDmg = soloDmg && g.me != null ? g.me.shopDmg : g.shopDmg;
+            UiKit.SetBar(shopFill, myDmg / 100f);
+            shopTxt.text = "店舗ダメージ " + Mathf.RoundToInt(myDmg) + "%";
+            moneyCard.SetActive(!(g.MultiLocal() && g.mode != "coop"));
+            TickVs();
             for (int i = 0; i < next.Count; i++)
             {
                 var o = g.oi + i < g.orders.Count ? g.orders[g.oi + i] : null;
@@ -224,20 +249,118 @@ namespace Nekorobo
             mTotal.text = Game.Yen(L.total);
             mTotal.color = L.total >= 0 ? GREEN_D : RED_D;
 
-            // ---- 右の人ごとの札
-            if (cards.Count != g.players.Count || (cards.Count > 0 && cards[0].P != g.players[0]))
+            // ---- 右の人ごとの札（この画面で動かしている人＝キーボードとパッドだけ。NPC は出さない）
+            var loc = g.players.FindAll(q => q.src.kind == "key" || q.src.kind == "pad");
+            bool same = cards.Count == loc.Count;
+            for (int i = 0; same && i < loc.Count; i++) if (cards[i].P != loc[i]) same = false;
+            if (!same)
             {
                 Clear();
-                foreach (var Q in g.players) cards.Add(MakeCard(Q));
+                foreach (var Q in loc) cards.Add(MakeCard(Q));
             }
             foreach (var c in cards) TickCard(c);
+        }
+
+        // ------------------------------------------------------------ 対戦の一覧
+        void TickVs()
+        {
+            bool on = g.players.Count > 1;
+            vsCard.gameObject.SetActive(on);
+            if (!on) return;
+            bool many = g.players.Count > 2;
+            bool same = vsRows.Count == g.players.Count;
+            for (int i = 0; same && i < vsRows.Count; i++) if (vsRows[i].P != g.players[i]) same = false;
+            if (!same)
+            {
+                foreach (var r in vsRows) Object.Destroy(r.go);
+                vsRows.Clear();
+                foreach (var P in g.players) vsRows.Add(MakeVsRow(P, many));
+            }
+            // チーム戦は、いまのチームの差引を先に出す（どちらが勝っているかが一目で分かる）
+            vsTeam.gameObject.SetActive(g.mode == "team");
+            if (g.mode == "team")
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var t in g.TeamsInPlay())
+                {
+                    var L = g.LedgerOf(g.TeamLead(t));
+                    sb.Append("<color=" + UiKit.Hex(Mats.Hex(Game.TEAM_HEX[t])) + ">● " + (t == 0 ? "青" : "赤") + "</color> ")
+                      .Append("<color=" + (L.total >= 0 ? "#7be39a" : "#ff8a80") + ">" + Game.Yen(L.total) + "</color>　");
+                }
+                vsTeam.text = sb.ToString().TrimEnd();
+            }
+            foreach (var r in vsRows)
+            {
+                var P = r.P;
+                r.dl.text = P.delivered.ToString();
+                // チーム戦の差引はチームでひとつなので、人ごとの行には売上を出す
+                r.money.text = Game.Yen(g.mode == "team" ? P.sales : g.LedgerOf(P).total);
+                r.sd.gameObject.SetActive(g.mode != "coop");
+                r.sd.text = "壊" + Mathf.RoundToInt(P.shopDmg) + "%";
+                r.outT.gameObject.SetActive(P.down);
+                r.hpBack.SetActive(!P.down); r.hpn.gameObject.SetActive(!P.down);
+                if (!P.down)
+                {
+                    // 客と同じで「残りが減る」向き。緑→橙→赤
+                    int left = Mathf.Max(0, 100 - Mathf.RoundToInt(P.botDmg));
+                    var col = Mats.Hex(P.botDmg < 50 ? 0x4caf50 : (P.botDmg < 75 ? 0xffa726 : 0xe53935));
+                    UiKit.SetBar(r.hp, left / 100f); r.hp.color = col;
+                    r.hpn.text = left + "%"; r.hpn.color = col;
+                }
+                // 手持ち（色の四角。パック式は残弾、ふつうの品は2個以上のときだけ数）
+                var W = g.WalletOf(P);
+                var bs = new System.Text.StringBuilder();
+                foreach (var it in Game.ITEMS)
+                {
+                    if (W.Has(it.k) <= 0) continue;
+                    bs.Append("<color=" + UiKit.Hex(Mats.Hex(it.col)) + ">■</color>");
+                    if (it.ammo > 0) bs.Append(W.ammo[it.k]); else if (W.Has(it.k) > 1) bs.Append(W.Has(it.k));
+                }
+                r.bag.text = bs.ToString();
+            }
+        }
+
+        VsRow MakeVsRow(Player P, bool many)
+        {
+            // 列は幅を決め打ちにする（名前の長さで縦がずれないように）。
+            // 上の帯は高さ78pxなので、4人＋チームの行でも収まる高さにしてある（JS版 #vs.many / #vs.team）
+            var r = new VsRow { P = P };
+            var row = UiKit.Rect(vsCard, "Row_" + P.name);
+            UiKit.HRow(row.gameObject, many ? 4 : 7, null, TextAnchor.MiddleLeft);
+            UiKit.Size(row, -1, g.mode == "team" ? 12 : (many ? 14 : 20));
+            r.go = row.gameObject;
+            float fs = many ? 10 : 13;
+            System.Func<Component, float, Component> fix = (c, w) => { var le = UiKit.Size(c, w, -1, 0, w); le.minHeight = 0; return c; };
+            var dot = UiKit.Img(row, Mats.Hex(P.col)); dot.sprite = UiKit.Ellipse;
+            float ds = many ? 8 : 10;
+            var dl = UiKit.Size(dot, ds, ds, 0, ds); dl.minHeight = ds; dl.flexibleHeight = 0;
+            r.nm = UiKit.Label(row, P.Label, fs, P == g.me ? Mats.Hex(0xffe07a) : Color.white);
+            fix(r.nm, many ? 26 : 32);
+            r.src = UiKit.Label(row, P.src.kind == "npc" ? NpcLevels.Get(P.src.lv).name : P.src.kind == "pad" ? "パッド" + (P.src.index + 1) : "キー",
+                                many ? 8 : 10, Mats.Hex(0x9aa2ae), false);
+            fix(r.src, many ? 32 : 40);
+            r.dl = UiKit.Label(row, "0", many ? 11 : 15, Color.white, true, TextAnchor.MiddleCenter);
+            fix(r.dl, many ? 14 : 18);
+            r.money = UiKit.Label(row, "", many ? 9 : 12, Mats.Hex(0xc9ced6), true, TextAnchor.MiddleRight);
+            fix(r.money, many ? 48 : 62);
+            r.sd = UiKit.Label(row, "", many ? 8 : 10, Mats.Hex(0xff9e6b), false);
+            fix(r.sd, many ? 30 : 38);
+            Image back;
+            r.hp = UiKit.Bar(row, Mats.Hex(0x2b313c), Mats.Hex(0x4caf50), out back);
+            var bl = UiKit.Size(back, many ? 58 : 70, many ? 7 : 10, 0, many ? 58 : 70); bl.minHeight = bl.preferredHeight; bl.flexibleHeight = 0;
+            r.hpBack = back.gameObject;
+            r.hpn = UiKit.Label(row, "", fs, Color.white, true, TextAnchor.MiddleRight);
+            fix(r.hpn, many ? 28 : 36);
+            r.outT = UiKit.Label(row, "リタイア", many ? 8 : 10, Mats.Hex(0xff6b6b));
+            r.bag = UiKit.Label(row, "", many ? 9 : 11, Color.white, false);
+            return r;
         }
 
         void TickCard(PCard c)
         {
             var P = c.P;
             c.nm.text = P.name;
-            c.src.text = "キーボード";                         // 1人で遊ぶときはパッドもキーボードの枠（JS版と同じ）
+            c.src.text = P.src.kind == "pad" ? "パッド" + (P.src.index + 1) : "キーボード";   // 1人で遊ぶときはパッドもキーボードの枠
             var cd = P.carried;
             c.pic.gameObject.SetActive(cd != null);
             if (cd != null)
