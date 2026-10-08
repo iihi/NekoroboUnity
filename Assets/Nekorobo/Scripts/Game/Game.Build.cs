@@ -217,7 +217,7 @@ namespace Nekorobo
                     {
                         // 橋：下に水を敷いてから板を渡す
                         Slab(c, w, d, -Tiles.PondDepth, Mats.Get(0x123c52), "pit", 0.5f, 0.02f);
-                        Water(c, w, d, 0x2a7fb0, 0.8f, -0.10f);
+                        Water(c, w, d, "water", 0.8f, -0.10f);
                         Slab(c, w, d, 0f, Mats.Get(0xa5763f), "floor", 0.9f * fr, 0.05f);
                     }
                     else if (t != null && t.wall)
@@ -241,8 +241,7 @@ namespace Nekorobo
                     {
                         float dep = Tiles.DepthOf(ch);
                         Slab(c, w, d, -dep, Mats.Get(ch == '^' ? 0x3a1408 : ch == '@' ? 0x08243a : 0x0e2a3d), "pit", 0.5f, 0.02f);
-                        if (ch == '^') Water(c, w, d, 0xff5a1a, 1f, Tiles.WaterTop, true);
-                        else Water(c, w, d, ch == '@' ? 0x1a4f7a : 0x2a7fb0, 0.82f, Tiles.WaterTop);
+                        Water(c, w, d, ch == '^' ? "lava" : ch == '@' ? "sea" : "water", 0.82f, Tiles.WaterTop);
                     }
                     // 'o'（穴）は当たり判定を置かない。落ちた物は下の受け皿へ
                 }
@@ -330,7 +329,7 @@ namespace Nekorobo
                         break;
                     case "car": BuildCar(o, b); break;
                     case "mover": BuildMover(o, b); break;
-                    case "deco": Warn("壁の飾り"); break;
+                    case "deco": BuildDeco(o, b); break;
                     default: if (!BuildProp(o, b, bw, bd)) Warn("置き物「" + o.t + "」"); break;
                 }
             }
@@ -362,7 +361,40 @@ namespace Nekorobo
 
             if (C.stall) BuildStall(C);
             BuildZones(C);
-            if (C.raw["scenery"] != null) Warn("まわりの飾り");
+            BuildScenery(C);
+        }
+
+        /// <summary>
+        /// まわりの飾り（JS版 buildStageScenery）。水のステージはまわりも水にする。
+        /// ステージに scenery:false があれば、地面と背景だけ（置き物を手で並べた面用）。
+        /// </summary>
+        void BuildScenery(StageCfg C)
+        {
+            bool sea = false; int liq = 0, all = 0;
+            foreach (var ch in map.Values)
+            {
+                all++;
+                var td = Tiles.Def(ch);
+                if (td != null && td.deadly) sea = true;
+                if (td != null && td.liquid) liq++;
+            }
+            if (all > 0 && (float)liq / all > 0.5f) sea = true;
+            const float depth = 11;
+            // 盤面の外へ伸ばした道と線路の帯（three.js の向き）。その上には置き物を並べない
+            var clear = new List<Rect>();
+            foreach (var t in tails)
+            {
+                float ax = t.ci + 0.5f, az = t.cj + 0.5f, len = depth + 6, half = 0.75f;
+                float x0 = Mathf.Min(ax, ax + t.di * len) - (t.di != 0 ? 0 : half), x1 = Mathf.Max(ax, ax + t.di * len) + (t.di != 0 ? 0 : half);
+                float z0 = Mathf.Min(az, az + t.dj * len) - (t.dj != 0 ? 0 : half), z1 = Mathf.Max(az, az + t.dj * len) + (t.dj != 0 ? 0 : half);
+                clear.Add(Rect.MinMaxRect(x0, z0, x1, z1));
+            }
+            bool props = !(C.raw["scenery"] != null && C.raw["scenery"].Type == Newtonsoft.Json.Linq.JTokenType.Boolean && !(bool)C.raw["scenery"]);
+            int seed = 90210;
+            foreach (var ch in (C.n ?? "")) seed = (seed * 31 + ch) & 0x7fffff;
+            seed += Shops.All.IndexOf(shop) * 13;
+            var bg = Scenery.Build(stageRoot, bounds.x0, bounds.x1, -bounds.z1, -bounds.z0, depth, seed, shop.n, sea, props, clear);
+            if (mainCam != null) mainCam.backgroundColor = bg;
         }
 
         static List<Ent> StableSortByPri(List<Ent> src)
@@ -384,11 +416,41 @@ namespace Nekorobo
             mr.name = "SlabVis";
         }
 
-        void Water(Vector3 c, float w, float d, int col, float alpha, float y, bool basic = false)
+        /// <summary>水面（流れの筋の絵がゆっくり流れる）。溶岩は光の影響を受けない色で、海と水は少し透ける。</summary>
+        void Water(Vector3 c, float w, float d, string kind, float alpha, float y)
         {
-            var m = basic ? Mats.Basic(Mats.Hex(col)) : Mats.LitTransparent(new Color(Mats.Hex(col).r, Mats.Hex(col).g, Mats.Hex(col).b, alpha), 0.25f);
+            Texture2D tex;
+            if (!flowTex.TryGetValue(kind, out tex)) flowTex[kind] = tex = SurfaceArt.Flow(kind, kind.Length * 7919 + 13);
+            var rep = new Vector2(Mathf.Max(1, w / 3.2f), Mathf.Max(1, d / 3.2f));
+            Material m;
+            if (kind == "lava") { m = Mats.BasicTex(tex); m.SetTextureScale("_BaseMap", rep); }
+            else { m = Mats.Textured(tex, new Color(1, 1, 1, alpha), 0.25f, rep); Mats.MakeTransparent(m); }
+            flowMats.Add(m);
             var s = Part.Add(stageRoot, MeshGen.FlatUp(w, d), m, new Vector3(c.x, y, c.z), shadow: false);
             s.name = "WaterSurf";
+        }
+        readonly Dictionary<string, Texture2D> flowTex = new Dictionary<string, Texture2D>();
+        readonly List<Material> flowMats = new List<Material>();
+
+        /// <summary>流れを動かす（JS版 updateFlow：offset.x を 0.06/秒ずつ）。</summary>
+        void UpdateFlow(float dt)
+        {
+            foreach (var m in flowMats)
+            {
+                var o = m.GetTextureOffset("_BaseMap"); o.x -= 0.06f * dt;
+                m.SetTextureOffset("_BaseMap", o);
+            }
+        }
+
+        /// <summary>壁の飾り。壁のマスに置き、向きの三角の側へ半マスぶん寄せて立てる（当たり判定は作らない）。</summary>
+        void BuildDeco(StageObj o, Vector3 b)
+        {
+            var D = SurfaceArt.Deco(o.v);
+            var g = SurfaceArt.DecoMesh(stageRoot, D);
+            float r = o.rot * Mathf.Deg2Rad;
+            float d3x = Mathf.Cos(r), d3z = -Mathf.Sin(r);                 // three.js の向き（dirOf）
+            g.transform.position = new Vector3(b.x + d3x * 0.53f, D.y, b.z - d3z * 0.53f);
+            g.transform.rotation = Part.Euler3(0, Mathf.Atan2(d3x, d3z), 0);
         }
 
         /// <summary>壁の見た目を半分の薄さにして、床のある側へ寄せる（JS版 thinWall）。</summary>

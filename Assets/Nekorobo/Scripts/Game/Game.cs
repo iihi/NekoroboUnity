@@ -99,6 +99,7 @@ namespace Nekorobo
             hud.Toast("モデルを読み込み中…");
             Props.LoadCatalog();                           // 置き物のカタログ（catalog.json・models.json の props）
             await ModelStore.LoadAll();
+            await Scenery.LoadModels();                    // まわりの飾りのモデル（木・建物…）
             if (this == null) return;                      // 読んでいる間に止められた
             Debug.Log("[Nekorobo] モデル: " + string.Join(" ／ ", ModelStore.Log));
             course = Course.Load(courseName);
@@ -180,7 +181,7 @@ namespace Nekorobo
             stageRoot = new GameObject("Stage").transform;
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
-            routeT = 0; buildGen++; tailRoot = null;
+            routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
             warned.Clear();
             // ステージごとの数値の上書き（その面だけ）
             T = BaseTune();
@@ -356,6 +357,7 @@ namespace Nekorobo
         void LateUpdate()
         {
             if (stage == null) return;
+            UpdateFlow(Time.deltaTime);
             SyncLooks();
             ApplyCamera();
         }

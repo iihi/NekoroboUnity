@@ -221,4 +221,151 @@ namespace Nekorobo
             return g;
         }
     }
+
+    /// <summary>
+    /// コードで描く絵。水・溶岩・海の流れ（JS版 makeFlowTex）と、壁の飾り（JS版 decoTex / decoMesh）。
+    /// どちらも仮の絵で、models.json の textures に画像を書けば差し替える前提（HTML版と同じ）。
+    /// </summary>
+    public static class SurfaceArt
+    {
+        // ---------------------------------------------------------------- 流れ
+        /// <summary>水・溶岩・海の貼り絵（128×128、流れの筋）。kind は water / lava / sea。</summary>
+        public static Texture2D Flow(string kind, int seed)
+        {
+            const int N = 128;
+            bool lava = kind == "lava";
+            var bg = Mats.Hex(lava ? 0xe8410f : kind == "sea" ? 0x1c6d9c : 0x2f8fc4);
+            var px = new Color[N * N];
+            for (int i = 0; i < px.Length; i++) px[i] = bg;
+            var rnd = new Lcg(seed);
+            System.Func<float> R = () => (float)rnd.Next();
+            for (int i = 0; i < 26; i++)
+            {
+                float y = R() * N, w = 18 + R() * 54, x = R() * N;
+                var col = lava ? (R() < 0.45f ? Mats.Hex(0xffb03a) : Mats.Hex(0x8f2205)) : (R() < 0.5f ? Mats.Hex(0x7fc6ea) : Mats.Hex(0x1d6f9e));
+                float a = lava ? 0.75f : 0.5f;
+                float lw = lava ? 3 + R() * 5 : 2 + R() * 3;
+                float y2 = y + (R() - 0.5f) * 5;
+                Stroke(px, N, x, y, x + w, y2, lw, col, a);
+            }
+            var t = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            t.SetPixels(px); t.Apply(true);
+            return t;
+        }
+
+        /// <summary>丸い端の線を、左右につながる（巻き戻る）ように塗る。</summary>
+        static void Stroke(Color[] px, int N, float x0, float y0, float x1, float y1, float lw, Color c, float a)
+        {
+            float r = lw / 2;
+            int ymin = Mathf.FloorToInt(Mathf.Min(y0, y1) - r), ymax = Mathf.CeilToInt(Mathf.Max(y0, y1) + r);
+            int xmin = Mathf.FloorToInt(Mathf.Min(x0, x1) - r), xmax = Mathf.CeilToInt(Mathf.Max(x0, x1) + r);
+            var d = new Vector2(x1 - x0, y1 - y0); float L2 = Mathf.Max(1e-4f, d.sqrMagnitude);
+            for (int y = ymin; y <= ymax; y++)
+                for (int x = xmin; x <= xmax; x++)
+                {
+                    var p = new Vector2(x + 0.5f - x0, y + 0.5f - y0);
+                    float t = Mathf.Clamp01(Vector2.Dot(p, d) / L2);
+                    float dist = (p - d * t).magnitude;
+                    float k = Mathf.Clamp01(r - dist + 0.5f) * a;
+                    if (k <= 0) continue;
+                    int X = ((x % N) + N) % N, Y = ((y % N) + N) % N;
+                    int i = (N - 1 - Y) * N + X;
+                    px[i] = Color.Lerp(px[i], c, k);
+                }
+        }
+
+        // ---------------------------------------------------------------- 壁の飾り
+        public class DecoKind { public string k; public float w, h, y; }
+        public static readonly DecoKind[] DECO_KINDS =
+        {
+            new DecoKind { k = "poster", w = 0.86f, h = 0.60f, y = 1.45f },
+            new DecoKind { k = "board",  w = 0.90f, h = 0.68f, y = 1.40f },
+            new DecoKind { k = "menu",   w = 0.72f, h = 0.86f, y = 1.45f },
+            new DecoKind { k = "frame",  w = 0.62f, h = 0.50f, y = 1.55f },
+        };
+        public static DecoKind Deco(string v)
+        {
+            foreach (var d in DECO_KINDS) if (d.k == v) return d;
+            return DECO_KINDS[0];
+        }
+
+        /// <summary>
+        /// 壁の飾り1枚。表はローカルの -Z（カメラ側。three.js の板の表と同じ）。
+        /// 絵は板と字を重ねて組む（JS版は canvas に描いている。中身は同じ）。
+        /// </summary>
+        public static GameObject DecoMesh(Transform parent, DecoKind D)
+        {
+            var g = new GameObject("Deco_" + D.k);
+            g.transform.SetParent(parent, false);
+            var t = g.transform;
+            Part.Add(t, MeshGen.Box(D.w, D.h, 0.035f), Mats.Get(D.k == "board" ? 0x2f4038 : 0xe8e0cc, 0.9f), Vector3.zero);
+            // 絵の面（板の表から 1.9cm 手前）。256×256 の canvas の座標で置く
+            float z = -0.019f;
+            System.Action<float, float, float, float, int> rect = (x0, y0, w, h, col) =>
+            {
+                // canvas（左上が原点、y が下）→ 板の上の位置
+                float cx = (x0 + w / 2) / 256f * D.w - D.w / 2, cy = D.h / 2 - (y0 + h / 2) / 256f * D.h;
+                Part.Add(t, MeshGen.Plane(w / 256f * D.w, h / 256f * D.h), Mats.Basic(Mats.Hex(col)), new Vector3(cx, cy, z), false);
+                z -= 0.0008f;
+            };
+            System.Action<float, float, string, int, float, TextAnchor> txt = (x, y, s, col, size, al) =>
+            {
+                var go = new GameObject("T"); go.transform.SetParent(t, false);
+                go.transform.localPosition = new Vector3(x / 256f * D.w - D.w / 2, D.h / 2 - y / 256f * D.h, z - 0.002f);
+                var tm = go.AddComponent<TextMesh>();
+                tm.font = Fonts.UI; tm.text = s; tm.color = Mats.Hex(col); tm.fontSize = 64; tm.fontStyle = FontStyle.Bold;
+                tm.anchor = al; tm.alignment = TextAlignment.Center;
+                // 字の高さ（canvas の px）を板の上の長さへ
+                tm.characterSize = size / 256f * D.h / 6.4f;
+                go.GetComponent<MeshRenderer>().sharedMaterial = Fonts.UI.material;
+            };
+            switch (D.k)
+            {
+                case "board":
+                    rect(0, 0, 256, 256, 0x8a6a44); rect(14, 14, 228, 228, 0x2f4038);
+                    txt(128, 44, "本日のおすすめ", 0xf2efe2, 30, TextAnchor.MiddleCenter);
+                    rect(40, 65, 176, 2, 0xcfe0c8);
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var d = Dishes.All[i];
+                        txt(40, 104 + i * 38, d.n, 0xe8e4d2, 26, TextAnchor.MiddleLeft);
+                        txt(216, 104 + i * 38, "¥" + d.price, 0xe8e4d2, 26, TextAnchor.MiddleRight);
+                    }
+                    break;
+                case "menu":
+                    rect(0, 0, 256, 256, 0xfbf6ea); rect(0, 0, 256, 52, 0xc0483a);
+                    txt(128, 27, "MENU", 0xfff8e8, 34, TextAnchor.MiddleCenter);
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var d = Dishes.All[i];
+                        txt(26, 84 + i * 34, d.n, 0x3a332a, 22, TextAnchor.MiddleLeft);
+                        txt(230, 84 + i * 34, "¥" + d.price, 0x8a7a5a, 22, TextAnchor.MiddleRight);
+                        rect(26, 101 + i * 34, 204, 1, 0xe0d8c4);
+                    }
+                    break;
+                case "frame":
+                    rect(0, 0, 256, 256, 0x8a6a44); rect(16, 16, 224, 224, 0xf2efe2);
+                    rect(30, 30, 196, 110, 0x8fd0e8); rect(30, 140, 196, 86, 0x7ab84f);
+                    {
+                        var sun = Part.Add(t, MeshGen.Circle(22 / 256f * D.h, 20), Mats.Basic(Mats.Hex(0xffe08a)),
+                                           new Vector3(196 / 256f * D.w - D.w / 2, D.h / 2 - 66 / 256f * D.h, z), false);
+                        sun.transform.localScale = new Vector3(D.w / D.h, 1, 1);
+                    }
+                    break;
+                default:
+                    rect(0, 0, 256, 256, 0xe0d8c4); rect(8, 8, 240, 240, 0xfff6e0);
+                    {
+                        var c = Part.Add(t, MeshGen.Circle(56 / 256f * D.h, 24), Mats.Basic(Mats.Hex(0xe8b400)),
+                                         new Vector3(0, D.h / 2 - 92 / 256f * D.h, z), false);
+                        c.transform.localScale = new Vector3(D.w / D.h, 1, 1);
+                        z -= 0.001f;
+                    }
+                    txt(128, 92, "♪", 0xffffff, 64, TextAnchor.MiddleCenter);
+                    txt(128, 178, "たべよう", 0xc0483a, 40, TextAnchor.MiddleCenter);
+                    txt(128, 218, "たのしく！", 0x3f7fb8, 34, TextAnchor.MiddleCenter);
+                    break;
+            }
+            return g;
+        }
+    }
 }
