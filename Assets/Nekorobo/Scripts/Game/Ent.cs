@@ -29,7 +29,8 @@ namespace Nekorobo
 
         // 客
         public int pri;
-        public bool walkStop;           // 巡回している客が、ぶつかられて歩くのをやめた
+        public bool walkStop;
+        public bool bench;              // ベンチ（案内の矢印 "bench" が指す）           // 巡回している客が、ぶつかられて歩くのをやめた
         public GameObject ring;         // 倒れた印
         public float modelH;
         public GameObject vomit;        // HP が減ると口から出る虹

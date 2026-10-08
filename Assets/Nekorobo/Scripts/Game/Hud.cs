@@ -19,6 +19,8 @@ namespace Nekorobo
         HudTop top;
         SettingsPanel settings;
         ShopWin shopWin;
+        /// <summary>会話・案内・バン（ストーリーの画面）。</summary>
+        public StoryUi Story;
         GameObject gearBtn;
         float readyAnim; string readyShown = "";
         GameObject resultPanel, menuPanel;
@@ -33,6 +35,7 @@ namespace Nekorobo
         public bool ShopOpen { get { return shopWin != null && shopWin.Open; } }
         public void OpenShop() { resultPanel.SetActive(false); if (MenuOpen) menuPanel.SetActive(false); shopWin.OpenNow(); }
         public void CloseShop() { if (shopWin != null) shopWin.Close(); }
+        public void ShopResetLocks() { if (shopWin != null) shopWin.ResetLocks(); }
 
         void Awake()
         {
@@ -80,6 +83,9 @@ namespace Nekorobo
             // ---- 検証用パネル（Tab / ⚙）
             // ---- 強化ショップ（全画面。検証用パネルより下に重ねる）
             shopWin = new ShopWin(root, GetComponent<Game>());
+
+            // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
+            Story = new StoryUi(root, GetComponent<Game>());
 
             settings = new SettingsPanel(root, GetComponent<Game>());
             {
@@ -133,6 +139,9 @@ namespace Nekorobo
         // ------------------------------------------------------------ 呼び出し口
         public void OnStage()
         {
+            Story.TalkClose(true);
+            Story.HideBang();
+            Story.TutHide();
             resultPanel.SetActive(false);
             foreach (var p in pops) Destroy(p.t.gameObject);
             pops.Clear();
@@ -269,13 +278,15 @@ namespace Nekorobo
         {
             var g = game;
             if (g == null || g.stage == null) return;
-            if (shopWin.Open) shopWin.Tick(Time.deltaTime); else MenuTick();
+            Story.Tick(Time.deltaTime);
+            if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
+            else if (shopWin.Open) shopWin.Tick(Time.deltaTime); else MenuTick();
 
             top.Tick();
             // 3・2・1・スタート！
             // JS版と同じ：3.999→3 / 2.999→2 / 1.999→1 / 0.999→スタート！（スタートの間はまだ動けない）
             string label = "";
-            if (g.state == "ready") { int n = Mathf.CeilToInt(g.readyT) - 1; label = n > 0 ? n.ToString() : "スタート！"; }
+            if (g.state == "ready" && !Story.TalkOn) { int n = Mathf.CeilToInt(g.readyT) - 1; label = n > 0 ? n.ToString() : "スタート！"; }
             if (label != readyShown)
             {
                 readyShown = label; readyAnim = 0;

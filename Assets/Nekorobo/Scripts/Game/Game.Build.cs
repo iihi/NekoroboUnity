@@ -310,6 +310,7 @@ namespace Nekorobo
                             var bn = MakeBody("chair", b + new Vector3(0, half.y, 0), half, Quaternion.identity,
                                               false, 22, 0.5f * fr, 0.25f, 0.5f);
                             BenchLook(bn.transform, half, along);
+                            bn.bench = true;
                             furni.Add(bn); objEnt[o] = bn;
                             break;
                         }

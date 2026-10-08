@@ -183,6 +183,9 @@ namespace Nekorobo
                 }
             mode = "versus";
             Rebuild();
+            SaveStory();                                   // ストーリーだけ、面が変わるたびに途中経過を覚える
+            if (entry.raw != null && entry.raw["before"] != null)
+                TalkOpen(entry.raw["before"], null, "STAGE " + (courseIndex + 1) + (entry.title != null ? "　" + entry.title : ""));
         }
 
         public void LoadFile(string file, string shopN)
@@ -227,6 +230,7 @@ namespace Nekorobo
             SyncCounterPlates();
             FitCamera();
             hud.OnStage();
+            TutBegin();                                    // 遊んでいる間の案内（ステージの hints）
         }
 
         // ================================================================ ロボ
@@ -362,7 +366,7 @@ namespace Nekorobo
             }
 
             var kb = Keyboard.current;
-            if (hud.ShopOpen) return;                              // ショップの間はショップが入力を見る
+            if (hud.ShopOpen || TalkOn) return;                    // ショップと会話の間は、そちらが入力を見る
             if (kb != null && !hud.MenuOpen)
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
@@ -492,12 +496,13 @@ namespace Nekorobo
             TickFx(Time.deltaTime);
             SyncLooks();
             ApplyCamera();
+            TutArrowTick();
         }
 
         // ================================================================ 1/60秒ごとの更新（JS版 step）
         void FixedUpdate()
         {
-            if (stage == null || hud.MenuOpen) return;
+            if (stage == null || hud.MenuOpen || TalkOn) return;      // 会話の間は止める（3・2・1 も）
             float dt = Time.fixedDeltaTime;
             t += dt;
             if (state == "ready")
@@ -579,6 +584,7 @@ namespace Nekorobo
             }
             UpdateDropped(dt);
             UpdateItems(dt);                     // バナナ・ドローン・ブーメラン・ビーム・ミサイル・爆風
+            TutTick(dt);                         // 遊んでいる間の案内
             if (state == "play")
             {
             }
@@ -1192,8 +1198,21 @@ namespace Nekorobo
                 if (best == 0 || frames < best) { result.rec = true; PlayerPrefs.SetInt(BestKey(), frames); }
             }
             foreach (var P in players) { SetFace(P, cleared ? "happy" : "dead", 99); if (P.aim != null) ClearAim(P); }
-            resultAt = Time.unscaledTime;
-            hud.ShowResult();
+            // まず「バン！」と出してから結果を出す（すぐ結果が出ると、終わったことに気づく前に画面が変わる）
+            resultAt = float.MaxValue;
+            System.Action showRes = () =>
+            {
+                if (hud.ShopOpen) return;
+                resultAt = Time.unscaledTime;
+                hud.ShowResult();
+            };
+            hud.Story.Bang(cleared, cleared ? "\u2572(^o^)\u2571" : (players.Count > 1 ? "全員が動けなくなった" : "動けなくなった"), () =>
+            {
+                if (hud.ShopOpen) return;
+                var after = entry != null && entry.raw != null ? entry.raw["after"] : null;
+                if (cleared && after != null) { TutEnd(); TalkOpen(after, showRes, null); }
+                else showRes();
+            });
         }
 
         /// <summary>差引の大きい順（個人戦の順位）。同点は元の並び（JS の sort は安定）。</summary>

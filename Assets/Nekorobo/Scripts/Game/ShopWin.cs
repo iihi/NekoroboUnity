@@ -14,7 +14,7 @@ namespace Nekorobo
     ///   下    … 指している物の説明（この画面で動かしている人ごとに1行）・購入完了のボタン・注意書き
     ///
     /// 指カーソルは人ごとに1つ。升目に吸い付かず、マウスのように自由に動く。
-    /// 品物の絵は HTML版の ICONS（SVG）を PNG にした物（Resources/ShopIcons。作り方は Tools/shop_icons）。
+    /// 品物の絵は HTML版の ICONS（SVG）を PNG にした物（Resources/Ui。作り方は Tools/shop_icons）。
     /// 位置と大きさは 1280×720 の画面で CSS と同じ数値にしてある（1px ＝ ここの 1）。
     /// </summary>
     public class ShopWin
@@ -118,6 +118,9 @@ namespace Nekorobo
             root.gameObject.SetActive(true);
             Open = true;
         }
+
+        /// <summary>開いた直後と同じく、少しのあいだ決定を受け付けない（店主の話を読み終えた指で買わないため）。</summary>
+        public void ResetLocks() { foreach (var c in cur) { c.lockT = g.T.menuLock; c.armed = false; } }
 
         public void Close()
         {
@@ -316,7 +319,7 @@ namespace Nekorobo
             // 絵（白い板に乗せる。4:3、高さは 100 まで）
             float ih = Mathf.Min(h - 18, 100), iw = ih * 4 / 3f;
             var ic = Box(bg.transform, 13, (h - ih) / 2, iw, ih, 12, new Color(1, 1, 1, 0.92f), "Icon");
-            var tex = Resources.Load<Texture2D>("ShopIcons/" + gd.k);
+            var tex = Resources.Load<Texture2D>("Ui/" + gd.k);
             if (tex != null)
             {
                 var ri = UiKit.Rect(ic.transform, "Pic").gameObject.AddComponent<RawImage>();
@@ -392,7 +395,7 @@ namespace Nekorobo
             var f = UiKit.Rect(fingRoot, "Finger_" + c.P.name);
             f.anchorMin = f.anchorMax = new Vector2(0, 1); f.pivot = new Vector2(0, 1);
             var hand = UiKit.Rect(f, "Hand").gameObject.AddComponent<RawImage>();
-            hand.texture = Resources.Load<Texture2D>("ShopIcons/finger"); hand.raycastTarget = false;
+            hand.texture = Resources.Load<Texture2D>("Ui/finger"); hand.raycastTarget = false;
             var hr = hand.rectTransform; hr.anchorMin = hr.anchorMax = new Vector2(0, 1); hr.pivot = new Vector2(0, 1);
             hr.sizeDelta = new Vector2(32, 32); hr.anchoredPosition = new Vector2(-5, 5);
             c.tagBg = UiKit.Img(f, Mats.Hex(c.P.col), 5, "Tag");

@@ -109,6 +109,8 @@ namespace Nekorobo
         {
             shopped = true;                      // NPC はショップの画面で買うので、あとで裏買いさせない
             hud.OpenShop();
+            if (entry != null && entry.raw != null && entry.raw["shopTalk"] != null)
+                TalkOpen(entry.raw["shopTalk"], () => hud.ShopResetLocks(), "ショップ");
         }
 
         /// <summary>全員が購入完了・時間切れ（JS版 shopDone）。</summary>

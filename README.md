@@ -109,7 +109,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Items.cs` | アイテム・爆風・財布（JS版 ITEMS / UPGRADES と同じ値） |
 | `Scripts/Game/Game.Shop.cs` | 値段と買う処理・NPC の裏の買い物・面の送り（JS版 afterResult / nextStage / buyUpgrade / buyItem / npcShop） |
 | `Scripts/Game/ShopWin.cs` | 強化ショップの画面と指カーソル（JS版 #shopwin。位置と大きさは CSS と同じ数値） |
-| `Resources/ShopIcons/*.png` | 品物の絵と指。HTML版の ICONS（SVG）を Chrome で PNG にした物（`Tools/shop_icons/make_sheet.py`） |
+| `Resources/Ui/*.png` | 品物の絵と指。HTML版の ICONS（SVG）を Chrome で PNG にした物（`Tools/shop_icons/make_sheet.py`） |
 | `Scripts/Game/Game.Npc.cs` | NPC（JS版 NPC_LV・findPath・driveNpc）。道探しに教えるマス（動く床・いかだ・置き物） |
 | `Scripts/Game/Game.Fx.cs` | 演出（飛沫・モクモク・閃光・光の柱・矢印・客の虹）と落ちた料理 |
 | `Scripts/Game/Scenery.cs` | ステージのまわりの飾り（JS版 scenery.js） |
