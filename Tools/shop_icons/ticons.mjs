@@ -1,0 +1,10 @@
+import fs from "node:fs";
+const src = fs.readFileSync(process.argv[2], "utf8").split("\n");
+const a = src.findIndex(l => l.startsWith("const TI = "));
+const b = src.findIndex(l => l.startsWith("const tIcon"));
+const code = src.slice(a, b).join("\n") + "\nreturn TICONS;";
+const T = new Function(code)();
+const out = {};
+for (const k in T) out[k] = String(T[k]).replace(/currentColor/g, "#ffffff");
+fs.writeFileSync(process.argv[3], JSON.stringify(out));
+console.log(Object.keys(out).join(" "));

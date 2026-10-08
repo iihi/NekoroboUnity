@@ -131,7 +131,15 @@ namespace Nekorobo
                 return;
             }
             // フリープレイには終わりが無い。お金・強化・アイテムを持ったまま、次に遊ぶ面を選ぶ
-            hud.OpenStageMenu();
+            hud.OpenTitle("Free", true);
+        }
+
+        /// <summary>タイトルへ戻る（ショップの T。JS版 backToTitle）。走っている途中のものは畳んでから開く。</summary>
+        public void BackToTitle()
+        {
+            shopped = false;
+            TutEnd();
+            hud.OpenTitle("Top");
         }
 
         /// <summary>最初から（ショップの R。JS版 resetRun）。お金と強化も戻す。</summary>

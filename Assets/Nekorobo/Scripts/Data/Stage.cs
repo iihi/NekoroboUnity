@@ -85,6 +85,60 @@ namespace Nekorobo
             return Parse(o, name);
         }
 
+        // ---- 内蔵の面（HTML版 configs.js の CONFIGS）
+        // configs.js はキーに引用符の無い JS の配列。Newtonsoft はこの書き方も読めるので、
+        // `export const CONFIGS = [` から最後の `];` までを切り出してそのまま読む（JS の式は入っていない）。
+        static JArray builtins;
+        public static JArray Builtins()
+        {
+            if (builtins != null) return builtins;
+            builtins = new JArray();
+            try
+            {
+                var path = DataRoot.File_("configs.js");
+                if (!File.Exists(path)) return builtins;
+                var s = File.ReadAllText(path);
+                int a = s.IndexOf("export const CONFIGS");
+                if (a < 0) return builtins;
+                a = s.IndexOf('[', a);
+                int b = s.LastIndexOf("];");
+                if (a < 0 || b < a) return builtins;
+                builtins = JArray.Parse(s.Substring(a, b - a + 1));
+            }
+            catch (System.Exception e) { Debug.LogWarning("[Nekorobo] configs.js が読めません: " + e.Message); }
+            return builtins;
+        }
+
+        /// <summary>内蔵の面を名前で引く（"通常フロア" など）。</summary>
+        public static StageCfg Builtin(string name)
+        {
+            foreach (var t in Builtins())
+            {
+                var o = t as JObject;
+                if (o != null && J.S(o, "n") == name) return Parse(o, null);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 並び（course.json / free.json）の cfg から引く。JS版 freeEntry と同じ書き方を受ける：
+        /// "file:名前" はファイル、"builtin:名前" は内蔵、ただの名前はファイルがあればファイル、無ければ内蔵。
+        /// </summary>
+        public static StageCfg Ref(string v, bool quiet = false)
+        {
+            if (string.IsNullOrEmpty(v)) return null;
+            if (v.StartsWith("file:")) return quiet ? LoadQuiet(v.Substring(5)) : Load(v.Substring(5));
+            if (v.StartsWith("builtin:")) return Builtin(v.Substring(8));
+            if (File.Exists(DataRoot.File_("stages/" + v + ".json"))) return quiet ? LoadQuiet(v) : Load(v);
+            return Builtin(v);
+        }
+
+        public static StageCfg LoadQuiet(string name)
+        {
+            var o = DataRoot.ReadJson("stages/" + name + ".json");
+            return o != null ? Parse(o, name) : null;
+        }
+
         /// <summary>stages フォルダのステージ一覧（並びとコースのファイルは除く）。</summary>
         public static List<string> List()
         {

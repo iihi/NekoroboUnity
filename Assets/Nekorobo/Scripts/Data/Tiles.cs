@@ -11,6 +11,7 @@ namespace Nekorobo
         public bool floor, wall, high, hidden, liquid, burn, deadly, slippery;
         public string conn;
         public int raft;
+        public string col = "#3f444d";   // 見取り図の色（JS版 TT[ch].col）
     }
 
     /// <summary>
@@ -43,6 +44,21 @@ namespace Nekorobo
             { '2', new TileDef { k = "raft",   n = "いかだ 2",   floor = true, raft = 2 } },
             { '3', new TileDef { k = "raft",   n = "いかだ 3",   floor = true, raft = 3 } },
             { '4', new TileDef { k = "raft",   n = "いかだ 4",   floor = true, raft = 4 } },
+        };
+
+        /// <summary>見取り図の色。JS版 tiles.js の TT[ch].col と OBJ[t].col。</summary>
+        public static readonly Dictionary<char, string> COL = new Dictionary<char, string>
+        {
+            { ' ', "#171a20" }, { '.', "#3f444d" }, { '#', "#8d99ab" }, { 'H', "#6f7c90" }, { '+', "#5a6472" },
+            { '=', "#b07a3c" }, { 'r', "#2b3038" }, { '~', "#1d5b7d" }, { '^', "#7a2409" }, { '@', "#0f3550" },
+            { 'o', "#0c0e12" }, { 'i', "#8fd8e8" }, { 'l', "#5a4a3a" }, { 'b', "#a5763f" },
+            { '1', "#c98b45" }, { '2', "#b87a3a" }, { '3', "#a86a30" }, { '4', "#986028" },
+        };
+        public static readonly Dictionary<string, string> OBJ_COL = new Dictionary<string, string>
+        {
+            { "spawn", "#2f9bff" }, { "counter", "#6b4230" }, { "table", "#d98b45" }, { "table2", "#c97f38" },
+            { "chair", "#e0a463" }, { "bench", "#a5763f" }, { "guest", "#7fd0a0" }, { "car", "#d94f4f" },
+            { "mover", "#b08a5a" }, { "ramp", "#9aa7b8" }, { "raft", "#ffd24a" }, { "deco", "#e8d9b4" },
         };
 
         public static TileDef Def(char ch) { TileDef t; return TT.TryGetValue(ch, out t) ? t : null; }

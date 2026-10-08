@@ -82,7 +82,15 @@ namespace Nekorobo
             if (P == null || mode == "coop") return wallets[0];
             return wallets[mode == "team" ? Mathf.Clamp(P.team, 0, 1) : Mathf.Clamp(P.idx, 0, 3)];
         }
-        void NewWallets() { wallets = new[] { new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash) }; }
+        /// <summary>タイトルのデバッグ「最初からアイテムを持つ」（この端末で覚える）。</summary>
+        public const string ITEMS_KEY = "nekorobo.items";
+
+        void NewWallets()
+        {
+            wallets = new[] { new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash), new Wallet(T.startCash) };
+            if (PlayerPrefs.GetString(ITEMS_KEY, "") == "all") foreach (var W in wallets) W.StockAll();
+        }
+        public void ResetWallets() { NewWallets(); runDone = 0; }
 
         // ================================================================ 選ぶ・使う
         void FixSlot(Player P)

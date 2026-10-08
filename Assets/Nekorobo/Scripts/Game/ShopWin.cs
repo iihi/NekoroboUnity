@@ -267,14 +267,14 @@ namespace Nekorobo
                     else
                     {
                         var ne = g.course.stages[i + 1];
-                        var nc = ne.FileName != null ? StageCfg.Load(ne.FileName) : null;
+                        var nc = StageCfg.Ref(ne.cfg, true);
                         sub = "ステージ " + (i + 1) + " 終了 — 次は " + (last ? "最終ステージ"
                             : "ステージ " + (i + 2) + "（" + ne.shop + " × " + (nc != null ? nc.n : ne.cfg) + "）");
                     }
                 }
                 Lbl(box, sub, 11, SUB2, TextAnchor.MiddleCenter, 0, 632, 1280, 16);
                 note2 = Lbl(box, "", 12, SUB2, TextAnchor.MiddleCenter, 0, 658, 1280, 16);
-                var n3 = Lbl(box, "カーソルを下の「購入完了」へ動かしても押せます　／　[ R ] 最初から", 12, SUB2, TextAnchor.MiddleCenter, 0, 688, 1280, 16);
+                var n3 = Lbl(box, "カーソルを下の「購入完了」へ動かしても押せます　／　[ R ] 最初から　／　[ T ] タイトルへ", 12, SUB2, TextAnchor.MiddleCenter, 0, 688, 1280, 16);
                 n3.color = new Color(SUB2.r, SUB2.g, SUB2.b, 0.65f);
             }
 
@@ -416,6 +416,7 @@ namespace Nekorobo
             if (!Open) return;
             var kb = Keyboard.current;
             if (kb != null && kb.rKey.wasPressedThisFrame) { g.ResetRun(); return; }
+            if (kb != null && kb.tKey.wasPressedThisFrame) { g.BackToTitle(); return; }
 
             // マウスでも買えるように（この画面の人のカーソルがマウスに付いていく）
             var mc = cur.Find(c => c.P == g.me && IsViewer(c.P)) ?? cur.Find(c => IsViewer(c.P));

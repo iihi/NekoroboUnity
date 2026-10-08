@@ -21,6 +21,16 @@ namespace Nekorobo
         ShopWin shopWin;
         /// <summary>会話・案内・バン（ストーリーの画面）。</summary>
         public StoryUi Story;
+        TitleWin title;
+        public bool TitleOpen { get { return title != null && title.Open; } }
+        /// <summary>タイトルを開く（page は Top / Free など。next なら買い物のあとの「次の面選び」）。</summary>
+        public void OpenTitle(string page, bool next = false)
+        {
+            CloseShop(); resultWin.Close(); if (MenuOpen) menuPanel.SetActive(false);
+            Story.TalkClose(true); Story.HideBang(); Story.TutHide();
+            title.next = next;
+            title.OpenPage(page);
+        }
         GameObject gearBtn;
         float readyAnim; string readyShown = "";
         GameObject menuPanel;
@@ -84,6 +94,9 @@ namespace Nekorobo
 
             // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
             Story = new StoryUi(root, GetComponent<Game>());
+
+            // ---- タイトルとメニュー（全画面。検証用パネルより下）
+            title = new TitleWin(root, GetComponent<Game>());
 
             settings = new SettingsPanel(root, GetComponent<Game>());
             {
@@ -174,7 +187,15 @@ namespace Nekorobo
         void Update()
         {
             var g = game;
-            if (g == null || g.stage == null) return;
+            if (g == null) return;
+            if (title.Open)
+            {
+                // タイトルの間は、ゲームの表示を動かさない（後ろの面は止めてある）
+                title.Tick(Time.unscaledDeltaTime);
+                SideTick();
+                return;
+            }
+            if (g.stage == null) { SideTick(); return; }
             Story.Tick(Time.deltaTime);
             if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
             else if (shopWin.Open) shopWin.Tick(Time.deltaTime);
@@ -215,7 +236,13 @@ namespace Nekorobo
                 p.t.gameObject.SetActive(sp.z > 0);
             }
             over.Tick();
-            settings.Tick();
+            SideTick();
+        }
+
+        /// <summary>検証用パネル（Tab / ⚙）とお知らせ。タイトルの間も動かす。</summary>
+        void SideTick()
+        {
+            if (game.stage != null) settings.Tick();
             var kbd = Keyboard.current;
             if (kbd != null && kbd.tabKey.wasPressedThisFrame) settings.Toggle();
             gearBtn.SetActive(!settings.Open);
@@ -236,6 +263,8 @@ namespace Nekorobo
         {
             menuAct.Clear(); menuLabel.Clear();
             var g = game;
+            menuLabel.Add("<color=#ffc44d>◀ タイトルへ戻る</color>");
+            menuAct.Add(() => OpenTitle("Top"));
             if (g.course != null)
                 for (int i = 0; i < g.course.stages.Count; i++)
                 {

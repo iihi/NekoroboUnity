@@ -24,6 +24,8 @@ namespace Nekorobo
         [Header("コースを使わずに面を直接選ぶとき（stages/ のファイル名。空ならコース）")]
         public string stageFile = "";
         public string shopName = "カフェ";
+        [Header("起動したらタイトルから始める（切るとコースの courseIndex 面から）")]
+        public bool startAtTitle = true;
         [Header("面を直接選んだときの参加者（JS版 ?p= と同じ書き方。key / pad0〜3 / npc-serious・normal・wild・easy）")]
         public string participants = "key";
         [Header("ルール（versus 個人戦 / coop 協力 / team チーム戦）")]
@@ -116,8 +118,10 @@ namespace Nekorobo
             if (this == null) return;                      // 読んでいる間に止められた
             Debug.Log("[Nekorobo] モデル: " + string.Join(" ／ ", ModelStore.Log));
             course = Course.Load(courseName);
-            if (string.IsNullOrEmpty(stageFile)) LoadCourseStage(courseIndex);
-            else LoadFile(stageFile, shopName);
+            // 何も指定が無ければタイトルから（JS版と同じ）。stageFile を入れたときは、その面をすぐ遊ぶ
+            if (!string.IsNullOrEmpty(stageFile)) LoadFile(stageFile, shopName);
+            else if (startAtTitle) hud.OpenTitle("Top");
+            else LoadCourseStage(courseIndex);
         }
 
         void OnDestroy() { if (I == this) I = null; }
@@ -161,14 +165,8 @@ namespace Nekorobo
             }
             courseIndex = Mathf.Clamp(i, 0, course.stages.Count - 1);
             entry = course.stages[courseIndex];
-            var fn = entry.FileName;
-            if (fn == null)
-            {
-                Debug.LogWarning("[Nekorobo] 内蔵の構成（configs.js）はまだ読めません: " + entry.cfg);
-                return;
-            }
-            var c = StageCfg.Load(fn);
-            if (c == null) return;
+            var c = StageCfg.Ref(entry.cfg);              // "file:名前" も内蔵の構成（configs.js）も
+            if (c == null) { Debug.LogWarning("[Nekorobo] 面が見つかりません: " + entry.cfg); return; }
             stage = c;
             shop = Shops.Find(entry.shop) ?? Shops.All[0];
             stageTitle = "STAGE " + (courseIndex + 1) + "　" + (entry.title ?? c.n);
@@ -187,6 +185,25 @@ namespace Nekorobo
             if (entry.raw != null && entry.raw["before"] != null)
                 TalkOpen(entry.raw["before"], null, "STAGE " + (courseIndex + 1) + (entry.title != null ? "　" + entry.title : ""));
         }
+
+        /// <summary>
+        /// フリープレイを始める（タイトルの「スタート」）。keep なら財布を作り直さない（買い物のあとの次の面）。JS版 titleStart("free")。
+        /// </summary>
+        public void StartFree(StageCfg c, string shopN, List<PlayerSrc> sl, string md, bool keep)
+        {
+            if (!keep) { NewWallets(); runDone = 0; }
+            shopped = false;
+            entry = null;
+            stage = c;
+            shop = Shops.Find(shopN) ?? Shops.All[0];
+            stageTitle = c.n + "（" + shop.n + "）";
+            stageFile = c.file ?? "";
+            slots = sl != null && sl.Count > 0 ? sl : new List<PlayerSrc> { new PlayerSrc() };
+            mode = md ?? "versus";
+            Rebuild();
+        }
+
+        public void Toast(string s) { hud.Toast(s); }
 
         public void LoadFile(string file, string shopN)
         {
@@ -366,7 +383,7 @@ namespace Nekorobo
             }
 
             var kb = Keyboard.current;
-            if (hud.ShopOpen || TalkOn) return;                    // ショップと会話の間は、そちらが入力を見る
+            if (hud.ShopOpen || TalkOn || hud.TitleOpen) return;   // ショップ・会話・タイトルの間は、そちらが入力を見る
             if (kb != null && !hud.MenuOpen)
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
@@ -494,7 +511,7 @@ namespace Nekorobo
         // ================================================================ 1/60秒ごとの更新（JS版 step）
         void FixedUpdate()
         {
-            if (stage == null || hud.MenuOpen || TalkOn) return;      // 会話の間は止める（3・2・1 も）
+            if (stage == null || hud.MenuOpen || TalkOn || hud.TitleOpen) return;      // 会話とタイトルの間は止める（3・2・1 も）
             float dt = Time.fixedDeltaTime;
             t += dt;
             if (state == "ready")
