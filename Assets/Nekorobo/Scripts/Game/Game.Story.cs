@@ -290,7 +290,8 @@ namespace Nekorobo
                 ws.Add(new JObject { ["cash"] = W.cash, ["up"] = JObject.FromObject(W.up), ["items"] = JObject.FromObject(W.items),
                                      ["ammo"] = JObject.FromObject(W.ammo), ["bought"] = JObject.FromObject(W.bought) });
             var o = new JObject { ["course"] = courseName, ["total"] = course.stages.Count, ["stage"] = courseIndex,
-                                  ["done"] = runDone, ["wallets"] = ws, ["at"] = System.DateTime.Now.ToString("s") };
+                                  ["done"] = runDone, ["wallets"] = ws, ["times"] = new JArray(runTimes.ToArray()),
+                                  ["at"] = System.DateTime.Now.ToString("s") };
             PlayerPrefs.SetString(STORY_KEY, o.ToString(Newtonsoft.Json.Formatting.None));
             PlayerPrefs.Save();
         }
@@ -329,13 +330,15 @@ namespace Nekorobo
         /// <summary>ストーリーを始める（cont なら続きから）。JS版 titleStart("story")。</summary>
         public void StartStory(bool cont)
         {
-            runDone = 0; shopped = false;
+            runDone = 0; shopped = false; runTimes.Clear();
             int at = 0;
             var sv = cont ? LoadStory() : null;
             if (sv != null)
             {
                 RestoreWallets((JArray)sv["wallets"]);
                 at = (int)sv["stage"]; runDone = J.I(sv, "done", at);
+                var tm = sv["times"] as JArray;
+                if (tm != null) foreach (var x in tm) runTimes.Add((int)x);
             }
             else NewWallets();
             LoadCourseStage(at);

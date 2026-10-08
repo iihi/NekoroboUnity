@@ -671,7 +671,7 @@ namespace Nekorobo
         }
 
         /// <summary>背景（radial-gradient(1200px 500px at 50% -10%, #1b3f8f, transparent 70%) と linear-gradient(#0b2463, #071a4a)）。</summary>
-        static Texture2D BgTex()
+        public static Texture2D BgTex()
         {
             const int W = 160, H = 90;
             var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };

@@ -34,6 +34,10 @@ namespace Nekorobo
         [System.NonSerialized] public List<PlayerSrc> slots = new List<PlayerSrc> { new PlayerSrc() };
         /// <summary>通算で終えた面の数。ステージボーナスの数えに使う（JS版 RUN.done）。</summary>
         [System.NonSerialized] public int runDone;
+        /// <summary>ストーリーの面ごとのクリアタイム[フレーム]（JS版 RUN.times）。やり直したら上書き。</summary>
+        [System.NonSerialized] public List<int> runTimes = new List<int>();
+        public int RunTime(int i) { return i >= 0 && i < runTimes.Count ? runTimes[i] : 0; }
+        public int RunFrames() { int s = 0; foreach (var f in runTimes) s += f; return s; }
 
         [Header("遊びの調子（JS版の右パネルと同じ3つ。F2 で切り替え）")]
         public Preset preset = Preset.普通;
@@ -383,7 +387,7 @@ namespace Nekorobo
             }
 
             var kb = Keyboard.current;
-            if (hud.ShopOpen || TalkOn || hud.TitleOpen) return;   // ショップ・会話・タイトルの間は、そちらが入力を見る
+            if (hud.ShopOpen || TalkOn || hud.TitleOpen || hud.EndingOpen) return;   // ショップ・会話・タイトル・エンディングの間は、そちらが入力を見る
             if (kb != null && !hud.MenuOpen)
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
@@ -1201,6 +1205,11 @@ namespace Nekorobo
                 }
             }
             foreach (var b in result.bonuses) if (b.P == null || b.P == me) result.bonus += b.amt;
+            if (cleared && entry != null)
+            {
+                while (runTimes.Count <= courseIndex) runTimes.Add(0);
+                runTimes[courseIndex] = frames;               // やり直したら上書き（足し込まない）
+            }
             if (cleared)
             {
                 int best = PlayerPrefs.GetInt(BestKey(), 0);

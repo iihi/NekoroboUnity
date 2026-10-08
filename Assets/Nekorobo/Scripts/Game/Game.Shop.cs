@@ -125,9 +125,9 @@ namespace Nekorobo
             if (entry != null && course != null)
             {
                 if (courseIndex + 1 < course.stages.Count) { LoadCourseStage(courseIndex + 1); return; }
-                // 最後の面のあとのエンディングは、タイトルと一緒に移す。いまはコースの1面目へ
-                hud.Toast("全ステージ終了！（エンディングはタイトルと一緒に移します）");
-                LoadCourseStage(0);
+                // 最後の面のあとはエンディング。通したので途中経過の記録は消す
+                ClearStory();
+                hud.ShowEnding();
                 return;
             }
             // フリープレイには終わりが無い。お金・強化・アイテムを持ったまま、次に遊ぶ面を選ぶ
@@ -146,7 +146,7 @@ namespace Nekorobo
         public void ResetRun()
         {
             hud.CloseShop();
-            shopped = false; runDone = 0;
+            shopped = false; runDone = 0; runTimes.Clear();
             NewWallets();
             if (entry != null) LoadCourseStage(0); else Rebuild();
         }

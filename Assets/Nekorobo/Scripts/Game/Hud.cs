@@ -22,11 +22,14 @@ namespace Nekorobo
         /// <summary>会話・案内・バン（ストーリーの画面）。</summary>
         public StoryUi Story;
         TitleWin title;
+        EndingWin ending;
+        public bool EndingOpen { get { return ending != null && ending.Open; } }
+        public void ShowEnding() { CloseShop(); resultWin.Close(); ending.Show(); }
         public bool TitleOpen { get { return title != null && title.Open; } }
         /// <summary>タイトルを開く（page は Top / Free など。next なら買い物のあとの「次の面選び」）。</summary>
         public void OpenTitle(string page, bool next = false)
         {
-            CloseShop(); resultWin.Close(); if (MenuOpen) menuPanel.SetActive(false);
+            CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
             Story.TalkClose(true); Story.HideBang(); Story.TutHide();
             title.next = next;
             title.OpenPage(page);
@@ -92,6 +95,9 @@ namespace Nekorobo
             // ---- 強化ショップ（全画面。検証用パネルより下に重ねる）
             shopWin = new ShopWin(root, GetComponent<Game>());
 
+            // ---- エンディング（全ステージ終了。ショップと同じ地）
+            ending = new EndingWin(root, GetComponent<Game>());
+
             // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
             Story = new StoryUi(root, GetComponent<Game>());
 
@@ -153,6 +159,7 @@ namespace Nekorobo
             Story.TalkClose(true);
             Story.HideBang();
             Story.TutHide();
+            ending.Close();
             resultWin.Close();
             foreach (var p in pops) Destroy(p.t.gameObject);
             pops.Clear();
@@ -198,6 +205,7 @@ namespace Nekorobo
             if (g.stage == null) { SideTick(); return; }
             Story.Tick(Time.deltaTime);
             if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
+            else if (ending.Open) ending.Tick(Time.unscaledDeltaTime);
             else if (shopWin.Open) shopWin.Tick(Time.deltaTime);
             else { if (resultWin.Open) resultWin.Tick(Time.deltaTime); MenuTick(); }
 
