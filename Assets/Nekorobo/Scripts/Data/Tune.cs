@@ -58,6 +58,27 @@ namespace Nekorobo
         public Tune Clone() { return (Tune)MemberwiseClone(); }
 
         /// <summary>
+        /// 中身だけ入れ替える。**Tune そのものは作り直さない**（つまみが古い方を触り続けるため。JS版と同じ注意）。
+        /// </summary>
+        public void CopyFrom(Tune src)
+        {
+            foreach (var f in typeof(Tune).GetFields(BindingFlags.Public | BindingFlags.Instance)) f.SetValue(this, f.GetValue(src));
+        }
+
+        /// <summary>{ 名前: 値 } の JSON にする（tune.json の "tune"）。</summary>
+        public JObject ToJson()
+        {
+            var o = new JObject();
+            foreach (var f in typeof(Tune).GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var v = f.GetValue(this);
+                if (v is bool) o[f.Name] = (bool)v;
+                else o[f.Name] = (double)System.Math.Round((float)v, 6);
+            }
+            return o;
+        }
+
+        /// <summary>
         /// 「爽快」の調子（JS版の WILD）。コードの既定値の上に、これだけ乗せる。
         /// 速くて壊れにくく、客がよく飛ぶ。見ている人も楽しい大味な調子。
         /// </summary>
@@ -125,6 +146,17 @@ namespace Nekorobo
                 }
                 catch { }
             }
+        }
+
+        public JObject ToJson()
+        {
+            var o = new JObject();
+            foreach (var f in typeof(CamTune).GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var v = f.GetValue(this);
+                if (v is bool) o[f.Name] = (bool)v; else o[f.Name] = (double)System.Math.Round((float)v, 6);
+            }
+            return o;
         }
     }
 

@@ -17,6 +17,8 @@ namespace Nekorobo
         RectTransform root;
         Text center, help;
         HudTop top;
+        SettingsPanel settings;
+        GameObject gearBtn;
         float readyAnim; string readyShown = "";
         GameObject resultPanel, menuPanel;
         Text resultText, menuText;
@@ -39,6 +41,7 @@ namespace Nekorobo
             sc.referenceResolution = new Vector2(1280, 720);
             sc.matchWidthOrHeight = 0.5f;
             root = cg.GetComponent<RectTransform>();
+            cg.AddComponent<GraphicRaycaster>();             // パネルのつまみをマウスで触れるように
             over = new Overhead(root, GetComponent<Game>());
 
             // ---- 上の帯と右の人ごとの札（JS版 #topbar / #pcards）
@@ -70,11 +73,28 @@ namespace Nekorobo
             menuText.supportRichText = true;
             menuPanel.SetActive(false);
 
+            // ---- 検証用パネル（Tab / ⚙）
+            settings = new SettingsPanel(root, GetComponent<Game>());
+            {
+                var im = UiKit.Img(root, new Color(0.16f, 0.19f, 0.24f, 0.9f), 10, "Gear");
+                im.raycastTarget = true;
+                var r = im.rectTransform; r.anchorMin = r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(1, 1);
+                r.sizeDelta = new Vector2(36, 36); r.anchoredPosition = new Vector2(-12, -88);
+                var b = im.gameObject.AddComponent<Button>(); b.targetGraphic = im;
+                b.navigation = new Navigation { mode = Navigation.Mode.None };
+                b.onClick.AddListener(() => { settings.Toggle(); UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null); });
+                var t = UiKit.Label(im.transform, "⚙", 22, Color.white, false, TextAnchor.MiddleCenter);
+                UiKit.Stretch(t.rectTransform);
+                gearBtn = im.gameObject;
+            }
+
             // ---- お知らせ（調子を変えたときなど）
             toast = Txt(root, "", 22, TextAnchor.MiddleCenter, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -110), new Vector2(0, -70));
         }
 
         public void Toast(string s) { toast.text = s; toastT = 2.2f; }
+        public void RefreshSettings() { if (settings != null) settings.Refresh(); }
+        public void OpenStageMenu() { if (!MenuOpen) MenuOpenNow(); }
 
         // ------------------------------------------------------------ 部品
         RectTransform Panel(Transform parent, Vector2 aMin, Vector2 aMax, Vector2 pos, Vector2 size, Color c)
@@ -204,6 +224,10 @@ namespace Nekorobo
                 p.t.gameObject.SetActive(sp.z > 0);
             }
             over.Tick();
+            settings.Tick();
+            var kbd = Keyboard.current;
+            if (kbd != null && kbd.tabKey.wasPressedThisFrame) settings.Toggle();
+            gearBtn.SetActive(!settings.Open);
             if (toastT > 0)
             {
                 toastT -= Time.deltaTime;

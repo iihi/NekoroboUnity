@@ -21,6 +21,7 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 | ↑ ↓ | 前進・バック |
 | Space | ジャンプ |
 | R | やり直し |
+| Tab（⚙） | 検証用パネル（HTML版の右パネルと同じ。調子・カメラ・店舗・数値のつまみ・既定として保存） |
 | F2 | 遊びの調子（普通 → 爽快 → カスタム）。既定は**普通**（HTML版のコードに書いてある内蔵の数値） |
 | Esc（F1） | 面を選ぶ（コースの面と、stages フォルダの全部のファイル） |
 | 結果で Enter ／ N | もう一度 ／ 次の面 |
@@ -102,6 +103,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
 | `Scripts/Game/HudTop.cs` | 上の帯（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards |
 | `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState） |
+| `Scripts/Game/SettingsPanel.cs` | 検証用パネル（JS版の右パネル）。保存すると HTML版の tune.json に書く（Unity が知らない項目は残す） |
 | `Scripts/Game/UiKit.cs` | 画面の部品（丸い札・枠・影）。CSS の数字をそのまま写すため |
 | `Editor/BackgroundStep.cs` | 確かめる用：Unity が裏にあっても遊びを進める（既定は切） |
 | `Editor/NekoroboSetup.cs` | シーンを作る |

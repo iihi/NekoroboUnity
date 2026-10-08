@@ -62,7 +62,8 @@ namespace Nekorobo
         Light sun;
         Hud hud;
         public float shake;
-        int buildGen;                       // 面を組み直した回数（読み込みが終わる前に組み直したかを見る）
+        int buildGen;
+        Tune tuneBack;                      // ステージの上書きを当てる前の値                       // 面を組み直した回数（読み込みが終わる前に組み直したかを見る）
 
         public class Result
         {
@@ -183,9 +184,9 @@ namespace Nekorobo
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
             routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
             warned.Clear();
-            // ステージごとの数値の上書き（その面だけ）
-            T = BaseTune();
-            if (stage.tune != null) T.Apply(stage.tune);
+            // ステージごとの数値の上書き（その面だけ）。前の面の上書きは必ず戻してから当てる（JS版 TUNE_BACK）
+            if (tuneBack != null) { T.CopyFrom(tuneBack); tuneBack = null; }
+            if (stage.tune != null) { tuneBack = T.Clone(); T.Apply(stage.tune); }
             t = 0; frames = 0; shopDmg = 0; oi = 0; done = 0; result = null; shake = 0;
             state = "ready"; readyT = 3.999f;
             ModelStore.ResetSeq(stage.n);                  // 人違いのモデルを配る順番を、面ごとに数え直す
@@ -294,8 +295,7 @@ namespace Nekorobo
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
                 if (kb.f2Key.wasPressedThisFrame)
                 {
-                    preset = (Preset)(((int)preset + 1) % 3);
-                    Rebuild();
+                    SetPreset((Preset)((((int)preset) + 1 + 3) % 3));
                     hud.Toast(preset + "の調子にしました");
                 }
                 if (state == "result")
@@ -337,6 +337,68 @@ namespace Nekorobo
             return i;
         }
 
+        /// <summary>調子を切り替える（数値を入れ直して、面を作り直す）。</summary>
+        public void SetPreset(Preset p)
+        {
+            preset = p;
+            tuneBack = null;
+            T.CopyFrom(BaseTune());
+            Rebuild();
+            hud.RefreshSettings();
+        }
+
+        /// <summary>店舗を切り替える（右パネル。その場で作り直す）。</summary>
+        public void CycleShop(int d)
+        {
+            int n = Shops.All.Count, i = Shops.All.IndexOf(shop);
+            shop = Shops.All[((i + d) % n + n) % n];
+            if (entry == null) stageTitle = stage.n + "（" + shop.n + "）";
+            Rebuild();
+        }
+
+        public void OpenStageMenu() { hud.OpenStageMenu(); }
+
+        public void ApplyShadows() { if (sun != null) sun.shadows = cam.shadow ? LightShadows.Soft : LightShadows.None; }
+
+        /// <summary>
+        /// tune.json の中身（HTML版の「既定として保存」と同じ形）。
+        /// **Unity がまだ知らない項目は残す**（ファイルにある値を読んで、知っている項目だけ書き換える）。
+        /// </summary>
+        public Newtonsoft.Json.Linq.JObject TuneJson()
+        {
+            var j = DataRoot.ReadJson("tune.json") ?? new Newtonsoft.Json.Linq.JObject();
+            if (j["_comment"] == null)
+                j["_comment"] = new Newtonsoft.Json.Linq.JArray(
+                    "右パネルの数値の既定値。ゲームは起動時にこれを読みます。",
+                    "ゲーム画面の右パネル「この数値を既定として保存」で書き出せます。",
+                    "知らないキーは無視されるので、要らない項目は消しても構いません。",
+                    "このファイルを消すと、コードに書いてある内蔵の数値に戻ります。");
+            var tj = j["tune"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
+            foreach (var p in T.ToJson().Properties()) tj[p.Name] = p.Value;
+            j["tune"] = tj;
+            var cj = j["camera"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
+            foreach (var p in cam.ToJson().Properties()) cj[p.Name] = p.Value;
+            j["camera"] = cj;
+            var gj = j["guest"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
+            gj["heads"] = (double)System.Math.Round(TF.heads, 4); gj["bodyTint"] = (double)System.Math.Round(TF.bodyTint, 4);
+            j["guest"] = gj;
+            return j;
+        }
+
+        /// <summary>tune.json へ書く（HTML版と同じファイル）。失敗したら理由を返す。</summary>
+        public string SaveTune(out string path)
+        {
+            path = DataRoot.File_("tune.json");
+            try
+            {
+                var text = TuneJson().ToString(Newtonsoft.Json.Formatting.Indented);
+                System.IO.File.WriteAllText(path, text, new System.Text.UTF8Encoding(false));
+                TF.tune = T.Clone();
+                return null;
+            }
+            catch (System.Exception e) { return e.Message; }
+        }
+
         /// <summary>調子の数値（JS版 applyPreset：内蔵の数値へ戻してから、その調子のぶんを乗せる）。</summary>
         Tune BaseTune()
         {
@@ -344,7 +406,8 @@ namespace Nekorobo
             {
                 case Preset.爽快: return Tune.Wild();
                 case Preset.カスタム: return TF.tune.Clone();
-                default: return new Tune();
+                case Preset.普通: return new Tune();
+                default: return T.Clone();                 // つまみを動かした後（どの調子でもない）
             }
         }
 
