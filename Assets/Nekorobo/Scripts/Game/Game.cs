@@ -25,7 +25,9 @@ namespace Nekorobo
         public string stageFile = "";
         public string shopName = "カフェ";
 
-        [Header("数値（tune.json から読む。遊びながら触ってよい）")]
+        [Header("遊びの調子（JS版の右パネルと同じ3つ。F2 で切り替え）")]
+        public Preset preset = Preset.普通;
+        [Header("いま効いている数値（遊びながら触ってよい。R で作り直すと調子の値に戻る）")]
         public Tune T;
         public CamTune cam;
         public TuneFile TF;
@@ -76,7 +78,7 @@ namespace Nekorobo
             Time.fixedDeltaTime = 1f / 60f;            // JS版と同じ刻み
             Physics.gravity = new Vector3(0, -9.81f, 0);
             TF = TuneFile.Load();
-            T = TF.tune.Clone();
+            T = BaseTune();
             cam = TF.cam;
             cash = T.startCash;
             var mj = DataRoot.ReadJson("assets/models.json");
@@ -169,7 +171,7 @@ namespace Nekorobo
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             warned.Clear();
             // ステージごとの数値の上書き（その面だけ）
-            T = TF.tune.Clone();
+            T = BaseTune();
             if (stage.tune != null) T.Apply(stage.tune);
             t = 0; frames = 0; shopDmg = 0; oi = 0; done = 0; result = null; shake = 0;
             state = "ready"; readyT = 3.999f;
@@ -276,6 +278,12 @@ namespace Nekorobo
             if (kb != null && !hud.MenuOpen)
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
+                if (kb.f2Key.wasPressedThisFrame)
+                {
+                    preset = (Preset)(((int)preset + 1) % 3);
+                    Rebuild();
+                    hud.Toast(preset + "の調子にしました");
+                }
                 if (state == "result")
                 {
                     if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) Rebuild();
@@ -313,6 +321,17 @@ namespace Nekorobo
             i.up = Mathf.Abs(ang) < 50;
             i.jump = P.ent.wet > 0.4f;                         // 池に落ちたら跳んで上がる
             return i;
+        }
+
+        /// <summary>調子の数値（JS版 applyPreset：内蔵の数値へ戻してから、その調子のぶんを乗せる）。</summary>
+        Tune BaseTune()
+        {
+            switch (preset)
+            {
+                case Preset.爽快: return Tune.Wild();
+                case Preset.カスタム: return TF.tune.Clone();
+                default: return new Tune();
+            }
         }
 
         public void NextStage()

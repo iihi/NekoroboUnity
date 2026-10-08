@@ -21,6 +21,7 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 | ↑ ↓ | 前進・バック |
 | Space | ジャンプ |
 | R | やり直し |
+| F2 | 遊びの調子（普通 → 爽快 → カスタム）。既定は**普通**（HTML版のコードに書いてある内蔵の数値） |
 | Esc（F1） | 面を選ぶ（コースの面と、stages フォルダの全部のファイル） |
 | 結果で Enter ／ N | もう一度 ／ 次の面 |
 
@@ -31,7 +32,8 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 **ステージ・数値・絵は、HTML版のフォルダから直接読みます。** コピーはしません。
 
 - `stages/*.json` … HTML版のエディタで作ったステージが、そのまま Unity でも遊べます
-- `tune.json` … 右パネルで保存した数値（加速・減衰・吹っ飛び…）がそのまま効きます
+- `tune.json` … 右パネルで保存した数値（加速・減衰・吹っ飛び…）。調子を「カスタム」にしたときに効きます
+  （いまの tune.json は「爽快」とほぼ同じ値なので、既定は「普通」にしてあります）
 - `assets/tex/*.png` と `assets/models.json` の designs … 床・壁・家具の見た目
 
 置き場所は自動で探します（環境変数 `NEKOROBO_DATA` → `StreamingAssets/nekorobo3d` →
@@ -89,6 +91,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Ent.cs` | 当たり判定を持つ物1つ（JS版の ent） |
 | `Scripts/Game/Player.cs` | ロボ1台ぶんの記録と見た目 |
 | `Scripts/Game/Looks.cs` | 客・家具・看板の見た目（仮） |
+| `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
 | `Scripts/Game/Hud.cs` | 画面の表示（仮）と面選び |
 | `Editor/NekoroboSetup.cs` | シーンを作る |
 

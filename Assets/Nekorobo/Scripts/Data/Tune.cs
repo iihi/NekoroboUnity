@@ -57,6 +57,24 @@ namespace Nekorobo
 
         public Tune Clone() { return (Tune)MemberwiseClone(); }
 
+        /// <summary>
+        /// 「爽快」の調子（JS版の WILD）。コードの既定値の上に、これだけ乗せる。
+        /// 速くて壊れにくく、客がよく飛ぶ。見ている人も楽しい大味な調子。
+        /// </summary>
+        public static Tune Wild()
+        {
+            var t = new Tune();
+            t.thrust = 34; t.linDamp = 3.4f; t.reverseRatio = 0.75f; t.steerAccel = 20; t.steerMax = 4.5f;
+            t.jumpSpeed = 4.6f; t.airControl = 0.50f;
+            t.botTough = 8.0f; t.botDmg = 0.024f; t.breakSteer = 65; t.breakDrive = 90;
+            t.knockback = 7.0f; t.knockUp = 3.2f; t.guestDmg = 0.05f;
+            t.guestTough = 10.0f;
+            t.blastRadius = 4.6f; t.blastForce = 48; t.blastGuestDmg = 45;
+            t.hitThreshold = 30; t.dropImpulse = 110;
+            t.shopDmg = 0.022f; t.repairPerPct = 90; t.ambulance = 1200;
+            return t;
+        }
+
         /// <summary>JSON の { 名前: 値 } を、同じ名前の項目へ入れる。知らない名前は無視。</summary>
         public void Apply(JObject o)
         {
@@ -74,6 +92,14 @@ namespace Nekorobo
                 catch { /* 型の合わない値は飛ばす */ }
             }
         }
+    }
+
+    /// <summary>遊びの調子。JS版の右パネル「遊びの調子」と同じ3つ。</summary>
+    public enum Preset
+    {
+        普通,      // コードに書いてある内蔵の数値（企画書の想定に近い、詰めて遊ぶ調子）
+        爽快,      // WILD
+        カスタム,  // 保存してある数値（tune.json）
     }
 
     /// <summary>カメラの数値。JS版の CAM と同じ。</summary>

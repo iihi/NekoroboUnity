@@ -20,7 +20,8 @@ namespace Nekorobo
         GameObject resultPanel, menuPanel;
         Text resultText, menuText;
         readonly List<PopItem> pops = new List<PopItem>();
-        readonly Dictionary<Player, Text> bubbles = new Dictionary<Player, Text>();
+        Overhead over;
+        Text toast; float toastT;
 
         class PopItem { public Text t; public Vector3 w; public float age, life; public bool big; }
 
@@ -37,6 +38,7 @@ namespace Nekorobo
             sc.referenceResolution = new Vector2(1280, 720);
             sc.matchWidthOrHeight = 0.5f;
             root = cg.GetComponent<RectTransform>();
+            over = new Overhead(root, game ?? GetComponent<Game>());
 
             // ---- 上の帯
             var bar = Panel(root, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -54), Vector2.zero, new Color(0.1f, 0.12f, 0.16f, 0.72f));
@@ -52,7 +54,7 @@ namespace Nekorobo
             dishBar = BarImg(st, new Vector2(110, -44), new Color(0.37f, 0.82f, 0.54f));
 
             // ---- 右下：操作
-            help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
+            help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
                        new Vector2(0.4f, 0), new Vector2(1, 0), new Vector2(0, 8), new Vector2(-12, 30));
             help.color = new Color(0.15f, 0.17f, 0.2f, 0.9f);
             Object.Destroy(help.GetComponent<Outline>());
@@ -74,7 +76,12 @@ namespace Nekorobo
             menuText = Txt(menuPanel.transform, "", 17, TextAnchor.UpperLeft, Vector2.zero, Vector2.one, new Vector2(24, 18), new Vector2(-24, -18));
             menuText.supportRichText = true;
             menuPanel.SetActive(false);
+
+            // ---- お知らせ（調子を変えたときなど）
+            toast = Txt(root, "", 22, TextAnchor.MiddleCenter, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -110), new Vector2(0, -70));
         }
+
+        public void Toast(string s) { toast.text = s; toastT = 2.2f; }
 
         // ------------------------------------------------------------ 部品
         RectTransform Panel(Transform parent, Vector2 aMin, Vector2 aMax, Vector2 pos, Vector2 size, Color c)
@@ -132,17 +139,19 @@ namespace Nekorobo
             resultPanel.SetActive(false);
             foreach (var p in pops) Destroy(p.t.gameObject);
             pops.Clear();
-            foreach (var b in bubbles.Values) Destroy(b.gameObject);
-            bubbles.Clear();
+            over.Clear();
         }
 
         /// <summary>数字の吹き出し（売上・故障・コンボ）。JS版 pop。</summary>
         public void Pop(Vector3 world, string text, int col, bool big)
         {
-            var t = Txt(root, text, big ? 26 : 20, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            // JS版の .pop：色つきの太字に白いふち（明るい床の上でも読める）。1秒で上へ流れて消える
+            var t = Txt(root, text, big ? 25 : 19, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             t.color = Mats.Hex(col);
             t.fontStyle = FontStyle.Bold;
-            pops.Add(new PopItem { t = t, w = world, life = 1.3f, big = big });
+            var o = t.GetComponent<Outline>(); o.effectColor = new Color(1, 1, 1, 0.9f); o.effectDistance = new Vector2(2, -2);
+            t.gameObject.AddComponent<Outline>().effectColor = new Color(1, 1, 1, 0.9f);
+            pops.Add(new PopItem { t = t, w = world, life = 1.0f, big = big });
         }
 
         /// <summary>戻ってきた所の印（仮。JS版は光の柱）。</summary>
@@ -207,8 +216,8 @@ namespace Nekorobo
                 SetBar(dishBar, P.carried != null ? P.carried.integ / 100f : 0f);
             }
             // 3・2・1・スタート！
-            if (g.state == "ready") center.text = Mathf.CeilToInt(g.readyT).ToString();
-            else if (g.state == "play" && g.frames < 60) center.text = "スタート！";
+            // JS版と同じ：3.999→3 / 2.999→2 / 1.999→1 / 0.999→スタート！（スタートの間はまだ動けない）
+            if (g.state == "ready") { int n = Mathf.CeilToInt(g.readyT) - 1; center.text = n > 0 ? n.ToString() : "スタート！"; }
             else center.text = "";
 
             var cam = g.mainCam;
@@ -218,23 +227,17 @@ namespace Nekorobo
                 var p = pops[i];
                 p.age += Time.deltaTime;
                 if (p.age >= p.life) { Destroy(p.t.gameObject); pops.RemoveAt(i); continue; }
-                var sp = cam.WorldToScreenPoint(p.w + Vector3.up * p.age * 0.6f);
+                var sp = cam.WorldToScreenPoint(p.w + Vector3.up * p.age * 0.7f);
                 p.t.rectTransform.position = sp;
-                var c = p.t.color; c.a = p.age > p.life * 0.7f ? 1 - (p.age - p.life * 0.7f) / (p.life * 0.3f) : 1; p.t.color = c;
+                var c = p.t.color; float k = p.age / p.life; c.a = 1 - k * k; p.t.color = c;
                 p.t.gameObject.SetActive(sp.z > 0);
             }
-            // セリフ（JS版はロボの胸のパネルに出す。ここでは頭の上に出す）
-            foreach (var Q in g.players)
+            over.Tick();
+            if (toastT > 0)
             {
-                Text b;
-                if (!bubbles.TryGetValue(Q, out b))
-                {
-                    b = Txt(root, "", 18, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-                    bubbles[Q] = b;
-                }
-                b.text = Q.msgT > 0 ? Q.msg : "";
-                var sp = cam.WorldToScreenPoint(Q.ent.transform.position + Vector3.up * 1.15f);
-                b.rectTransform.position = sp;
+                toastT -= Time.deltaTime;
+                var tc = toast.color; tc.a = Mathf.Clamp01(toastT / 0.5f); toast.color = tc;
+                if (toastT <= 0) toast.text = "";
             }
         }
 
