@@ -148,7 +148,8 @@ namespace Nekorobo
                     guestBars[gu] = b;
                 }
                 if (gu.sunk) { b.r.gameObject.SetActive(false); continue; }
-                Project(gu.transform.position + Vector3.up * 0.62f, b.r);
+                // 札は頭の少し上。モデルの客は背が当たり判定（1.04m）より高いので、そのぶん上げる
+                Project(gu.transform.position + Vector3.up * Mathf.Max(0.62f, gu.modelH - 0.52f + 0.22f), b.r);
                 SetFill(b, gu.hp / 100f, gu.hp > 50 ? GREEN : (gu.hp > 0 ? ORANGE : RED));
             }
             bool many = g.players.Count > 1;

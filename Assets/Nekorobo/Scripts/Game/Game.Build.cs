@@ -53,6 +53,13 @@ namespace Nekorobo
         /// 当たり判定を1つ作る（JS版 makeBody）。half は箱の半分の大きさ。
         /// capsule のときは half.x が半径、half.y が筒の半分の長さ。
         /// </summary>
+        /// <summary>models.json にその種類のモデルがあれば、手続きの見た目と差し替える（JS版 applyModel）。</summary>
+        void ApplyModel(Ent e, GameObject look, string kind, string want = null)
+        {
+            float h;
+            if (ModelStore.Apply(e.transform, look, kind, shop.n, e.size, out h, want) != null) e.modelH = h;
+        }
+
         Ent MakeBody(string kind, Vector3 pos, Vector3 half, Quaternion rot, bool fix,
                      float mass = 0, float fric = 0.7f, float rest = 0.15f, float angDamp = 0f,
                      bool capsule = false, bool minFric = false, bool kinematic = false)
@@ -279,7 +286,9 @@ namespace Nekorobo
                             float hw = (lng ? 1.95f : 0.95f) / 2, hd = 0.95f / 2, th = 0.38f;
                             var tb = MakeBody("table", b + new Vector3(0, th, 0), new Vector3(hw, th, hd), Coord.RotX(o.rot),
                                               false, lng ? 45 : 30, 0.6f * fr, 0.2f, 0.6f);
-                            Looks.Table(tb.transform, lng, o.des);
+                            var look = Looks.Table(tb.transform, lng, o.des);
+                            // 長テーブルのモデルが無ければテーブルのモデル（JS版と同じ）
+                            ApplyModel(tb, look, ModelStore.For(o.t, shop.n) != null ? o.t : "table");
                             furni.Add(tb);
                             break;
                         }
@@ -287,7 +296,7 @@ namespace Nekorobo
                         {
                             var chr = MakeBody("chair", b + new Vector3(0, 0.45f, 0), new Vector3(0.22f, 0.45f, 0.22f),
                                                Coord.RotFace(o.rot), false, 8, 0.5f * fr, 0.25f, 0.5f);
-                            Looks.Chair(chr.transform, o.des);
+                            ApplyModel(chr, Looks.Chair(chr.transform, o.des), "chair");
                             furni.Add(chr);
                             break;
                         }
@@ -309,7 +318,8 @@ namespace Nekorobo
                                               Coord.RotFace(o.rot), false, 55, 0.7f * fr, 0.3f, 0.4f, capsule: true);
                             gu.pri = o.pri;
                             var K = GuestKinds.Find(o.gk) ?? GuestKinds.All[rr.Pick(GuestKinds.All.Count)];
-                            Looks.Guest(gu.transform, rr, K, TF.heads);
+                            var look = Looks.Guest(gu.transform, rr, K, TF.heads);
+                            ApplyModel(gu, look, "guest", o.gm);    // gm … エディタで選んだ客のモデル
                             guests.Add(gu);
                             break;
                         }
@@ -465,12 +475,13 @@ namespace Nekorobo
             string des = null;
             var co = C.objects.Find(o => o.t == "counter");
             if (co != null) des = co.des;
-            var cg = counterEnt.transform;
+            var cg = Vis(counterEnt.transform, "Look").transform;
             Part.Add(cg, MeshGen.Box(CounterW, CounterH - 0.1f, CounterD), Designs.Mat(des, Mats.Get(0x6b4230), "counter", "leg"),
                      new Vector3(0, -0.05f, 0));
             Part.Add(cg, MeshGen.Box(CounterW + 0.22f, 0.1f, CounterD + 0.18f), Designs.Mat(des, Mats.Get(0xe9e4d8, 0.55f), "counter", "top", 3),
                      new Vector3(0, CounterH / 2f - 0.05f, 0));
             Part.Add(cg, MeshGen.Box(0.04f, 0.12f, CounterD * 0.94f), Mats.Get(0xb9c0c8, 0.35f), new Vector3(CounterW / 2f + 0.01f, 0.12f, 0));
+            ApplyModel(counterEnt, cg.gameObject, "counter");
 
             // 厨房まわり（カウンターと一緒に回す。ローカル +X が受取面の向き）
             kitchen = new GameObject("Kitchen").transform;

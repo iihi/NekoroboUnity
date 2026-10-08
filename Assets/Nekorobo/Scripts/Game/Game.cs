@@ -92,8 +92,13 @@ namespace Nekorobo
             hud.game = this;
         }
 
-        void Start()
+        async void Start()
         {
+            // モデル（glb）は遊ぶ前に全部読む（JS版 loadAssets と同じ）。客は18人ぶん
+            hud.Toast("モデルを読み込み中…");
+            await ModelStore.LoadAll();
+            if (this == null) return;                      // 読んでいる間に止められた
+            Debug.Log("[Nekorobo] モデル: " + string.Join(" ／ ", ModelStore.Log));
             course = Course.Load(courseName);
             if (string.IsNullOrEmpty(stageFile)) LoadCourseStage(courseIndex);
             else LoadFile(stageFile, shopName);
@@ -178,6 +183,7 @@ namespace Nekorobo
             if (stage.tune != null) T.Apply(stage.tune);
             t = 0; frames = 0; shopDmg = 0; oi = 0; done = 0; result = null; shake = 0;
             state = "ready"; readyT = 3.999f;
+            ModelStore.ResetSeq(stage.n);                  // 人違いのモデルを配る順番を、面ごとに数え直す
             BuildStage();
             me = players.Count > 0 ? players[0] : null;
             foreach (var P in players) Say(P, "ガンバルにゃ！", 2.2f);

@@ -30,7 +30,7 @@ namespace Nekorobo
         // 客
         public int pri;
         public GameObject ring;         // 倒れた印
-        public Transform vis;           // 見た目（物理の中心からずらして置く）
+        public float modelH;            // モデルに差し替えたときの見た目の高さ（頭の上の札をそれに合わせる）
 
         // 落ちた・浸かった
         public bool sunk;

@@ -146,8 +146,10 @@ namespace Nekorobo
         }
 
         /// <summary>テーブル（JS版の組み方）。原点は当たり判定の中心（高さ 0.38）。</summary>
-        public static void Table(Transform parent, bool lng, string des)
+        public static GameObject Table(Transform holder, bool lng, string des)
         {
+            var parent = new GameObject("Look").transform;
+            parent.SetParent(holder, false);
             float hw = (lng ? 1.95f : 0.95f) / 2, hd = 0.95f / 2;
             string kind = lng ? "table2" : "table";
             var top = Designs.Mat(des, Mats.Get(0xd98b45, 0.75f), kind, "top", lng ? 2 : 1);
@@ -161,11 +163,14 @@ namespace Nekorobo
             Part.Add(parent, MeshGen.Cylinder(0.12f, 0.11f, 0.02f, 14), cloth, Coord.W(-hw * 0.4f, 0.388f, 0));
             var glass = Mats.LitTransparent(new Color(0.81f, 0.90f, 0.96f, 0.5f), 0.1f);
             Part.Add(parent, MeshGen.Cylinder(0.045f, 0.038f, 0.14f, 12), glass, Coord.W(hw * 0.4f, 0.445f, 0.16f), shadow: false);
+            return parent.gameObject;
         }
 
         /// <summary>イス（前 = +Z）。原点は当たり判定の中心（高さ 0.45）。</summary>
-        public static void Chair(Transform parent, string des)
+        public static GameObject Chair(Transform holder, string des)
         {
+            var parent = new GameObject("Look").transform;
+            parent.SetParent(holder, false);
             var cm = Designs.Mat(des, Mats.Get(0xe0a463, 0.8f), "chair", "top");
             var leg = Designs.Mat(des, Mats.Get(0x8a5730), "chair", "leg");
             Part.Add(parent, MeshGen.Box(0.44f, 0.06f, 0.44f), cm, Vector3.zero);
@@ -173,6 +178,7 @@ namespace Nekorobo
             foreach (float lx in new[] { -0.18f, 0.18f })
                 foreach (float lz in new[] { -0.18f, 0.18f })
                     Part.Add(parent, MeshGen.Box(0.05f, 0.44f, 0.05f), leg, Coord.W(lx, -0.23f, lz));
+            return parent.gameObject;
         }
 
         /// <summary>

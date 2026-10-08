@@ -35,6 +35,8 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 - `tune.json` … 右パネルで保存した数値（加速・減衰・吹っ飛び…）。調子を「カスタム」にしたときに効きます
   （いまの tune.json は「爽快」とほぼ同じ値なので、既定は「普通」にしてあります）
 - `assets/tex/*.png` と `assets/models.json` の designs … 床・壁・家具の見た目
+- `assets/models.json` の models と、そこに書いた `assets/**/*.glb` … 客・家具・車などのモデル。
+  glb は Unity の glTF 読み込み（glTFast）で、遊ぶ前に全部読みます。客の配り方（どの席にどの人）も JS版と同じです
 
 置き場所は自動で探します（環境変数 `NEKOROBO_DATA` → `StreamingAssets/nekorobo3d` →
 このプロジェクトから見た `../../AI/ClaudeCode/Serving/nekorobo3d` の順）。
@@ -86,6 +88,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Data/Tune.cs` | 数値（JS版の DEFAULT_TUNE と同じ名前）と tune.json |
 | `Scripts/Data/Tiles.cs` | マップチップ・デザイン・客の種類・お店・料理（tiles.js / shops.js / DISHES） |
 | `Scripts/Data/Stage.cs` | ステージとコースの読み込み |
+| `Scripts/Data/ModelStore.cs` | モデル（glb）の読み込みと差し替え（JS版 loadAssets / applyModel）。models.json の models・dishes・shops |
 | `Scripts/Game/Game.cs` | 本体（JS版の G と step）。操作・受け取りと配達・ぶつかり・池・終わり・カメラ |
 | `Scripts/Game/Game.Build.cs` | ステージの組み立て（JS版 buildStage） |
 | `Scripts/Game/Ent.cs` | 当たり判定を持つ物1つ（JS版の ent） |
