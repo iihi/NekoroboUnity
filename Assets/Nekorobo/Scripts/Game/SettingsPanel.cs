@@ -114,9 +114,21 @@ namespace Nekorobo
             v.childForceExpandWidth = true;
             var fit = content.gameObject.AddComponent<ContentSizeFitter>(); fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.viewport = vp; sr.content = content;
+            // ---- 右上の ×（⚙ で開いたときに閉じる所。スクロールしても動かない）
+            {
+                var im = UiKit.Img(panel, new Color(0.22f, 0.25f, 0.31f, 0.95f), 8, "Close");
+                im.raycastTarget = true;
+                var r = im.rectTransform; r.anchorMin = r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(1, 1);
+                r.sizeDelta = new Vector2(32, 32); r.anchoredPosition = new Vector2(-10, -10);
+                var b = im.gameObject.AddComponent<UnityEngine.UI.Button>(); b.targetGraphic = im;
+                b.navigation = new Navigation { mode = Navigation.Mode.None };
+                b.onClick.AddListener(() => { Toggle(); EventSystem.current.SetSelectedGameObject(null); });
+                var t = UiKit.Label(im.transform, "×", 24, Color.white, false, TextAnchor.MiddleCenter);
+                UiKit.Stretch(t.rectTransform);
+            }
 
             var title = Label("ネコ配（仮）", 18, Color.white);
-            Label("Unity 版 / クォータービュー検証用（Tab で開け閉め）", 11, NOTE, false);
+            Label("Unity 版 / クォータービュー検証用（Tab か × で閉じる）", 11, NOTE, false);
 
             // ---- 遊びの調子
             Section("遊びの調子（まとめて切り替え）");
