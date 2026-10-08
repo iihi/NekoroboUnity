@@ -50,6 +50,23 @@ namespace Nekorobo
             Sec("池（水・溶岩）"),
             S("seaPenalty","海から戻るまで 秒(0=終わり)",0,30,1), S("waterDrag","水の抵抗",0,10,0.2f,1),
             S("waterDmg","水のダメージ %/秒",0,20,0.5f,1), S("lavaBurn","溶岩のダメージ %/秒",0,40,0.5f,1),
+            Sec("アイテム"),
+            S("bananaSlip","バナナで滑る時間(秒)",0.2f,6,0.1f,1), S("bananaSpin","└ 回る速さ(rad/秒)",0,12,0.5f,1),
+            S("droneSpeed","ドローンの速さ",1,15,0.2f,1), S("invTime","無敵の長さ(秒)",2,30,1),
+            S("boomSpeed","ブーメランの速さ",4,20,0.5f,1), S("boomOut","ブーメランの行き(秒)",0.2f,1.5f,0.05f,2),
+            S("missileSpeed","ビームの速さ",4,40,1), S("homingSpeed","追尾ミサイルの速さ",3,30,0.5f,1),
+            S("homingTurn","└ 曲がる速さ(rad/秒)",0.2f,8,0.1f,1), S("homingLife","└ 燃え尽きるまで(秒)",1,15,0.5f,1),
+            S("ballRange","弾道ミサイル 照準の範囲(m)",3,30,0.5f,1), S("ballAimSpeed","└ 照準の速さ(m/秒)",2,24,0.5f,1),
+            S("ballFlight","└ 落ちるまで(秒)",0.4f,5,0.1f,1), S("ballHeight","└ 打ち上がる高さ(m)",2,25,0.5f,1),
+            S("ballRadius","└ 爆発の半径(m)",1,16,0.2f,1),
+            S("blastRadius","爆風の半径(m)",0.5f,10,0.1f,1), S("blastForce","└ 吹っ飛ばす強さ",0,80,1),
+            S("blastBotDmg","└ ロボが受ける%",0,60,1), S("blastGuestDmg","└ 客が受ける",0,150,5),
+            S("blastShopDmg","└ 家具1つの店舗損壊%",0,20,0.5f,1), S("carRespawn","車が戻るまで(秒)",1,12,0.5f,1),
+            Sec("ぶつけて落とす"),
+            S("dropImpulse","落とす衝撃のしきい値",10,200,5), S("dropBlast","爆風で落とす近さ(0=落とさない)",0,1,0.05f,2),
+            S("dropDmg","落として減る完成度",0,100,1), S("dropSettle","誰でも拾えるまで(秒)",0,3,0.1f,1),
+            S("dropArm","└ 本人はさらに(秒)",0,5,0.1f,1), S("pickupR","拾える距離(m)",0.3f,2.5f,0.05f,2),
+            S("dishTimeout","放置で作り直し(秒)",5,90,5),
             Sec("凍りの床・ジャンプ台"),
             S("iceGrip","氷の横グリップ倍率",0,1,0.05f,2), S("iceDrag","氷の減衰倍率",0.1f,1,0.05f,2), S("icePush","氷の加速倍率",0.1f,1,0.05f,2),
             S("rampRise","ジャンプ台の高さ(m)",0.2f,1.6f,0.05f,2), S("wallLow","低い壁の高さ(m)",0.2f,1.5f,0.05f,2),
@@ -134,6 +151,11 @@ namespace Nekorobo
             var row2 = HRow();
             Button(row2, "面を選ぶ（Esc）", () => g.OpenStageMenu());
             Button(row2, "やり直し（R）", () => g.Rebuild());
+
+            // ---- アイテム（デバッグ）
+            Section("アイテム（デバッグ）");
+            Button(HRow(), "いま全員にアイテムを全部持たせる", () => g.GiveAllItems());
+            Label("Z で使う（弾道ミサイルは長押しで照準、離して発射）、X / C で持ち替え。パッドは Y で使う、R1 / L1 で持ち替え。", 11, NOTE, false);
 
             // ---- 今の収支
             Section("今の収支（ライブ検算）");

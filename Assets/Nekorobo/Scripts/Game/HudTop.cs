@@ -159,6 +159,7 @@ namespace Nekorobo
             c.down.gameObject.SetActive(false);
             c.dn = UiKit.Label(card.transform, "手ぶら", 11, Mats.Hex(0xc9ced6), true, TextAnchor.MiddleCenter);
             c.bag = UiKit.Label(card.transform, "アイテムなし", 9, Mats.Hex(0x77808d));
+            c.bag.horizontalOverflow = HorizontalWrapMode.Wrap;            // 持ち物が多いときは折り返す
             UiKit.Size(c.bag, 156);
             // 配った数と所持金
             var ft = UiKit.Rect(card.transform, "Ft");
@@ -266,9 +267,26 @@ namespace Nekorobo
                 c.border.color = Color.Lerp(Mats.Hex(0xff4d4d), Mats.Hex(P.col), k);
             }
             else { c.down.gameObject.SetActive(false); c.border.color = Mats.Hex(P.col); }
-            c.bag.text = "アイテムなし";                      // アイテムを移したらここに並べる
+            // 手持ちのアイテム。選んでいる物を金色で囲う
+            {
+                var W = g.WalletOf(P);
+                var sb = new System.Text.StringBuilder();
+                int have = 0;
+                foreach (var it in Game.ITEMS)
+                {
+                    if (W.Has(it.k) <= 0) continue;
+                    have++;
+                    string nm = it.shortN ?? it.n;
+                    string cnt = it.ammo > 0 ? "残" + W.ammo[it.k] : "×" + W.Has(it.k);
+                    string box = "<color=" + UiKit.Hex(Mats.Hex(it.col)) + ">■</color>" + nm + cnt;
+                    sb.Append(P.slot == it.k ? "<color=#f2b52c>[" + box + "]</color> " : "<color=#9aa2ae>" + box + "</color> ");
+                }
+                c.bag.text = have == 0 ? "アイテムなし"
+                           : "<b>Z</b> " + (g.AimItemOfPublic(P) ? "長押し" : "使う") + (have > 1 ? "　<b>X</b> 持替" : "") + "\n" + sb.ToString().TrimEnd();
+                c.bag.color = have == 0 ? Mats.Hex(0x77808d) : Mats.Hex(0xc9ced6);
+            }
             c.dl.text = P.delivered + "品";
-            c.cash.text = Game.Yen(g.cash);
+            c.cash.text = Game.Yen(g.WalletOf(P).cash);
             var cg = c.go.GetComponent<CanvasGroup>();
             if (cg == null) cg = c.go.AddComponent<CanvasGroup>();
             cg.alpha = P.down ? 0.55f : 1f;

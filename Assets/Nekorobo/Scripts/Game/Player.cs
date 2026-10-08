@@ -6,6 +6,8 @@ namespace Nekorobo
     public struct BotInput
     {
         public bool up, down, left, right, jump, use, cycle, cycleBack;
+        // 照準・カーソル用（十字とスティックだけ。パッドの A は加速と兼用なので入れない）
+        public bool navUp, navDown, navLeft, navRight;
     }
 
     /// <summary>運んでいる料理。</summary>
@@ -54,6 +56,9 @@ namespace Nekorobo
         public float spawnRot;           // 出現位置の rot（度）
         public BotInput input;
         public bool prevUse, prevCycle, prevBack;
+        public string slot;              // 選んでいるアイテム
+        public Vector3? aim;             // 弾道ミサイルの照準（出している間だけ）
+        public Transform aimMesh;
 
         // 見た目
         public RobotLook look;

@@ -54,7 +54,8 @@ namespace Nekorobo
         [System.NonSerialized] public Player me;
         [System.NonSerialized] public Dictionary<Vector2Int, char> map;
         [System.NonSerialized] public Result result;
-        public float cash;                  // 所持金（1人ぶん）
+        /// <summary>所持金（自分の財布）。財布は人ごと（Game.Items の Wallet）。</summary>
+        public float cash { get { return wallets[me != null ? me.idx : 0].cash; } set { wallets[me != null ? me.idx : 0].cash = value; } }
         readonly Dictionary<long, float> hits = new Dictionary<long, float>();
         List<StageObj> spawnObjs = new List<StageObj>();
         Transform stageRoot, fxRoot;
@@ -85,7 +86,7 @@ namespace Nekorobo
             TF = TuneFile.Load();
             T = BaseTune();
             cam = TF.cam;
-            cash = T.startCash;
+            NewWallets();
             var mj = DataRoot.ReadJson("assets/models.json");
             if (mj != null) Designs.Register(mj["designs"] as Newtonsoft.Json.Linq.JObject);
             Debug.Log("[Nekorobo] データ: " + DataRoot.Path + "（" + TF.log + "）");
@@ -181,7 +182,7 @@ namespace Nekorobo
             if (stageRoot != null) DestroyImmediate(stageRoot.gameObject);
             stageRoot = new GameObject("Stage").transform;
             fxRoot = new GameObject("Fx").transform; fxRoot.SetParent(stageRoot, false);
-            ClearFx();
+            ClearFx(); ClearItems();
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
             routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
@@ -261,6 +262,7 @@ namespace Nekorobo
                 i.use = kb.zKey.isPressed;
                 i.cycle = kb.xKey.isPressed;
                 i.cycleBack = kb.cKey.isPressed;
+                i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
             }
             // パッド（1台目）。A/R2＝加速、B/L2＝バック、X＝ジャンプ、Y＝アイテム（JS版と同じ割り当て）
             var gp = Gamepad.current;
@@ -268,10 +270,10 @@ namespace Nekorobo
             {
                 const float dz = 0.35f;
                 var st = gp.leftStick.ReadValue();
-                if (st.y > dz || gp.dpad.up.isPressed) i.up = true;
-                if (st.y < -dz || gp.dpad.down.isPressed) i.down = true;
-                if (st.x < -dz || gp.dpad.left.isPressed) i.left = true;
-                if (st.x > dz || gp.dpad.right.isPressed) i.right = true;
+                if (st.y > dz || gp.dpad.up.isPressed) i.up = i.navUp = true;
+                if (st.y < -dz || gp.dpad.down.isPressed) i.down = i.navDown = true;
+                if (st.x < -dz || gp.dpad.left.isPressed) i.left = i.navLeft = true;
+                if (st.x > dz || gp.dpad.right.isPressed) i.right = i.navRight = true;
                 if (gp.buttonSouth.isPressed || gp.rightTrigger.ReadValue() > dz) i.up = true;
                 if (gp.buttonEast.isPressed || gp.leftTrigger.ReadValue() > dz) i.down = true;
                 if (gp.buttonWest.isPressed) i.jump = true;
@@ -444,6 +446,8 @@ namespace Nekorobo
             // ぶつかる直前の速度を控える（衝突の強さを相対速度で測るため）
             foreach (var e in ents) if (e.rb != null) e.prevV = e.rb.isKinematic ? e.prevV : e.rb.linearVelocity;
 
+            foreach (var P in players) FixSlot(P);                 // 選んでいるアイテムを全員ぶん正しく保つ
+            if (state == "play") foreach (var P in players) if (P.invT > 0) P.invT = Mathf.Max(0, P.invT - dt);
             if (state == "play") foreach (var P in players) Drive(P, dt);
 
             UpdateHazards(dt);
@@ -502,18 +506,21 @@ namespace Nekorobo
                 foreach (var P in players) if (!P.down) CheckPickupDelivery(P);
             }
             UpdateDropped(dt);
+            UpdateItems(dt);                     // バナナ・ドローン・ブーメラン・ビーム・ミサイル・爆風
             if (state == "play")
             {
             }
         }
 
         // ---- 強化（ショップを移すまでは全部 Lv0）
-        float EffThrust(Player P) { return T.thrust; }
-        float EffReverse(Player P) { return Mathf.Min(1f, T.reverseRatio); }
-        float EffBotDmg(Player P) { return T.botDmg / Mathf.Max(0.05f, T.botTough); }
-        float EffJumpSpd(Player P) { return T.jumpSpeed; }
-        float EffJumpCd(Player P) { return Mathf.Max(0.18f, T.jumpCooldown); }
-        float EffLight(Player P) { return 1f; }
+        // ---- 強化を反映した実効値（強化は人ごとの財布）
+        int Up(Player P, string k) { return WalletOf(P).Up(k); }
+        float EffThrust(Player P) { return T.thrust * (1 + 0.15f * Up(P, "accel")); }
+        float EffReverse(Player P) { return Mathf.Min(1f, T.reverseRatio * (1 + 0.15f * Up(P, "accel"))); }
+        float EffBotDmg(Player P) { return T.botDmg * (1 - 0.10f * Up(P, "armor")) / Mathf.Max(0.05f, T.botTough); }
+        float EffJumpSpd(Player P) { return T.jumpSpeed * (1 + 0.10f * Up(P, "jump")); }
+        float EffJumpCd(Player P) { return Mathf.Max(0.18f, T.jumpCooldown - 0.05f * Up(P, "jump")); }
+        float EffLight(Player P) { return Mathf.Max(0.3f, 1 - 0.10f * Up(P, "light")); }
         float GuestHurt(float v) { return v / Mathf.Max(0.05f, T.guestTough); }
         float Toughed(float v) { return v / Mathf.Max(0.05f, T.botTough); }
         static bool InvOn(Player P) { return P != null && P.invT > 0; }
@@ -531,12 +538,15 @@ namespace Nekorobo
             var R = P.ent; var rb = R.rb;
             if (P.down) { P.steerHold = null; return; }
             var inp = P.input;
+            // 照準（弾道ミサイル）。押している間は照準、離したら発射。照準中は旋回も前進もしない
+            TickAim(P, dt);
+            bool aiming = P.aim != null;
             // ---- 旋回。JS版は 左 = +1（上から見て反時計回り）。Unity の y 回転は向きが逆なので、
             //      計算は JS版の向きのまま行い、入れるときだけ符号を変える
             bool slipping = P.slipT > 0;
             if (slipping) P.slipT -= dt;
             int steer = 0;
-            if (!slipping)
+            if (!slipping && !aiming)
             {
                 if (inp.left && P.broken != "left") steer += 1;
                 if (inp.right && P.broken != "right") steer -= 1;
@@ -578,7 +588,8 @@ namespace Nekorobo
             bool onIce = grounded && Tiles.IsSlippery(Tiles.At(map, tp));
 
             float th = 0;
-            if (inp.up) th = 1; else if (inp.down) th = -EffReverse(P);
+            if (aiming) th = 0;
+            else if (inp.up) th = 1; else if (inp.down) th = -EffReverse(P);
             // 駆動系の故障。短い間隔で火が入ったり入らなかったりして、ガクガク進む
             if (P.brokenDrive)
             {
@@ -606,6 +617,7 @@ namespace Nekorobo
             }
             rb.linearVelocity = new Vector3(fwd.x * vf + right.x * vl, v.y, fwd.z * vf + right.z * vl);
             P.prevVy = v.y;
+            ItemInput(P);
         }
 
         // ================================================================ 受け取り・配達
@@ -767,6 +779,15 @@ namespace Nekorobo
                     if (blame != null) { blame.shopDmg += pGain; blame.comboDmg += Mathf.Min(gGain, pGain); }
                     noisy = true;
                 }
+            }
+            if (hitP.Count == 2 && j >= T.dropImpulse)
+            {
+                var A = hitP[0]; var B2 = hitP[1];
+                var pa = A.ent.rb.position; var pb = B2.ent.rb.position;
+                var dd2 = new Vector2(pb.x - pa.x, pb.z - pa.z); if (dd2.magnitude < 1e-4f) dd2 = Vector2.right;
+                dd2 = dd2.normalized;
+                if (!InvOn(A)) DropDish(A, new Vector3(-dd2.x * 2.2f, 0, -dd2.y * 2.2f));
+                if (!InvOn(B2)) DropDish(B2, new Vector3(dd2.x * 2.2f, 0, dd2.y * 2.2f));
             }
             if (noisy && j > T.hitThreshold * 1.8f && hitP.Count > 0)
             {
@@ -1049,6 +1070,7 @@ namespace Nekorobo
             {
                 P.look.SetInteg(P.carried != null ? P.carried.integ : 100);
                 P.look.SetDamaged(P.botDmg >= 100);
+                InvGlow(P);
                 P.look.DrawFace(P.face);
                 if (P.ring != null)
                 {

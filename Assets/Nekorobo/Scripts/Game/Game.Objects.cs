@@ -12,7 +12,7 @@ namespace Nekorobo
     public partial class Game
     {
         // ---- 走る物（車・走る置き物）
-        public class Car { public Ent ent; public Vector3 dir; public float speed; public Vector3 home; public float blown; public string vk; }
+        public class Car { public Ent ent; public Vector3 dir; public float speed; public Vector3 home; public Quaternion homeRot; public float blown; public string vk; }
         public readonly List<Car> cars = new List<Car>();
         // ---- 動く床（1軸の往復）
         public class Mover { public Ent ent; public float speed, range; public int dir; public int axis; public Vector3 home; public bool routed; public float v; }
@@ -246,7 +246,7 @@ namespace Nekorobo
                 holder.SetParent(car.transform, false);
                 holder.localPosition = new Vector3(0, -half.y, 0);
                 holder.localRotation = Coord.RotX(o.rot);
-                cars.Add(new Car { ent = car, speed = drive, dir = Coord.Dir(o.rot), home = car.transform.position, vk = pr.kind });
+                cars.Add(new Car { ent = car, speed = drive, dir = Coord.Dir(o.rot), home = car.transform.position, homeRot = car.transform.rotation, vk = pr.kind });
                 return true;
             }
             holder.position = b;
@@ -286,7 +286,7 @@ namespace Nekorobo
                     wl.transform.localRotation = Quaternion.Euler(90, 0, 0);
                 }
             ApplyModel(car, look, "car");
-            cars.Add(new Car { ent = car, speed = o.speed ?? 8f, dir = Coord.Dir(o.rot), home = car.transform.position });
+            cars.Add(new Car { ent = car, speed = o.speed ?? 8f, dir = Coord.Dir(o.rot), home = car.transform.position, homeRot = car.transform.rotation });
         }
         static readonly int[] CARCOL = { 0xd94f4f, 0x4f7fd9, 0x54b06a, 0xe0a53c, 0x8c6fd0 };
 
