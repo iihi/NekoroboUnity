@@ -388,13 +388,4 @@ namespace Nekorobo
             return integ >= 75 ? 1.0f : integ >= 50 ? 0.75f : integ >= 25 ? 0.5f : 0.25f;
         }
     }
-
-    /// <summary>
-    /// 置き物カタログ（props.js）の代わり。**まだ移していない。**
-    /// 大きさだけ分かれば盤面の組み立ては崩れないので、いまは何も返さない（1×1 扱い）。
-    /// </summary>
-    public static class Props
-    {
-        public static bool Size(string t, out Vector2Int s) { s = new Vector2Int(1, 1); return false; }
-    }
 }

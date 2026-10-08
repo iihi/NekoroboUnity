@@ -62,6 +62,7 @@ namespace Nekorobo
         Light sun;
         Hud hud;
         public float shake;
+        int buildGen;                       // 面を組み直した回数（読み込みが終わる前に組み直したかを見る）
 
         public class Result
         {
@@ -96,6 +97,7 @@ namespace Nekorobo
         {
             // モデル（glb）は遊ぶ前に全部読む（JS版 loadAssets と同じ）。客は18人ぶん
             hud.Toast("モデルを読み込み中…");
+            Props.LoadCatalog();                           // 置き物のカタログ（catalog.json・models.json の props）
             await ModelStore.LoadAll();
             if (this == null) return;                      // 読んでいる間に止められた
             Debug.Log("[Nekorobo] モデル: " + string.Join(" ／ ", ModelStore.Log));
@@ -177,6 +179,8 @@ namespace Nekorobo
             if (stageRoot != null) DestroyImmediate(stageRoot.gameObject);
             stageRoot = new GameObject("Stage").transform;
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
+            cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
+            routeT = 0; buildGen++; tailRoot = null;
             warned.Clear();
             // ステージごとの数値の上書き（その面だけ）
             T = BaseTune();
@@ -665,6 +669,7 @@ namespace Nekorobo
                 {
                     float before = guest.hp;
                     guest.hp = Mathf.Max(0, guest.hp - d);
+                    guest.walkStop = true;          // 巡回している客は、ぶつかられたらそれまで
                     if (before > 50 && guest.hp <= 50 && blame != null) blame.hurt++;
                     if (before > 0 && guest.hp <= 0) GuestDown(guest);
                     noisy = true;
@@ -759,6 +764,7 @@ namespace Nekorobo
         // ================================================================ 池・溶岩・海・穴（JS版 updateHazards の後半）
         void UpdateHazards(float dt)
         {
+            UpdateMoving(dt);                    // 車・ルート・歩く客・動く床（Game.Objects）
             foreach (var e in ents)
             {
                 if (e.isFixed || e.infMass || e.rb == null || e.sunk) continue;
@@ -770,10 +776,12 @@ namespace Nekorobo
                     SinkOut(e);
                     continue;
                 }
-                char ch = Tiles.At(map, p);
+                // いかだのマスは「その下の地形」で見る（いかだが動いて行ったら、そこはただの水）
+                char ch = Tiles.At(under ?? map, p);
                 var td = Tiles.Def(ch);
                 float foot = p.y - (e.size.y > 0 ? e.size.y / 2 : 0.5f);
                 if (td == null || !td.liquid || foot > -0.06f) { e.wet = 0; continue; }
+                if (rafts.Count > 0 && OverRaftNow(p)) { e.wet = 0; continue; }   // いかだの上なら水ではない
                 if (td.deadly)
                 {
                     if (e.kind == "guest") { RescueGuest(e); continue; }
@@ -890,16 +898,16 @@ namespace Nekorobo
                 foreach (var bp in from)
                 {
                     System.Func<Vector3, bool> ok = q => Standable(q) && ClearOf(q, e) && (!strict || Inland(q));
-                    if (ok(bp)) return bp;
+                    if (ok(bp)) return RaftShift(bp);
                     for (int r = 1; r <= reach; r++)
                         for (int k = 0; k < 8; k++)
                         {
                             float a = k * Mathf.PI / 4;
                             var q = bp + new Vector3(Mathf.Cos(a) * r, 0, Mathf.Sin(a) * r);
-                            if (ok(q)) return q;
+                            if (ok(q)) return RaftShift(q);
                         }
                 }
-            return home ?? (P != null ? P.spawn : Vector3.zero);
+            return RaftShift(home ?? (P != null ? P.spawn : Vector3.zero));
         }
 
         /// <summary>戻すときは少し上から落とす（ぱっと置くと戻ったことに気づけない）。</summary>
@@ -1018,8 +1026,8 @@ namespace Nekorobo
         public void FitCamera()
         {
             if (stage == null) return;
-            if (stage.camFix && stage.camDist != null) { cam.dist = stage.camDist.Value; return; }
-            if (!cam.autoFit) return;
+            if (stage.camFix && stage.camDist != null) { cam.dist = stage.camDist.Value; ApplyCameraRaw(); RefreshTails(); return; }
+            if (!cam.autoFit) { ApplyCameraRaw(); RefreshTails(); return; }
             var b = fitBox;
             float hi = cam.fitWalls ? Mathf.Max(cam.fitHead, wallTop + 0.4f) : cam.fitHead;
             var pts = new List<Vector3>();
@@ -1051,6 +1059,8 @@ namespace Nekorobo
                 cam.dist = next;
                 if (fin) break;
             }
+            ApplyCameraRaw();
+            RefreshTails();                      // 道を伸ばす長さはカメラで決まる
         }
 
         void ApplyCameraRaw()

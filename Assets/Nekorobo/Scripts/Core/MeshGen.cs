@@ -201,6 +201,29 @@ namespace Nekorobo
                 }
         }
 
+        // ------------------------------------------------------------ 二十面体（岩）
+        /// <summary>three.js の IcosahedronGeometry(r, 0)。面ごとに平らに塗る（角ばった岩）。</summary>
+        public static Mesh Icosahedron(float r)
+        {
+            return Cached("ico|" + r, () =>
+            {
+                float t = (1 + Mathf.Sqrt(5)) / 2;
+                var V = new[] { new Vector3(-1,t,0), new Vector3(1,t,0), new Vector3(-1,-t,0), new Vector3(1,-t,0),
+                                new Vector3(0,-1,t), new Vector3(0,1,t), new Vector3(0,-1,-t), new Vector3(0,1,-t),
+                                new Vector3(t,0,-1), new Vector3(t,0,1), new Vector3(-t,0,-1), new Vector3(-t,0,1) };
+                int[] I = { 0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+                            3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1 };
+                var b = new B();
+                for (int i = 0; i < I.Length; i += 3)
+                {
+                    var a = V[I[i]].normalized * r; var c = V[I[i + 1]].normalized * r; var d = V[I[i + 2]].normalized * r;
+                    var n = Vector3.Cross(c - a, d - a).normalized;
+                    b.Tri(b.Add(a, n, Vector2.zero), b.Add(c, n, Vector2.zero), b.Add(d, n, Vector2.zero));
+                }
+                return b.ToMesh("Icosahedron");
+            });
+        }
+
         // ------------------------------------------------------------ カプセル
         /// <summary>three.js の CapsuleGeometry(r, length)（筒の長さ＋両端の半球）。縦向き。</summary>
         public static Mesh Capsule(float r, float length, int seg = 8)

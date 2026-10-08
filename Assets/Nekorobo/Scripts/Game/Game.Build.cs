@@ -171,12 +171,13 @@ namespace Nekorobo
             spawnObjs = objs.FindAll(o => o.t == "spawn");
 
             // ---- 地形を種類ごとに矩形へまとめて置く
-            // （いかだのマスは、まだ普通の床として置く。動かすのは未対応）
+            // いかだのマスはここでは作らない（動くので、まとめて1つのかたまりにする）。
+            // いかだの「下」には、すぐ隣の地形を敷く（under）
+            BuildUnder();
             var groups = new Dictionary<char, HashSet<Vector2Int>>();
-            foreach (var kv in map)
+            foreach (var kv in under)
             {
                 char ch = kv.Value;
-                if (Tiles.Def(ch) != null && Tiles.Def(ch).raft > 0) { Warn("いかだ（床として置きました）"); ch = '='; }
                 HashSet<Vector2Int> set;
                 if (!groups.TryGetValue(ch, out set)) groups[ch] = set = new HashSet<Vector2Int>();
                 set.Add(kv.Key);
@@ -210,7 +211,7 @@ namespace Nekorobo
                                           c + new Vector3(0, 0.012f, 0), shadow: false);
                         gl.name = "IceGloss";
                     }
-                    else if (ch == 'r') { Slab(c, w, d, 0f, Mats.Get(0x4a4f55), "floor", 0.9f * fr, 0.05f); Warn("道路の白線"); }
+                    else if (ch == 'r') Slab(c, w, d, 0f, Mats.Get(0x4a4f55), "floor", 0.9f * fr, 0.05f);
                     else if (ch == 'l') Slab(c, w, d, 0f, Mats.Get(0x3a3228), "floor", 0.9f * fr, 0.05f);
                     else if (ch == 'b')
                     {
@@ -269,6 +270,7 @@ namespace Nekorobo
             }
 
             BuildCounter(C);
+            BuildRafts(fr);
 
             // ---- 置いた物
             var rr = new Lcg(20251010);
@@ -289,7 +291,7 @@ namespace Nekorobo
                             var look = Looks.Table(tb.transform, lng, o.des);
                             // 長テーブルのモデルが無ければテーブルのモデル（JS版と同じ）
                             ApplyModel(tb, look, ModelStore.For(o.t, shop.n) != null ? o.t : "table");
-                            furni.Add(tb);
+                            furni.Add(tb); objEnt[o] = tb;
                             break;
                         }
                     case "chair":
@@ -297,7 +299,7 @@ namespace Nekorobo
                             var chr = MakeBody("chair", b + new Vector3(0, 0.45f, 0), new Vector3(0.22f, 0.45f, 0.22f),
                                                Coord.RotFace(o.rot), false, 8, 0.5f * fr, 0.25f, 0.5f);
                             ApplyModel(chr, Looks.Chair(chr.transform, o.des), "chair");
-                            furni.Add(chr);
+                            furni.Add(chr); objEnt[o] = chr;
                             break;
                         }
                     case "bench":
@@ -309,7 +311,7 @@ namespace Nekorobo
                             var bn = MakeBody("chair", b + new Vector3(0, half.y, 0), half, Quaternion.identity,
                                               false, 22, 0.5f * fr, 0.25f, 0.5f);
                             BenchLook(bn.transform, half, along);
-                            furni.Add(bn);
+                            furni.Add(bn); objEnt[o] = bn;
                             break;
                         }
                     case "guest":
@@ -320,19 +322,21 @@ namespace Nekorobo
                             var K = GuestKinds.Find(o.gk) ?? GuestKinds.All[rr.Pick(GuestKinds.All.Count)];
                             var look = Looks.Guest(gu.transform, rr, K, TF.heads);
                             ApplyModel(gu, look, "guest", o.gm);    // gm … エディタで選んだ客のモデル
-                            guests.Add(gu);
+                            guests.Add(gu); objEnt[o] = gu;
                             break;
                         }
                     case "ramp":
                         BuildRamp(o, b, bw, bd, fr);
                         break;
-                    case "car": Warn("車"); break;
-                    case "mover": Warn("動く床"); break;
+                    case "car": BuildCar(o, b); break;
+                    case "mover": BuildMover(o, b); break;
                     case "deco": Warn("壁の飾り"); break;
-                    default: Warn("置き物「" + o.t + "」"); break;
+                    default: if (!BuildProp(o, b, bw, bd)) Warn("置き物「" + o.t + "」"); break;
                 }
-                if (o.HasRoute && o.t != "raft") Warn("ルート（動く物・歩く客）");
             }
+            BuildRoutes();
+            BuildMarks();
+            FindTails();
 
             // ---- ロボ（オーダー数が人数で変わるので、先に作る）
             BuildPlayers(fr);

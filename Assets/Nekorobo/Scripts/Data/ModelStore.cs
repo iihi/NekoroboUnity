@@ -169,6 +169,34 @@ namespace Nekorobo
             Loaded = true;
         }
 
+        // ---- 置き物のモデル。**置いたときに**読む（全部で30MB近くあり、使わない建物まで読むことになるため）
+        static readonly Dictionary<string, List<System.Action>> propWait = new Dictionary<string, List<System.Action>>();
+
+        /// <summary>置き物のモデルを読んで、読めたら done を呼ぶ（もう読んであればすぐ呼ぶ）。JS版 needPropModel。</summary>
+        public static void EnsureProp(PropDef pr, System.Action done)
+        {
+            ModelEntry M;
+            if (Models.TryGetValue(pr.k, out M)) { if (M.roots.Count > 0) done(); return; }
+            List<System.Action> wl;
+            if (propWait.TryGetValue(pr.k, out wl)) { wl.Add(done); return; }
+            propWait[pr.k] = wl = new List<System.Action> { done };
+            LoadProp(pr, wl);
+        }
+
+        static async void LoadProp(PropDef pr, List<System.Action> wl)
+        {
+            var M = new ModelEntry
+            {
+                key = pr.k, names = new List<string>(pr.model), scaleMode = pr.scaleNum > 0 ? null : (pr.scaleMode ?? "fit"),
+                scaleNum = pr.scaleNum, maxScale = pr.maxScale, rotDeg = pr.rotDeg, offset = pr.offset, keepY = pr.keepY, skinned = pr.skinned,
+            };
+            await Fill(M, "置き物:" + pr.k);
+            Models[pr.k] = M;
+            propWait.Remove(pr.k);
+            if (M.roots.Count == 0) return;
+            foreach (var a in wl) a();
+        }
+
         /// <summary>その店ぶんの指定があればそちら（JS版 modelFor）。</summary>
         public static ModelEntry For(string kind, string shopName)
         {
