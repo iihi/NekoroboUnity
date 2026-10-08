@@ -376,15 +376,7 @@ namespace Nekorobo
                     hud.Toast(preset + "の調子にしました");
                 }
             }
-            // 結果の画面：決定（Enter・スペース・N／パッドの A）で次へ（ふつうはショップ）。R はもう一度。
-            // 開いた直後は少しのあいだ効かない（走りながら押していた指で進まないように。JS版 menuLock）
-            if (state == "result" && result != null && !hud.MenuOpen && Time.unscaledTime - resultAt > T.menuLock)
-            {
-                bool go = kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame
-                                         || kb.spaceKey.wasPressedThisFrame || kb.nKey.wasPressedThisFrame);
-                foreach (var gp in Gamepad.all) if (gp.buttonSouth.wasPressedThisFrame) go = true;
-                if (go) AfterResult();
-            }
+            // 結果の画面の「準備OK」は ResultWin が見る（全員そろうとショップへ）
         }
         float resultAt;
 

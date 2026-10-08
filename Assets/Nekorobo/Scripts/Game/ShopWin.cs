@@ -153,7 +153,7 @@ namespace Nekorobo
                 // 金色の丸い札に白い縁、下に濃い金の影（CSS の box-shadow 0 4px 0）
                 Box(box, L, 14 + 4, 260, 62, 31, GoldD(), "TitleShadow");
                 var ti = Box(box, L, 14, 260, 62, 0, Color.white, "Title");
-                ti.sprite = Grad(260, 62, 31, Mats.Hex(0xffd558), Mats.Hex(0xf2b52c));
+                ti.sprite = UiKit.Grad(260, 62, 31, Mats.Hex(0xffd558), Mats.Hex(0xf2b52c));
                 Ring(ti.transform, Color.white, 4, 31);
                 var tx = Lbl(box, "強化ショップ", 34, Color.white, TextAnchor.MiddleCenter, L, 14, 260, 60);
                 var s = tx.gameObject.AddComponent<Shadow>(); s.effectColor = GoldD(); s.effectDistance = new Vector2(0, -2);
@@ -309,7 +309,7 @@ namespace Nekorobo
             var col0 = gd.kind == "up" ? Mats.Hex(0x25a8e6) : Mats.Hex(0x1cc266);
             var col1 = gd.kind == "up" ? Mats.Hex(0x0f78b8) : Mats.Hex(0x0a9046);
             var bg = Box(box, x, y, w, h, 0, Color.white, "Card_" + gd.k);
-            bg.sprite = Grad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), 14, col0, col1);
+            bg.sprite = UiKit.Grad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), 14, col0, col1);
             c.r = bg.rectTransform;
             c.cg = bg.gameObject.AddComponent<CanvasGroup>();
             Ring(bg.transform, new Color(1, 1, 1, 0.55f), 3, 14);
@@ -607,7 +607,7 @@ namespace Nekorobo
             // 購入完了のボタン（この画面の人のぶん）
             var meC = cur.Find(c => c.P == g.me) ?? cur.Find(c => c.P.src.kind != "npc");
             bool rdy = meC != null && meC.ready;
-            readyBg.sprite = rdy ? Grad(1204, 44, 14, Mats.Hex(0x9aa3ae), Mats.Hex(0x6f7884)) : Grad(1204, 44, 14, Mats.Hex(0x63d47f), GREEN);
+            readyBg.sprite = rdy ? UiKit.Grad(1204, 44, 14, Mats.Hex(0x9aa3ae), Mats.Hex(0x6f7884)) : UiKit.Grad(1204, 44, 14, Mats.Hex(0x63d47f), GREEN);
             readyText.text = rdy ? "購入完了（もう一度で取り消し）" : "購入完了";
             // 説明の行
             for (int i = 0; i < descRows.Count; i++)
@@ -667,33 +667,6 @@ namespace Nekorobo
             UiKit.Stretch(b.rectTransform, inset);
             var le = b.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
             return b;
-        }
-
-        static readonly Dictionary<string, Sprite> grads = new Dictionary<string, Sprite>();
-        /// <summary>角の丸い、縦のグラデーションの板（CSS の linear-gradient(180deg, top, bottom)）。大きさごとに1枚作って使い回す。</summary>
-        static Sprite Grad(int w, int h, float r, Color top, Color bottom)
-        {
-            string key = w + "x" + h + "r" + r + ColorUtility.ToHtmlStringRGBA(top) + ColorUtility.ToHtmlStringRGBA(bottom);
-            Sprite s;
-            if (grads.TryGetValue(key, out s)) return s;
-            w = Mathf.Max(2, w); h = Mathf.Max(2, h);
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            var px = new Color32[w * h];
-            for (int y = 0; y < h; y++)
-            {
-                var c = Color.Lerp(bottom, top, (y + 0.5f) / h);     // テクスチャの y は下から
-                for (int x = 0; x < w; x++)
-                {
-                    float cx = Mathf.Clamp(x + 0.5f, r, w - r), cy = Mathf.Clamp(y + 0.5f, r, h - r);
-                    float d = Mathf.Sqrt((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
-                    float a = Mathf.Clamp01(r - d + 0.5f) * c.a;
-                    px[y * w + x] = new Color(c.r, c.g, c.b, a);
-                }
-            }
-            tex.SetPixels32(px); tex.Apply(false);
-            s = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100);
-            grads[key] = s;
-            return s;
         }
 
         /// <summary>背景（radial-gradient(1200px 500px at 50% -10%, #1b3f8f, transparent 70%) と linear-gradient(#0b2463, #071a4a)）。</summary>

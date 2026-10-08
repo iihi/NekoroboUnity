@@ -330,7 +330,7 @@ namespace Nekorobo
             float w = bangText.preferredWidth + 108 + 12, h = 78 * 1.25f + 12 + 12;
             bangPill.sizeDelta = new Vector2(w, h);
             bangPill.anchoredPosition = new Vector2(0, 19);           // 下の字と合わせて、まん中より少し上
-            bangBg.sprite = PillGrad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), top, bot, 6);
+            bangBg.sprite = UiKit.PillGrad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), top, bot, 6);
             bangShadow.sprite = UiKit.Round; bangShadow.type = Image.Type.Sliced; bangShadow.pixelsPerUnitMultiplier = 15.5f / (h / 2);
             bangShadow.color = dark;
             bangText.GetComponent<Shadow>().effectColor = dark;
@@ -489,28 +489,5 @@ namespace Nekorobo
             return tri;
         }
 
-        /// <summary>丸い札のグラデーションに白い縁（border 6px）を焼き込んだ絵。</summary>
-        static Sprite PillGrad(int w, int h, Color top, Color bottom, int border)
-        {
-            w = Mathf.Max(4, w); h = Mathf.Max(4, h);
-            var t = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            float r = h / 2f;
-            var px = new Color32[w * h];
-            for (int y = 0; y < h; y++)
-            {
-                var c = Color.Lerp(bottom, top, (y + 0.5f) / h);
-                for (int x = 0; x < w; x++)
-                {
-                    float cx = Mathf.Clamp(x + 0.5f, r, w - r), cy = h / 2f;
-                    float d = Mathf.Sqrt((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
-                    float a = Mathf.Clamp01(r - d + 0.5f);
-                    float wb = Mathf.Clamp01(d - (r - border) + 0.5f);            // 縁の白
-                    var col = Color.Lerp(c, Color.white, wb);
-                    px[y * w + x] = new Color(col.r, col.g, col.b, a);
-                }
-            }
-            t.SetPixels32(px); t.Apply(false);
-            return Sprite.Create(t, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100);
-        }
     }
 }
