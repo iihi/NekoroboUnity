@@ -312,6 +312,7 @@ namespace Nekorobo
                 i.cycle = kb.xKey.isPressed;
                 i.cycleBack = kb.cKey.isPressed;
                 i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
+                i.ok = kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed;
             }
             // パッドを枠に割り当てているときは、キーボードの枠にパッドを流し込まない
             // （流すと1台目のパッドが2人ぶん動かしてしまう）。1人で遊ぶときはどのパッドでも動く
@@ -344,6 +345,8 @@ namespace Nekorobo
                 if (gp.buttonNorth.isPressed) i.use = true;
                 if (gp.rightShoulder.isPressed) i.cycle = true;
                 if (gp.leftShoulder.isPressed) i.cycleBack = true;
+                if (gp.buttonSouth.isPressed) i.ok = true;            // A は決定（ショップの指）
+                if (gp.buttonEast.isPressed) i.back = true;
             }
         }
 
@@ -359,6 +362,7 @@ namespace Nekorobo
             }
 
             var kb = Keyboard.current;
+            if (hud.ShopOpen) return;                              // ショップの間はショップが入力を見る
             if (kb != null && !hud.MenuOpen)
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
@@ -367,15 +371,18 @@ namespace Nekorobo
                     SetPreset((Preset)((((int)preset) + 1 + 3) % 3));
                     hud.Toast(preset + "の調子にしました");
                 }
-                if (state == "result")
-                {
-                    if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) Rebuild();
-                    if (kb.nKey.wasPressedThisFrame) NextStage();
-                }
             }
-            var g = Gamepad.current;
-            if (g != null && state == "result" && !hud.MenuOpen && g.buttonSouth.wasPressedThisFrame) NextStage();
+            // 結果の画面：決定（Enter・スペース・N／パッドの A）で次へ（ふつうはショップ）。R はもう一度。
+            // 開いた直後は少しのあいだ効かない（走りながら押していた指で進まないように。JS版 menuLock）
+            if (state == "result" && result != null && !hud.MenuOpen && Time.unscaledTime - resultAt > T.menuLock)
+            {
+                bool go = kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame
+                                         || kb.spaceKey.wasPressedThisFrame || kb.nKey.wasPressedThisFrame);
+                foreach (var gp in Gamepad.all) if (gp.buttonSouth.wasPressedThisFrame) go = true;
+                if (go) AfterResult();
+            }
         }
+        float resultAt;
 
         // ---- 確かめる用の自動運転。自分のロボを NPC（まじめ）に運転させる。遊ぶときは使わない
         [System.NonSerialized] public bool autoPlay;
@@ -476,12 +483,6 @@ namespace Nekorobo
                 case Preset.普通: return new Tune();
                 default: return T.Clone();                 // つまみを動かした後（どの調子でもない）
             }
-        }
-
-        public void NextStage()
-        {
-            if (entry != null && course != null && courseIndex + 1 < course.stages.Count) LoadCourseStage(courseIndex + 1);
-            else Rebuild();
         }
 
         void LateUpdate()
@@ -937,8 +938,10 @@ namespace Nekorobo
         void UpdateHazards(float dt)
         {
             UpdateMoving(dt);                    // 車・ルート・歩く客・動く床（Game.Objects）
-            foreach (var e in ents)
+            // 番号で回す。海へ落ちたロボが料理を落とすと、途中で ents に物が増えるため（foreach だと止まる）
+            for (int ei = 0; ei < ents.Count; ei++)
             {
+                var e = ents[ei];
                 if (e.isFixed || e.infMass || e.rb == null || e.sunk) continue;
                 var p = e.rb.position;
                 if (p.y < -1.6f)
@@ -1189,6 +1192,7 @@ namespace Nekorobo
                 if (best == 0 || frames < best) { result.rec = true; PlayerPrefs.SetInt(BestKey(), frames); }
             }
             foreach (var P in players) { SetFace(P, cleared ? "happy" : "dead", 99); if (P.aim != null) ClearAim(P); }
+            resultAt = Time.unscaledTime;
             hud.ShowResult();
         }
 

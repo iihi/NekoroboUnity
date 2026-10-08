@@ -599,7 +599,8 @@ namespace Nekorobo
             if (boom) SpawnPuffs(at); else SpawnFlash(at);
             SpawnSplash(at, boom ? 0xff9040 : 0xdff6ff, boom ? 14 : 8);
 
-            foreach (var e in ents)
+            // 写しを回す（料理を落とすと ents に物が増えるため）
+            foreach (var e in ents.ToArray())
             {
                 if (e == null || e.rb == null) continue;
                 if (e.kind == "floor" || e.kind == "pit" || e.kind == "wall" || e.kind == "counter" || e.kind == "fence") continue;

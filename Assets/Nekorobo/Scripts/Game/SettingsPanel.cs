@@ -75,11 +75,15 @@ namespace Nekorobo
             S("wallHigh","高い壁の高さ(m)",1,8,0.1f,1), S("wallPhys","壁の見えない高さ(m)",2,40,1),
             Sec("故障とコンボ"),
             S("breakSteer","旋回が壊れる%",10,100,5), S("breakDrive","駆動が壊れる%",10,100,5), S("repairHeal","リペアの回復%",10,100,5),
+            S("menuLock","決定が効くまで(秒)",0,2,0.1f,1), S("shopTime","ショップの持ち時間(秒)",10,120,5),
+            S("ptrCross","└ カーソルの横断(秒)",0.4f,3,0.1f,1), C("soloShopTimer","└ 1人でも時間制限を付ける"),
             S("wreckMin","大暴れが付く連鎖数",2,12,1), S("wreckBack","└ そのときの戻し率",0,1,0.05f,2),
             S("wreckStep","└ 1連鎖ごとの上乗せ",0,0.5f,0.02f,2), S("wreckMax","└ 戻し率の上限",0,1,0.05f,2),
             S("comboWindow","コンボの猶予(秒)",3,40,1), S("comboBonus","コンボ1回の上乗せ",0,1,0.05f,2), S("comboMax","コンボの上限回数",0,12,1),
             Sec("収支"),
-            S("startCash","始めの所持金",0,100000,1000), S("repairPerPct","修理費/損壊1%",0,600,10), S("ambulance","救急車1台",0,20000,500),
+            S("startCash","始めの所持金",0,100000,1000), S("stageBonus","ステージボーナス基準",0,100000,1000),
+            S("bonusEvery","└ 何ステージごと(0=無)",0,10,1), S("bonusSpread","└ 順位での増減幅",0,1,0.05f,2),
+            S("repairPerPct","修理費/損壊1%",0,600,10), S("ambulance","救急車1台",0,20000,500),
             C("countAmb","救急車費用を合計に含める（企画書未定）"),
             S("orderCount","オーダー数(R後)",1,12,1), S("repairShare","人数ぶんの修理費割引",0,1,0.05f,2), S("orderAddPer","└ 1人増ごとに+",0,4,1),
         };
@@ -187,8 +191,9 @@ namespace Nekorobo
             Button(row2, "やり直し（R）", () => g.Rebuild());
 
             // ---- アイテム（デバッグ）
-            Section("アイテム（デバッグ）");
+            Section("アイテムとショップ（デバッグ）");
             Button(HRow(), "いま全員にアイテムを全部持たせる", () => g.GiveAllItems());
+            Button(HRow(), "ショップを開く（見た目の確認）", () => g.OpenShop());
             Label("Z で使う（弾道ミサイルは長押しで照準、離して発射）、X / C で持ち替え。パッドは Y で使う、R1 / L1 で持ち替え。", 11, NOTE, false);
 
             // ---- 今の収支

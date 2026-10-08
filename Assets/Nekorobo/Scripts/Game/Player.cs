@@ -8,6 +8,8 @@ namespace Nekorobo
         public bool up, down, left, right, jump, use, cycle, cycleBack;
         // 照準・カーソル用（十字とスティックだけ。パッドの A は加速と兼用なので入れない）
         public bool navUp, navDown, navLeft, navRight;
+        // 決定と戻る（ショップの指・結果の画面）。遊んでいる間は誰も見ない
+        public bool ok, back;
     }
 
     /// <summary>運んでいる料理。</summary>

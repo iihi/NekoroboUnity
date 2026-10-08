@@ -343,8 +343,7 @@ namespace Nekorobo
             bool onRoad = Tiles.At(map, p) == 'r';
 
             // ---- 届ける直前・受け取る直前は速度を落とす（ちゃんと運ぶほうが儲かる）。
-            // JS版は `!N.ramHold` で見ていて、一度体当たりを狙うと ramHold が負の小さな値で残り、
-            // それ以降この減速が効かなくなっていた。ここは「狙っている間だけ外す」にしてある
+            // 体当たりを狙っている間だけ外す（ramHold は数え終わると負の小さな値で残るので <= 0 で見る。JS版も同じ）
             if (K.up && N.ramHold <= 0)
             {
                 float near = P.carried != null ? 2.4f : 1.9f;

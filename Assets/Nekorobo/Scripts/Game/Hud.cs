@@ -18,6 +18,7 @@ namespace Nekorobo
         Text center, help;
         HudTop top;
         SettingsPanel settings;
+        ShopWin shopWin;
         GameObject gearBtn;
         float readyAnim; string readyShown = "";
         GameObject resultPanel, menuPanel;
@@ -29,6 +30,9 @@ namespace Nekorobo
         class PopItem { public Text t; public Vector3 w; public float age, life; public bool big; }
 
         public bool MenuOpen { get { return menuPanel != null && menuPanel.activeSelf; } }
+        public bool ShopOpen { get { return shopWin != null && shopWin.Open; } }
+        public void OpenShop() { resultPanel.SetActive(false); if (MenuOpen) menuPanel.SetActive(false); shopWin.OpenNow(); }
+        public void CloseShop() { if (shopWin != null) shopWin.Close(); }
 
         void Awake()
         {
@@ -74,6 +78,9 @@ namespace Nekorobo
             menuPanel.SetActive(false);
 
             // ---- 検証用パネル（Tab / ⚙）
+            // ---- 強化ショップ（全画面。検証用パネルより下に重ねる）
+            shopWin = new ShopWin(root, GetComponent<Game>());
+
             settings = new SettingsPanel(root, GetComponent<Game>());
             {
                 var im = UiKit.Img(root, new Color(0.16f, 0.19f, 0.24f, 0.9f), 10, "Gear");
@@ -171,7 +178,7 @@ namespace Nekorobo
             if (many && g.mode != "coop")
             {
                 RankRows(s);
-                s.Append("\n<size=14><color=#666>Enter：もう一度　N（パッドは A）：次の面　Esc：面を選ぶ</color></size>");
+                s.Append("\n<size=14><color=#666>Enter・スペース（パッドは A）：次へ　R：もう一度　Esc：面を選ぶ</color></size>");
                 resultText.text = s.ToString();
                 resultPanel.SetActive(true);
                 return;
@@ -191,7 +198,7 @@ namespace Nekorobo
             s.Append(Row("<b>合計</b>", "<b><color=" + (R.total >= 0 ? "#1a9e4b" : "#e53935") + ">" + Game.Yen(R.total) + "</color></b>"));
             if (R.bonus > 0) s.Append(Row("ステージ達成ボーナス", "<color=#ff9500>" + Game.Yen(R.bonus) + "</color>"));
             s.Append(Row("所持金", Game.Yen(g.cash)));
-            s.Append("\n<size=16><color=#666>Enter：もう一度　N（パッドは A）：次の面　Esc：面を選ぶ</color></size>");
+            s.Append("\n<size=16><color=#666>Enter・スペース（パッドは A）：次へ　R：もう一度　Esc：面を選ぶ</color></size>");
             resultText.text = s.ToString();
             resultPanel.SetActive(true);
         }
@@ -262,7 +269,7 @@ namespace Nekorobo
         {
             var g = game;
             if (g == null || g.stage == null) return;
-            MenuTick();
+            if (shopWin.Open) shopWin.Tick(Time.deltaTime); else MenuTick();
 
             top.Tick();
             // 3・2・1・スタート！
