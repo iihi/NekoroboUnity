@@ -138,6 +138,14 @@ namespace Nekorobo
             return L;
         }
 
+        /// <summary>料理の崩れ具合（JS版 dishIntegrity）。満点で高さ 0.7、崩れるほど低く潰れる。</summary>
+        public void SetInteg(float integ)
+        {
+            if (dishVis == null) return;
+            float sy = 0.6f * (integ / 100f) + 0.1f;
+            dishVis.transform.localScale = new Vector3(1, sy / 0.7f, 1);
+        }
+
         public void SetDamaged(bool dmg)
         {
             var m = dmg ? bodyDmg : body;

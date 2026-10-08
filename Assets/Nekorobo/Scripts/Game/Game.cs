@@ -57,7 +57,7 @@ namespace Nekorobo
         public float cash;                  // 所持金（1人ぶん）
         readonly Dictionary<long, float> hits = new Dictionary<long, float>();
         List<StageObj> spawnObjs = new List<StageObj>();
-        Transform stageRoot;
+        Transform stageRoot, fxRoot;
         public Camera mainCam;
         Light sun;
         Hud hud;
@@ -180,6 +180,8 @@ namespace Nekorobo
         {
             if (stageRoot != null) DestroyImmediate(stageRoot.gameObject);
             stageRoot = new GameObject("Stage").transform;
+            fxRoot = new GameObject("Fx").transform; fxRoot.SetParent(stageRoot, false);
+            ClearFx();
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
             routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
@@ -421,6 +423,7 @@ namespace Nekorobo
         {
             if (stage == null) return;
             UpdateFlow(Time.deltaTime);
+            TickFx(Time.deltaTime);
             SyncLooks();
             ApplyCamera();
         }
@@ -474,7 +477,7 @@ namespace Nekorobo
                         MarkFell(R);
                         var sp = RescueSpot(R, p);
                         DropBack(R, sp, 0.6f);
-                        hud.Mark(sp, P.col);
+                        Respawned(R, sp, P.col, false);
                     }
                 }
                 // 客が店の外まで吹っ飛んだら、店内へ引き戻してダメージ
@@ -497,6 +500,10 @@ namespace Nekorobo
                 }
                 TickRevive(dt);
                 foreach (var P in players) if (!P.down) CheckPickupDelivery(P);
+            }
+            UpdateDropped(dt);
+            if (state == "play")
+            {
             }
         }
 
@@ -563,6 +570,8 @@ namespace Nekorobo
                     if (P.carried != null && !InvOn(P))
                         P.carried.integ = Mathf.Max(0, P.carried.integ - fall * 2.2f * P.carried.dish.frag);
                     shake = Mathf.Min(12, shake + fall * 1.2f);
+                    var lp = rb.position;
+                    for (int k = 0; k < 4; k++) SpawnSplash(new Vector3(lp.x, 0.06f, lp.z), 0xd8d2c4, 1);   // 着地の土ぼこり
                 }
             }
             var tp = rb.position;
@@ -602,6 +611,7 @@ namespace Nekorobo
         // ================================================================ 受け取り・配達
         void CheckPickupDelivery(Player P)
         {
+            PickDropped(P);                       // 落ちている料理を拾う（カウンターへ戻らずに済む）
             var p = P.ent.rb.position;
             if (P.carried == null && oi < orders.Count)
             {
@@ -711,7 +721,11 @@ namespace Nekorobo
                     float dd = j * T.dishDmg * P.carried.dish.frag;
                     if (dd > 0.2f)
                     {
+                        float before = P.carried.integ;
                         P.carried.integ = Mathf.Max(0, P.carried.integ - dd);
+                        // 料理が実際に飛び散る
+                        if (before - P.carried.integ > 8)
+                            SpawnSplash(pp + Vector3.up * 0.5f, P.carried.dish.col, Mathf.Min(9, Mathf.RoundToInt((before - P.carried.integ) / 6) * 2));
                         noisy = true;
                     }
                 }
@@ -795,7 +809,8 @@ namespace Nekorobo
             P.down = true; P.downT = t;
             P.revT = rev > 0 ? rev : 0;
             if (P.revT <= 0) P.botDmg = 100;
-            if (P.carried != null) { P.carried = null; P.look.ShowDish(null); }   // 落とした料理（拾い直し）はまだ
+            // 運んでいた料理は床へ。持ったまま止まると、その注文が永久に届かなくなる
+            if (P.carried != null) DropDish(P, Vector3.zero);
             SetFace(P, "dead", 99);
             Say(P, P.revT > 0 ? "たすけてにゃ～！" : "もうダメにゃ…", 3.0f);
             hud.Pop(P.ent.rb.position + Vector3.up * 1.2f, P.revT > 0 ? "おちた！ " + Mathf.RoundToInt(P.revT) + "秒" : "リタイア", 0xe53935, true);
@@ -818,7 +833,7 @@ namespace Nekorobo
                     var sp = RescueSpot(P.ent, null);
                     DropBack(P.ent, sp, 0.6f);
                     P.ent.rb.rotation = Coord.RotFace(P.spawnRot);
-                    hud.Mark(sp, P.col);
+                    Respawned(P.ent, sp, P.col, false);
                     SetFace(P, "norm", 99);
                     Say(P, "もどったにゃ！", 1.6f);
                     if (P.ring != null) P.ring.SetActive(true);
@@ -878,6 +893,7 @@ namespace Nekorobo
                         e.hp = Mathf.Max(0, e.hp - GuestHurt(T.lavaBurn * 1.2f * dt));
                         if (was > 0 && e.hp <= 0) GuestDown(e);
                     }
+                    if (Random.value < 12 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0xff7a2a, 1);
                 }
                 else
                 {
@@ -893,6 +909,7 @@ namespace Nekorobo
                         e.hp = Mathf.Max(0, e.hp - GuestHurt(T.waterDmg * 0.6f * dt));
                         if (was > 0 && e.hp <= 0) GuestDown(e);
                     }
+                    if (Random.value < 6 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0x9fd8f0, 1);
                 }
             }
         }
@@ -903,7 +920,7 @@ namespace Nekorobo
             var sv = RescueSpot(e, e.rb.position);
             DropBack(e, sv, 0.9f);
             e.wet = 0;
-            hud.Mark(sv, 0xffffff);
+            Respawned(e, sv, 0xffffff, true);
             if (e.hp > 0)
             {
                 e.hp = Mathf.Max(0, e.hp - GuestHurt(T.guestOut));
@@ -1030,6 +1047,7 @@ namespace Nekorobo
         {
             foreach (var P in players)
             {
+                P.look.SetInteg(P.carried != null ? P.carried.integ : 100);
                 P.look.SetDamaged(P.botDmg >= 100);
                 P.look.DrawFace(P.face);
                 if (P.ring != null)

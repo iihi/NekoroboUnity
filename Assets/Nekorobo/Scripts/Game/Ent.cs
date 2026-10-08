@@ -31,7 +31,9 @@ namespace Nekorobo
         public int pri;
         public bool walkStop;           // 巡回している客が、ぶつかられて歩くのをやめた
         public GameObject ring;         // 倒れた印
-        public float modelH;            // モデルに差し替えたときの見た目の高さ（頭の上の札をそれに合わせる）
+        public float modelH;
+        public GameObject vomit;        // HP が減ると口から出る虹
+        public int vomitTier;            // モデルに差し替えたときの見た目の高さ（頭の上の札をそれに合わせる）
 
         // 落ちた・浸かった
         public bool sunk;

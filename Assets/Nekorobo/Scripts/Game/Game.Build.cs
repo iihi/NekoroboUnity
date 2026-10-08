@@ -320,6 +320,10 @@ namespace Nekorobo
                             gu.pri = o.pri;
                             var K = GuestKinds.Find(o.gk) ?? GuestKinds.All[rr.Pick(GuestKinds.All.Count)];
                             var look = Looks.Guest(gu.transform, rr, K, TF.heads);
+                            {
+                                float hR = 1.04f / (2 * Mathf.Max(2.2f, TF.heads + K.heads));
+                                gu.vomit = Vomit(gu.transform, hR, 1.04f / 2 - hR);   // モデルに差し替えても残す
+                            }
                             ApplyModel(gu, look, "guest", o.gm);    // gm … エディタで選んだ客のモデル
                             guests.Add(gu); objEnt[o] = gu;
                             break;

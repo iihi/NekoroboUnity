@@ -17,6 +17,7 @@ namespace Nekorobo
         readonly Game g;
         readonly Dictionary<Ent, Bar> guestBars = new Dictionary<Ent, Bar>();
         readonly Dictionary<Player, RobotMark> robots = new Dictionary<Player, RobotMark>();
+        readonly Dictionary<Game.Dropped, Text> drops = new Dictionary<Game.Dropped, Text>();
 
         class Bar { public RectTransform r; public Image fill; }
         class RobotMark
@@ -48,6 +49,8 @@ namespace Nekorobo
                 Object.Destroy(m.r.gameObject); Object.Destroy(m.msg.gameObject); Object.Destroy(m.tgt.gameObject);
             }
             guestBars.Clear(); robots.Clear();
+            foreach (var t in drops.Values) Object.Destroy(t.gameObject);
+            drops.Clear();
         }
 
         // ------------------------------------------------------------ 部品
@@ -151,6 +154,22 @@ namespace Nekorobo
                 // 札は頭の少し上。モデルの客は背が当たり判定（1.04m）より高いので、そのぶん上げる
                 Project(gu.transform.position + Vector3.up * Mathf.Max(0.62f, gu.modelH - 0.52f + 0.22f), b.r);
                 SetFill(b, gu.hp / 100f, gu.hp > 50 ? GREEN : (gu.hp > 0 ? ORANGE : RED));
+            }
+            // ---- 落ちている料理（誰でも拾えるので、居場所が分からないと取り合いにならない）
+            var gone = new List<Game.Dropped>();
+            foreach (var kv in drops) if (!g.dropped.Contains(kv.Key)) gone.Add(kv.Key);
+            foreach (var d in gone) { Object.Destroy(drops[d].gameObject); drops.Remove(d); }
+            foreach (var d in g.dropped)
+            {
+                Text t;
+                if (!drops.TryGetValue(d, out t))
+                {
+                    t = Label(layer, "▼ " + d.dish.n, 13, Mats.Hex(0xff9500));
+                    t.gameObject.AddComponent<Outline>().effectColor = Color.black;
+                    drops[d] = t;
+                }
+                if (d.ent == null) continue;
+                Project(d.ent.transform.position + Vector3.up * (0.55f + Mathf.Sin(g.t * 7) * 0.05f), t.rectTransform);
             }
             bool many = g.players.Count > 1;
             foreach (var P in g.players)
