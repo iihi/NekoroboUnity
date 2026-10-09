@@ -545,8 +545,12 @@ namespace Nekorobo
             if (R.ent != null && R.ent.rb != null)
             {
                 R.ent.prevV = new Vector3(R.vx, 0, R.vz);
-                R.ent.rb.MovePosition(new Vector3(R.pos.x, R.y, R.pos.z));
-                if (R.turn && (dx != 0 || dz != 0)) R.ent.rb.MoveRotation(Quaternion.Euler(0, -yawDeg, 0));
+                // **置き直すだけにする（MovePosition は使わない）。**MovePosition は筏に速さを持たせるので、
+                // その摩擦で上の物が引きずられ、CarryRiders が動かすぶんと二重になって、上の物が筏より先へ滑って落ちていた
+                // （筏が 5.4m 動く間に、上の客は 8.0m 動いていた）。上の物を運ぶのは CarryRiders だけ（JS版と同じ）
+                var np = new Vector3(R.pos.x, R.y, R.pos.z);
+                R.ent.rb.position = np; R.ent.transform.position = np;
+                if (R.turn && (dx != 0 || dz != 0)) { var nr = Quaternion.Euler(0, -yawDeg, 0); R.ent.rb.rotation = nr; R.ent.transform.rotation = nr; }
             }
             if (R.mesh != null)
             {
@@ -566,7 +570,8 @@ namespace Nekorobo
                 foreach (var m in R.riders)
                 {
                     var x = R.pos.x + m.ox; var z = R.pos.z + m.oz;
-                    m.ent.rb.MovePosition(new Vector3(x, m.y, z));
+                    var mp = new Vector3(x, m.y, z);                // 筏と同じく置き直すだけ（速さを持たせると、上の物を引きずる）
+                    m.ent.rb.position = mp; m.ent.transform.position = mp;
                     if (m.counter)
                     {
                         // 受取口はあちこちから位置を見るので、動いたら教える

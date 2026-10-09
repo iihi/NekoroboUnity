@@ -503,17 +503,54 @@ namespace Nekorobo
         char Get(int i, int j) { char ch; return map.TryGetValue(new Vector2Int(i, j), out ch) ? ch : ' '; }
 
         /// <summary>穴の中を暗くする（底と、穴でない側の縁の壁）。見た目だけ。</summary>
+        /// <summary>
+        /// 穴の中を暗くする（見た目だけ。JS版 buildPitLook）。**上は開けておく**（底と、穴でないマスに面した縁の内壁だけ）。
+        /// 前は1マスごとに上面のある箱を床すれすれに置いていたので、上から見ると平らな灰色の板に見えて、
+        /// 落ちる穴だと分かりにくかった。底は0.86m下。落ちた物は底をすり抜けて下へ消える（当たり判定は無い）。
+        /// </summary>
         void BuildPitLook()
         {
-            var m = Mats.Get(0x2e3138, 1f);
-            const float depth = 0.86f, top = -0.02f;
-            foreach (var kv in map)
+            var holes = new HashSet<Vector2Int>();
+            foreach (var kv in map) if (kv.Value == 'o') holes.Add(kv.Key);
+            if (holes.Count == 0) return;
+            const float depth = 0.86f, top = -0.02f, bot = -0.02f - depth, e = 0.01f, h = 0.5f - e;
+            var verts = new List<Vector3>(); var tris = new List<int>();
+            // 四角を両面で（どちらから見ても描く）
+            System.Action<Vector3, Vector3, Vector3, Vector3> quad = (q0, q1, q2, q3) =>
             {
-                if (kv.Value != 'o') continue;
-                var c = Coord.Cell(kv.Key.x, kv.Key.y);
-                // 底と4つの縁。箱1つで代用（穴どうしの境目にも面ができるが、上からは見えない）
-                Part.Add(stageRoot, MeshGen.Box(0.98f, depth, 0.98f), m, new Vector3(c.x, top - depth / 2f, c.z), shadow: false, name: "PitVis");
+                int o = verts.Count;
+                verts.Add(q0); verts.Add(q1); verts.Add(q2); verts.Add(q3);
+                tris.AddRange(new[] { o, o + 1, o + 2, o, o + 2, o + 3 });
+                int o2 = verts.Count;
+                verts.Add(q0); verts.Add(q1); verts.Add(q2); verts.Add(q3);
+                tris.AddRange(new[] { o2, o2 + 2, o2 + 1, o2, o2 + 3, o2 + 2 });
+            };
+            // 底。穴のマスを矩形にまとめて1枚ずつ
+            foreach (var r in Tiles.MergeCells(holes))
+            {
+                Vector3 c; float w, d;
+                Tiles.RectWorld(r, out c, out w, out d);
+                quad(new Vector3(c.x - w / 2, bot, c.z - d / 2), new Vector3(c.x - w / 2, bot, c.z + d / 2),
+                     new Vector3(c.x + w / 2, bot, c.z + d / 2), new Vector3(c.x + w / 2, bot, c.z - d / 2));
             }
+            // 壁。穴でない側の縁だけ（床の板の側面と重なるので 1cm 内へ寄せる）
+            foreach (var k in holes)
+            {
+                var c = Coord.Cell(k.x, k.y);
+                // j-1（奥）は Unity の +z、j+1（手前）は −z
+                if (!holes.Contains(new Vector2Int(k.x, k.y - 1)))
+                    quad(new Vector3(c.x - h, top, c.z + h), new Vector3(c.x - h, bot, c.z + h), new Vector3(c.x + h, bot, c.z + h), new Vector3(c.x + h, top, c.z + h));
+                if (!holes.Contains(new Vector2Int(k.x, k.y + 1)))
+                    quad(new Vector3(c.x - h, top, c.z - h), new Vector3(c.x - h, bot, c.z - h), new Vector3(c.x + h, bot, c.z - h), new Vector3(c.x + h, top, c.z - h));
+                if (!holes.Contains(new Vector2Int(k.x - 1, k.y)))
+                    quad(new Vector3(c.x - h, top, c.z - h), new Vector3(c.x - h, bot, c.z - h), new Vector3(c.x - h, bot, c.z + h), new Vector3(c.x - h, top, c.z + h));
+                if (!holes.Contains(new Vector2Int(k.x + 1, k.y)))
+                    quad(new Vector3(c.x + h, top, c.z - h), new Vector3(c.x + h, bot, c.z - h), new Vector3(c.x + h, bot, c.z + h), new Vector3(c.x + h, top, c.z + h));
+            }
+            var mesh = new Mesh { name = "PitLook", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(verts); mesh.SetTriangles(tris, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            var go = Part.Add(stageRoot, mesh, Mats.Get(0x2e3138, 1f), Vector3.zero, shadow: false, name: "PitLook");
+            var mr = go.GetComponent<MeshRenderer>(); if (mr != null) mr.receiveShadows = true;
         }
 
         /// <summary>床のマス目の線。床の上にだけ、マスの境目に1本ずつ。</summary>

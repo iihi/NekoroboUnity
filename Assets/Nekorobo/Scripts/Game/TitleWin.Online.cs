@@ -85,7 +85,9 @@ namespace Nekorobo
         void Off(Item it)
         {
             it.off = true;
-            var cg = it.rt.GetComponent<CanvasGroup>() ?? it.rt.gameObject.AddComponent<CanvasGroup>();
+            // Unity の部品は ?? で比べられない（無いときも null に見えない）ので、明示して比べる
+            var cg = it.rt.GetComponent<CanvasGroup>();
+            if (cg == null) cg = it.rt.gameObject.AddComponent<CanvasGroup>();
             cg.alpha = 0.45f;
         }
 
