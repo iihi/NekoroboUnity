@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -96,7 +97,7 @@ namespace Nekorobo
         public void AfterResult()
         {
             if (result == null) return;
-            if (entry != null)
+            if (entry != null && !NpOn)
             {
                 // ストーリー：失敗した面はもう一度（チュートリアルなので、できるまで）。ショップの無い面は次へ
                 if (!result.cleared) { shopped = false; LoadCourseStage(courseIndex); return; }
@@ -114,7 +115,60 @@ namespace Nekorobo
         }
 
         /// <summary>全員が購入完了・時間切れ（JS版 shopDone）。</summary>
-        public void ShopDone() { NextStage(); }
+        public void ShopDone()
+        {
+            if (!hud.ShopOpen) return;
+            if (NpOn)
+            {
+                // この画面で動かしている枠は、これで買い終わり。最後にもう一度配る（配らないと相手の帯が「買い物中…」のまま）
+                hud.Shop.ReadyMine();
+                hud.Shop.NetSendW(true);
+                // 買ったものをホストへ知らせて、次の面をホストが選ぶのを待つ（計算するのはホストなので、ホスト側に無いと効かない）
+                if (me != null) Net.Send(new JObject { ["p"] = "bought", ["w"] = WalletJson(WalletOf(me)) });
+                np.shopped[Net.Id] = true;
+                hud.CloseShop();
+                if (NetHost) HostAfterShop();
+                else
+                {
+                    np.waitHost = true;
+                    hud.NetWait("買い物おわり", "ホストが<b>次の面を選ぶ</b>のを待っています。\n決まったら自動で始まります。\n" + RoundLine());
+                }
+                return;
+            }
+            NextStage();
+        }
+
+        /// <summary>
+        /// ホスト：全員が買い終わったら、次の面を選ぶ画面へ（JS版 npHostAfterShop）。
+        /// 待たずに進めると、買っている人の強化が反映されないまま次が始まってしまう。
+        /// </summary>
+        public void HostAfterShop()
+        {
+            if (!NetHost) return;
+            var mem = Net.Players ?? new JArray();
+            var yet = new List<int>();
+            foreach (var m in mem)
+            {
+                int id = (int?)m["id"] ?? -1;
+                bool done = np.shopped.ContainsKey(id) && np.shopped[id];
+                if (!done && NetAlive(id)) yet.Add(id);          // 入力が届かなくなった人は待たない
+            }
+            // 自分がまだ買い物中なら、待ちの画面は出さない（出すと、ホストの買い物の画面が横取りされる）
+            bool meDone = np.shopped.ContainsKey(Net.Id) && np.shopped[Net.Id];
+            if (yet.Count > 0 && !meDone) { np.waitShop = true; return; }
+            if (yet.Count > 0)
+            {
+                np.waitShop = true;
+                hud.NetWait("みんなの買い物を待っています",
+                            string.Join("、", yet.ConvertAll(id => "<b>" + SeatName(id) + "</b>").ToArray()) + " が買い物中です。\n終わると、次の面を選ぶ画面になります。");
+                return;
+            }
+            np.waitShop = false;
+            hud.NetWaitHide();
+            np.stage++;
+            // 部屋づくりの流れとは別物として見せる（「次のステージを選ぶ」）。決めると待機へ戻る
+            hud.OpenTitle("Free", true, "Wait");
+        }
 
         /// <summary>次の面へ（JS版 nextStage）。フリープレイは面を選ぶ。</summary>
         public void NextStage()

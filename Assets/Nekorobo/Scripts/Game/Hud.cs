@@ -37,11 +37,12 @@ namespace Nekorobo
             title.Close(); CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
         }
         /// <summary>タイトルを開く（page は Top / Free など。next なら買い物のあとの「次の面選び」）。</summary>
-        public void OpenTitle(string page, bool next = false)
+        public void OpenTitle(string page, bool next = false, string from = null)
         {
             CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
             Story.TalkClose(true); Story.HideBang(); Story.TutHide();
             title.next = next;
+            if (from != null) title.from = from;
             title.OpenPage(page);
         }
         GameObject gearBtn;
@@ -56,6 +57,8 @@ namespace Nekorobo
         class PopItem { public Text t; public Vector3 w; public float age, life; public bool big; }
 
         public bool MenuOpen { get { return menuPanel != null && menuPanel.activeSelf; } }
+        public ResultWin Result { get { return resultWin; } }
+        public ShopWin Shop { get { return shopWin; } }
         public bool ShopOpen { get { return shopWin != null && shopWin.Open; } }
         public void OpenShop() { resultWin.Close(); if (MenuOpen) menuPanel.SetActive(false); shopWin.OpenNow(); }
         public void CloseShop() { if (shopWin != null) shopWin.Close(); }
@@ -157,23 +160,79 @@ namespace Nekorobo
             netWarnBg.gameObject.SetActive(!string.IsNullOrEmpty(txt));
             netWarnBg.transform.SetAsLastSibling();
         }
-        /// <summary>人を待っている画面（ゲーム画面に戻さない。戻すと動かないので「固まった」と受け取られる）。</summary>
+        /// <summary>人を待っている画面（ゲーム画面に戻さない。戻すと動かないので「固まった」と受け取られる）。JS版 #netwait。</summary>
         public void NetWait(string head, string msg)
         {
             if (netWait == null)
             {
-                var bg = UiKit.Img(root, new Color(10 / 255f, 14 / 255f, 22 / 255f, 0.82f), 0, "NetWait");
-                bg.raycastTarget = true;
-                netWait = bg.rectTransform; UiKit.Stretch(netWait);
-                netWaitH = UiKit.Label(netWait, "", 28, Color.white, true, TextAnchor.MiddleCenter);
-                var hr = netWaitH.rectTransform; hr.anchorMin = hr.anchorMax = new Vector2(0.5f, 0.5f); hr.sizeDelta = new Vector2(1000, 50); hr.anchoredPosition = new Vector2(0, 40);
-                netWaitM = UiKit.Label(netWait, "", 16, new Color(1, 1, 1, 0.85f), true, TextAnchor.UpperCenter);
-                var mr = netWaitM.rectTransform; mr.anchorMin = mr.anchorMax = new Vector2(0.5f, 0.5f); mr.sizeDelta = new Vector2(1000, 120); mr.anchoredPosition = new Vector2(0, -40);
-                netWaitM.horizontalOverflow = HorizontalWrapMode.Wrap;
+                // 地：濃い紺のグラデーションに、左上の白い光（JS版の background）
+                var raw = UiKit.Rect(root, "NetWait").gameObject.AddComponent<RawImage>();
+                raw.texture = NetWaitBg(); raw.raycastTarget = true;
+                netWait = raw.rectTransform; UiKit.Stretch(netWait);
+                // 札：クリームの地に白い縁 5px
+                netWaitBox = UiKit.Card(netWait, Mats.Hex(0xfffdf6), Color.white, 5, 18, "Box").rectTransform;
+                netWaitBox.anchorMin = netWaitBox.anchorMax = new Vector2(0.5f, 0.5f); netWaitBox.pivot = new Vector2(0.5f, 0.5f);
+                var sh = netWaitBox.GetComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.18f); sh.effectDistance = new Vector2(0, -10);
+                netWaitH = UiKit.Label(netWaitBox, "", 26, Mats.Hex(0x3a352c), true, TextAnchor.UpperCenter);
+                netWaitM = UiKit.Label(netWaitBox, "", 14, Mats.Hex(0x8a8274), true, TextAnchor.UpperCenter);
+                netWaitM.horizontalOverflow = HorizontalWrapMode.Wrap; netWaitM.lineSpacing = 1.15f;
+                netWaitH.horizontalOverflow = HorizontalWrapMode.Wrap;
+                for (int i = 0; i < 3; i++)
+                {
+                    var d = UiKit.Img(netWaitBox, Mats.Hex(0x8a8274), 0, "Dot"); d.sprite = UiKit.Ellipse;
+                    var r = d.rectTransform; r.anchorMin = r.anchorMax = new Vector2(0.5f, 0); r.sizeDelta = new Vector2(11, 11);
+                    netWaitDots[i] = d;
+                }
             }
             netWaitH.text = head; netWaitM.text = msg ?? "";
+            // 中身の高さで札の高さを決める（幅 560、内側 22/26/20）
+            const float W = 560, inW = W - 52;
+            float hh = netWaitH.cachedTextGeneratorForLayout.GetPreferredHeight(head, netWaitH.GetGenerationSettings(new Vector2(inW, 0))) / netWaitH.pixelsPerUnit;
+            float mh = string.IsNullOrEmpty(msg) ? 0 : netWaitM.cachedTextGeneratorForLayout.GetPreferredHeight(netWaitM.text, netWaitM.GetGenerationSettings(new Vector2(inW, 0))) / netWaitM.pixelsPerUnit;
+            float H = 22 + hh + 8 + mh + 14 + 11 + 20;
+            netWaitBox.sizeDelta = new Vector2(W, H);
+            Place(netWaitH.rectTransform, 26, 22, inW, hh);
+            Place(netWaitM.rectTransform, 26, 22 + hh + 8, inW, mh);
+            for (int i = 0; i < 3; i++) netWaitDots[i].rectTransform.anchoredPosition = new Vector2((i - 1) * 20, 20 + 5.5f);
             netWait.gameObject.SetActive(true);
             netWait.SetAsLastSibling();
+        }
+        RectTransform netWaitBox; readonly Image[] netWaitDots = new Image[3];
+        static void Place(RectTransform r, float x, float y, float w, float h)
+        {
+            r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
+            r.anchoredPosition = new Vector2(x, -y); r.sizeDelta = new Vector2(w, h);
+        }
+        /// <summary>待ちの点（3つが順に浮いて明るくなる。JS版 @keyframes nwd）。</summary>
+        void NetWaitTick()
+        {
+            if (netWait == null || !netWait.gameObject.activeSelf) return;
+            for (int i = 0; i < 3; i++)
+            {
+                float k = Mathf.Repeat((Time.unscaledTime - i * 0.18f) / 1.1f, 1f);
+                float on = k < 0.3f ? k / 0.3f : k < 0.6f ? 1 - (k - 0.3f) / 0.3f : 0;
+                var c = netWaitDots[i].color; c.a = 0.25f + 0.75f * on; netWaitDots[i].color = c;
+                var r = netWaitDots[i].rectTransform; r.anchoredPosition = new Vector2((i - 1) * 20, 20 + 5.5f + 4 * on);
+            }
+        }
+        static Texture2D netWaitTex;
+        static Texture2D NetWaitBg()
+        {
+            if (netWaitTex != null) return netWaitTex;
+            const int W = 160, H = 90;
+            var t = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            Color c0 = Mats.Hex(0x2a3446), c1 = Mats.Hex(0x1b2330);
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    float X = (x + 0.5f) / W * 1280, Y = (1 - (y + 0.5f) / H) * 720;
+                    var col = Color.Lerp(c0, c1, Y / 720f);
+                    float d = Mathf.Sqrt(Mathf.Pow((X - 256) / 900f, 2) + Mathf.Pow((Y - 86) / 260f, 2));
+                    col = Color.Lerp(col, Color.white, 0.35f * Mathf.Clamp01(1 - d / 0.7f));
+                    t.SetPixel(x, y, col);
+                }
+            t.Apply(false);
+            return netWaitTex = t;
         }
         public void NetWaitHide() { if (netWait != null) netWait.gameObject.SetActive(false); }
         public bool NetWaitOpen { get { return netWait != null && netWait.gameObject.activeSelf; } }
@@ -250,6 +309,7 @@ namespace Nekorobo
         void Update()
         {
             Net.Pump();                                    // 部屋サーバーから届いた便りを配る（タイトルの間も）
+            NetWaitTick();
             var g = game;
             if (g == null) return;
             if (title.Open)

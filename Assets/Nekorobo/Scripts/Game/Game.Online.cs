@@ -58,7 +58,18 @@ namespace Nekorobo
             Net.OnStart += NetStart;
             Net.OnState += () =>
             {
-                if (Net.State != "on") NpEnd();          // 切れたら同期もやめる
+                if (Net.State == "on") return;
+                // 遊んでいる最中に切れたら、黙って固まらせない
+                bool playing = NetGuest && !hud.TitleOpen;
+                if (playing) NpLostHost("サーバとの通信が切れました。");
+                NpEnd();                                 // 切れたら同期もやめる
+            };
+            Net.OnRoom += m =>
+            {
+                // 買い物待ちの最中に誰かが抜けたら、待ち続けない（居ない人は待てない）
+                if (np.waitShop) HostAfterShop();
+                // ホストが抜けた。サーバは次の人をホストにするので、自分がホストになっていたら、もう計算してくれる人が居ない
+                if (NetGuest && (Net.Room == null || Net.IsHost)) NpLostHost("ホストが部屋から抜けました。");
             };
         }
 
@@ -117,6 +128,8 @@ namespace Nekorobo
                 for (int i = 0; i < wa.Count && i < wallets.Length; i++) WalletFromJson(wallets[i], wa[i] as JObject);
             if (!again && room != null) NpBegin(room["players"] as JArray ?? new JArray(), cfg != null ? cfg["npc"] as JArray : null, cfg);
             np.shopped.Clear(); np.rdy.Clear(); np.waitHost = false; np.waitShop = false;
+            hud.NetWaitHide();                       // 次の面が来た。待ちの画面は畳む
+            hud.NetWarn("", false);
             // 面。ランダムはホストが引いて、決まった面を配ってある（ref）
             string rf = pick != null ? (string)pick["ref"] : null;
             var c = rf != null ? StageCfg.Ref(rf, true) : null;

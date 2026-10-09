@@ -249,12 +249,21 @@ namespace Nekorobo
         }
 
         /// <summary>ホストの「生きています」の知らせ（1秒ごと）。位置の便りはゲームが止まっている間は出ないため。</summary>
+        /// <summary>ホストから見て、その人がまだ居るか（入力が5秒届かなければ居ないものとして扱う）。</summary>
+        bool NetAlive(int id)
+        {
+            if (id == Net.Id) return true;
+            NetIn v;
+            return npInputs.TryGetValue(id, out v) && Time.realtimeSinceStartup - v.at < 5f;
+        }
+
         void NpHeartbeat(float dt)
         {
             npHbT -= dt;
             if (npHbT > 0) return;
             npHbT = 1;
             Net.Send(new JObject { ["p"] = "hb", ["hid"] = Application.isFocused ? 0 : 1 });
+            if (np.waitShop) HostAfterShop();              // 黙って止まった人を待ち続けないよう、1秒ごとに数え直す
         }
 
         /// <summary>
@@ -328,6 +337,22 @@ namespace Nekorobo
                     if (!NetGuest) return;
                     bool hid = (int?)d["hid"] == 1;
                     if (hid != npHostHidden) { npHostHidden = hid; hud.NetWarn(hid ? "ホストの画面が裏に回っています。ホストが戻るまで止まります" : "", true); }
+                    return;
+                }
+                // ---- 結果の「準備OK」と、ホストの合図（みんな同時にショップへ）
+                if (p == "rok") { if (d["r"] is JArray rr) hud.Result.OnRok(id, rr); return; }
+                if (p == "rgo" && NetGuest) { hud.Result.OnGo(); return; }
+                // ---- 買い物の様子・指・買い終わり
+                if (p == "shopw") { if (d["r"] is JArray rr) hud.Shop.OnShopW(id, rr); return; }
+                if (p == "shopp") { if (d["r"] is JArray rr) hud.Shop.OnShopP(id, rr); return; }
+                if (p == "bought" && NetHost)
+                {
+                    // 買ったものを、その人の財布へ入れる（財布はその人が正しいので、まるごと写す）
+                    int i = np.ids.IndexOf(id);
+                    if (i >= 0 && i < players.Count) WalletFromJson(WalletOf(players[i]), d["w"] as JObject);
+                    np.shopped[id] = true;
+                    if (i >= 0) { np.rdy[i] = true; hud.Shop.MarkReady(i); }
+                    HostAfterShop();
                     return;
                 }
                 if (p == "in" && NetHost)
@@ -623,7 +648,8 @@ namespace Nekorobo
             {
                 GuestAim(dt);
                 NpSendInput(dt);
-                NpApply(dt);
+                if (!hud.ShopOpen) NpApply(dt);
+                else npLastRecv = Time.realtimeSinceStartup;     // 買い物の間は位置の便りが来ない（hb は来る）
             }
         }
     }

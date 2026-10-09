@@ -56,6 +56,7 @@ namespace Nekorobo
         class Cur
         {
             public Player P; public float x, y; public int idx = -1; public bool onRdy, placed, armed, ready;
+            public float nx = -1, ny = -1; public bool netSeen;          // オンラインの相手の指（割合で届く）
             public float lockT, buyT; public bool pOk, pUse;
             public RectTransform el; public Text tag; public Image tagBg; public Image tagPoor;
         }
@@ -113,7 +114,10 @@ namespace Nekorobo
             t = timed ? g.T.shopTime : 0;
             cur.Clear();
             for (int i = 0; i < g.players.Count; i++)
-                cur.Add(new Cur { P = g.players[i], lockT = g.T.menuLock, buyT = 0.8f + i * 0.45f });
+                cur.Add(new Cur { P = g.players[i], lockT = g.T.menuLock, buyT = 0.8f + i * 0.45f,
+                                  // 開く前に「もう買い終わった」と届いていたら、それを引き継ぐ
+                                  ready = g.NpOn && g.np.rdy.ContainsKey(i) && g.np.rdy[i] });
+            shopSig = ""; ptrSig = ""; ptrT = 0;
             Build();
             root.gameObject.SetActive(true);
             Open = true;
@@ -407,7 +411,7 @@ namespace Nekorobo
             c.tag = UiKit.Label(c.tagBg.transform, "", 11, Color.white);
             c.tagPoor = Ring(c.tagBg.transform, Mats.Hex(0xe8604a), 2, 5);
             c.el = f;
-            if (!IsViewer(c.P)) f.gameObject.SetActive(false);      // NPC の指は出さない（何を見ているか出さない）
+            if (!IsViewer(c.P) && c.P.src.kind != "net") f.gameObject.SetActive(false);   // NPC の指は出さない（オンラインの相手の指は出す）
         }
 
         // ================================================================ 毎フレーム
@@ -415,8 +419,11 @@ namespace Nekorobo
         {
             if (!Open) return;
             var kb = Keyboard.current;
-            if (kb != null && kb.rKey.wasPressedThisFrame) { g.ResetRun(); return; }
-            if (kb != null && kb.tKey.wasPressedThisFrame) { g.BackToTitle(); return; }
+            if (!g.NpOn)                                     // オンラインでは、やり直しとタイトルへは効かない（みんなの続きが終わる）
+            {
+                if (kb != null && kb.rKey.wasPressedThisFrame) { g.ResetRun(); return; }
+                if (kb != null && kb.tKey.wasPressedThisFrame) { g.BackToTitle(); return; }
+            }
 
             // マウスでも買えるように（この画面の人のカーソルがマウスに付いていく）
             var mc = cur.Find(c => c.P == g.me && IsViewer(c.P)) ?? cur.Find(c => IsViewer(c.P));
@@ -442,6 +449,17 @@ namespace Nekorobo
             {
                 var c = cur[i];
                 if (c.lockT > 0) c.lockT -= dt;
+                if (!Mine(i))
+                {
+                    // 相手の指は、届いた場所へなめらかに寄せる（12回/秒のまま置くとカクつく）
+                    if (c.nx >= 0)
+                    {
+                        float k = Mathf.Min(1, dt * 14);
+                        c.x += (c.nx * gw - c.x) * k; c.y += (c.ny * gh - c.y) * k;
+                        Over(c);
+                    }
+                    continue;
+                }
                 if (c.P.src.kind == "npc") { NpcTick(c, dt); continue; }
                 var inp = c.P.input;
                 // 方向は nav*（十字とスティック）だけを見る。A は加速と兼用なので
@@ -465,8 +483,13 @@ namespace Nekorobo
                 c.pOk = inp.ok; c.pUse = inp.use;
             }
 
-            // 全員が買い終わったら、残り時間を待たずに進む
-            if (cur.Count > 0 && cur.TrueForAll(x => x.ready)) { g.ShopDone(); return; }
+            // オンライン：買い物の様子と指の位置を配る
+            NetSendW(false); NetSendPtr(dt);
+            // 全員が買い終わったら、残り時間を待たずに進む。
+            // オンラインでは**自分の画面で動かしている枠だけ**を見る（相手の入力は相手の画面にしか届かない）
+            bool all = true; bool any = false;
+            for (int i = 0; i < cur.Count; i++) { if (g.NpOn && !Mine(i)) continue; any = true; if (!cur[i].ready) all = false; }
+            if (any && all) { g.ShopDone(); return; }
             if (t > 0)
             {
                 t -= dt;
@@ -474,6 +497,91 @@ namespace Nekorobo
             }
             Refresh();
         }
+
+        // ================================================================ オンライン（JS版 npShopMine / npShopSend / npShopPtr と "shopw" "shopp"）
+        /// <summary>この画面で動かしている枠か。相手の枠は相手の画面が、NPC はホストの画面が買う。</summary>
+        public bool Mine(int i)
+        {
+            if (i < 0 || i >= cur.Count) return false;
+            var k = cur[i].P.src.kind;
+            if (k == "net") return false;
+            if (k == "npc") return !g.NpOn || g.NetHost;
+            return true;
+        }
+        string shopSig = "", ptrSig = ""; float ptrT;
+        /// <summary>この画面で動かしている枠の財布と「買い終わり」を配る（変わったときだけ）。last は買い終わった時の1回。</summary>
+        public void NetSendW(bool last)
+        {
+            if (!g.NpOn || (!Open && !last)) return;
+            var rows = new Newtonsoft.Json.Linq.JArray();
+            for (int i = 0; i < cur.Count; i++)
+            {
+                if (!Mine(i)) continue;
+                rows.Add(new Newtonsoft.Json.Linq.JArray(i, Game.WalletJson(g.WalletOf(cur[i].P)), cur[i].ready ? 1 : 0));
+            }
+            if (rows.Count == 0) return;
+            string sig = rows.ToString(Newtonsoft.Json.Formatting.None);
+            if (sig == shopSig) return;
+            shopSig = sig;
+            Net.Send(new Newtonsoft.Json.Linq.JObject { ["p"] = "shopw", ["r"] = rows });
+        }
+        /// <summary>指の位置。窓の大きさが人によって違うので、並びの幅・高さに対する割合で送る（12回/秒）。</summary>
+        void NetSendPtr(float dt)
+        {
+            if (!g.NpOn || gw <= 0 || gh <= 0) return;
+            ptrT -= dt;
+            if (ptrT > 0) return;
+            ptrT = 1f / 12;
+            var rows = new Newtonsoft.Json.Linq.JArray();
+            for (int i = 0; i < cur.Count; i++)
+            {
+                if (!Mine(i)) continue;
+                var c = cur[i];
+                rows.Add(new Newtonsoft.Json.Linq.JArray(i, Mathf.Round(c.x / gw * 1000) / 1000, Mathf.Round(c.y / gh * 1000) / 1000, c.idx, c.onRdy ? 1 : 0));
+            }
+            if (rows.Count == 0) return;
+            string sig = rows.ToString(Newtonsoft.Json.Formatting.None);
+            if (sig == ptrSig) return;                     // 止まっている間は送らない
+            ptrSig = sig;
+            Net.Send(new Newtonsoft.Json.Linq.JObject { ["p"] = "shopp", ["r"] = rows });
+        }
+        static bool Owns(Game g, int i, int from)
+        {
+            int host = Net.Room != null ? ((int?)Net.Room["host"] ?? -1) : -1;
+            int owner = i < g.np.ids.Count ? g.np.ids[i] : -1;
+            return owner == from || (owner == -1 && from == host);
+        }
+        /// <summary>相手の買い物の様子が届いた。財布を写し、買い終わりを立てる（ショップを開く前にも届く）。</summary>
+        public void OnShopW(int from, Newtonsoft.Json.Linq.JArray rows)
+        {
+            foreach (Newtonsoft.Json.Linq.JArray row in rows)
+            {
+                int i = (int)row[0];
+                if (i < 0 || i >= g.players.Count || !Owns(g, i, from)) continue;
+                if (Open && Mine(i)) continue;
+                if (!Open && (g.players[i].src.kind == "key" || g.players[i].src.kind == "pad")) continue;
+                Game.WalletFromJson(g.WalletOf(g.players[i]), row[1] as Newtonsoft.Json.Linq.JObject);
+                g.np.rdy[i] = (int)row[2] != 0;
+                if (Open && i < cur.Count) cur[i].ready = (int)row[2] != 0;
+            }
+        }
+        /// <summary>相手の指の位置が届いた。初めて届いたときは寄せずにその場へ置く。</summary>
+        public void OnShopP(int from, Newtonsoft.Json.Linq.JArray rows)
+        {
+            if (!Open) return;
+            foreach (Newtonsoft.Json.Linq.JArray row in rows)
+            {
+                int i = (int)row[0];
+                if (i < 0 || i >= cur.Count || Mine(i) || !Owns(g, i, from)) continue;
+                var c = cur[i];
+                c.nx = (float)row[1]; c.ny = (float)row[2];
+                if (!c.netSeen) { c.netSeen = true; c.x = c.nx * gw; c.y = c.ny * gh; Over(c); }
+            }
+        }
+        /// <summary>ホストが参加者の「買い終わり」を受けた（bought）。</summary>
+        public void MarkReady(int i) { if (Open && i >= 0 && i < cur.Count) cur[i].ready = true; }
+        /// <summary>この画面で動かしている枠を、全部買い終わりにする（時間切れ・購入完了）。</summary>
+        public void ReadyMine() { for (int i = 0; i < cur.Count; i++) if (Mine(i)) cur[i].ready = true; }
 
         /// <summary>NPC も同じ画面で買う（裏で一瞬で済ませると、何を買われたか分からない）。</summary>
         void NpcTick(Cur c, float dt)

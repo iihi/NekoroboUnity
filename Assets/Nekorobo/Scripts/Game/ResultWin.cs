@@ -53,7 +53,7 @@ namespace Nekorobo
         {
             var R = g.result;
             if (box != null) Object.Destroy(box.gameObject);
-            okBtns.Clear(); ok.Clear(); prevOk.Clear(); npcT.Clear();
+            okBtns.Clear(); ok.Clear(); prevOk.Clear(); npcT.Clear(); rokSent = "";
             for (int i = 0; i < g.players.Count; i++) { ok.Add(false); prevOk.Add(true); npcT.Add(0.9f + i * 0.35f); }
             went = false;
             shownAt = Time.unscaledTime;
@@ -273,7 +273,7 @@ namespace Nekorobo
             bool multiLocal = g.MultiLocal();
             foreach (var P in g.players)
             {
-                var b = new OkBtn { P = P, mine = P.src.kind != "npc" };
+                var b = new OkBtn { P = P, mine = P.src.kind != "npc" && P.src.kind != "net" };
                 var bg = UiKit.Img(foot, CREAM, 14, "Ok_" + P.name);
                 b.bg = bg;
                 b.ring = Ring(bg.transform, Color.white, 4, 14);
@@ -318,6 +318,51 @@ namespace Nekorobo
             okNote.text = left > 0 ? "全員が「準備OK」になると、みんなでショップへ進みます（あと " + left + " 人）" : "ショップへ…";
         }
 
+        /// <summary>
+        /// この画面で決める枠か（JS版 ownSlot）。オンラインの相手の枠は相手の画面が、NPC はホストの画面が決める。
+        /// </summary>
+        bool OwnSlot(int i)
+        {
+            var P = g.players[i];
+            if (P.src.kind == "net") return false;
+            if (P.src.kind == "npc") return !g.NpOn || g.NetHost;
+            return true;
+        }
+
+        string rokSent = "";
+        /// <summary>この画面で決める枠の「準備OK」を、部屋の全員へ配る（変わったときだけ）。</summary>
+        void RokSend()
+        {
+            if (!g.NpOn) return;
+            var rows = new Newtonsoft.Json.Linq.JArray();
+            for (int i = 0; i < ok.Count; i++) if (OwnSlot(i)) rows.Add(new Newtonsoft.Json.Linq.JArray(i, ok[i] ? 1 : 0));
+            if (rows.Count == 0) return;
+            string sig = rows.ToString(Newtonsoft.Json.Formatting.None);
+            if (sig == rokSent) return;
+            rokSent = sig;
+            Net.Send(new Newtonsoft.Json.Linq.JObject { ["p"] = "rok", ["r"] = rows });
+        }
+
+        /// <summary>相手の「準備OK」が届いた（送ってきた人がその枠を持っているかを確かめる）。</summary>
+        public void OnRok(int from, Newtonsoft.Json.Linq.JArray rows)
+        {
+            if (!Open) return;
+            int host = Net.Room != null ? ((int?)Net.Room["host"] ?? -1) : -1;
+            bool hit = false;
+            foreach (Newtonsoft.Json.Linq.JArray row in rows)
+            {
+                int i = (int)row[0];
+                if (i < 0 || i >= ok.Count || OwnSlot(i)) continue;
+                int owner = i < g.np.ids.Count ? g.np.ids[i] : -1;
+                if (!(owner == from || (owner == -1 && from == host))) continue;
+                ok[i] = (int)row[1] != 0; hit = true;
+            }
+            if (hit) Refresh();
+        }
+
+        /// <summary>ホストの合図（rgo）。みんな同時にショップへ入る。</summary>
+        public void OnGo() { if (!Open || went) return; went = true; g.OpenShop(); }
+
         public void Tick(float dt)
         {
             if (!Open || went) return;
@@ -327,6 +372,7 @@ namespace Nekorobo
             {
                 var P = g.players[i];
                 if (ok[i]) { prevOk[i] = true; continue; }
+                if (!OwnSlot(i)) continue;                                  // 相手の画面が決める枠
                 if (P.src.kind == "npc")
                 {
                     npcT[i] -= dt;
@@ -344,9 +390,13 @@ namespace Nekorobo
                 if (autoT <= 0) { for (int i = 0; i < ok.Count; i++) ok[i] = true; redraw = true; }
             }
             if (redraw) Refresh();
+            RokSend();
             if (ok.TrueForAll(x => x))
             {
+                // ショップへは、みんなそろって同時に入る。進める合図はホストが出す
+                if (g.NpOn && !g.NetHost) return;
                 went = true;
+                if (g.NpOn) Net.Send(new Newtonsoft.Json.Linq.JObject { ["p"] = "rgo" });
                 g.AfterResult();
             }
         }
