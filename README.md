@@ -36,7 +36,7 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 | 結果で R | もう一度 |
 | ショップ | ←→↑↓ で指を動かし、Enter・スペース（パッドは A）で買う。Z（パッドは Y）で購入完了。マウスでも買える。R で最初から、T でタイトルへ |
 
-パッドは HTML版と同じ割り当てです（A/R2 加速、B/L2 バック、X ジャンプ、Y アイテム、L1/R1 持ち替え）。
+パッドは HTML版と同じ割り当てです（A/R2 加速、B/L2 バック、X ジャンプ、Y アイテム、L1/R1 持ち替え。持ち替えは上の帯の並び＝リペア→バナナ→ドローン→ブーメラン→レーザー→弾道ミサイル→追尾ミサイル→無敵の順）。
 パッドを枠に割り当てていなければ、どのパッドでもキーボードの人を動かせます。
 
 ## データは HTML版のファイルをそのまま読む
@@ -118,13 +118,15 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/EndingWin.cs` | エンディング（全ステージ終了） |
 | `Resources/Shaders/Overlay.shader` | 何にも隠れずに手前へ描く色だけのシェーダー（案内の矢印） |
 | `Scripts/Game/ShopWin.cs` | 強化ショップの画面と指カーソル（JS版 #shopwin。位置と大きさは CSS と同じ数値） |
-| `Resources/Ui/*.png` | 品物の絵・指・店主とロボの顔・タイトルの板の絵（`Ui/Title`）。HTML版の SVG を Chrome で PNG にした物（作り方は `Tools/shop_icons`） |
+| `Resources/Ui/*.png` | 品物の絵・指・店主とロボの顔・タイトルの板の絵（`Ui/Title`）。HTML版の SVG を Chrome で PNG にした物（作り方は `Tools/shop_icons`）。上の帯の絵は `Ui/Hud`（`Tools/shop_icons/hud_icons.mjs` が HTML版の H2_ICONS から作る） |
 | `Scripts/Game/Game.Npc.cs` | NPC（JS版 NPC_LV・findPath・driveNpc）。道探しに教えるマス（動く床・いかだ・置き物） |
 | `Scripts/Game/Game.Fx.cs` | 演出（飛沫・モクモク・閃光・光の柱・矢印・客の虹）と落ちた料理 |
 | `Scripts/Game/Scenery.cs` | ステージのまわりの飾り（JS版 scenery.js） |
 | `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
-| `Scripts/Game/HudTop.cs` | 上の帯（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards |
+| `Scripts/Game/HudBar.cs` | 上の帯の新しい並び（担当の案・仮）。左に面の札（何回戦・店名／配膳数・損壊率・昇天数／経過時間）、右へ全員ぶんの札（名前・耐久・順位／売上・修理費・差引・配膳数／アイテム8種／運んでいる料理）。JS版 #hud2 |
+| `Scripts/Game/ShineText.cs` / `Thicken.cs` | 順位の数字の金・銀・銅のグラデーションと走る光 ／ 字を太らせる（CSS の font-weight:900 の代わり） |
+| `Scripts/Game/HudTop.cs` | 上の帯の前の並び（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards。設定パネルの「上の帯を新しい並び（試し）にする」を切るとこちら |
 | `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState） |
 | `Scripts/Game/SettingsPanel.cs` | 検証用パネル（JS版の右パネル）。保存すると HTML版の tune.json に書く（Unity が知らない項目は残す） |
 | `Scripts/Game/UiKit.cs` | 画面の部品（丸い札・枠・影）。CSS の数字をそのまま写すため |

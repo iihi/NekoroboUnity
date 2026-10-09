@@ -175,6 +175,9 @@ namespace Nekorobo
                 if (k == "autoFit" || k.StartsWith("fit")) g.FitCamera();
                 g.ApplyShadows();
             });
+            Section("上の帯");
+            Control(C("hud2", "上の帯を新しい並び（試し）にする"), Hud.Opt, k => Hud.SaveOpt());
+            Label("担当からの案（仮）。切ると前の並び（店名・NEXT・タイム・売上と、右の人ごとの札）に戻ります。", 11, NOTE, false);
             Section("客の見た目（R で反映）");
             Control(S("heads", "客の頭身", 2, 4, 0.1f, 1), g.TF, null);
             Control(S("bodyTint", "機体に乗せる色の濃さ", 0, 1, 0.05f, 2), g.TF, null);
@@ -194,7 +197,7 @@ namespace Nekorobo
             Section("アイテムとショップ（デバッグ）");
             Button(HRow(), "いま全員にアイテムを全部持たせる", () => g.GiveAllItems());
             Button(HRow(), "ショップを開く（見た目の確認）", () => g.OpenShop());
-            Label("Z で使う（弾道ミサイルは長押しで照準、離して発射）、X / C で持ち替え。パッドは Y で使う、R1 / L1 で持ち替え。", 11, NOTE, false);
+            Label("Z で使う（弾道ミサイルは長押しで照準、離して発射）、X / C で持ち替え（上の帯の並びの順）。パッドは Y で使う、R1 / L1 で持ち替え。", 11, NOTE, false);
 
             // ---- 今の収支
             Section("今の収支（ライブ検算）");

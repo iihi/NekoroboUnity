@@ -17,6 +17,11 @@ namespace Nekorobo
         RectTransform root;
         Text center, help;
         HudTop top;
+        HudBar bar2;
+        /// <summary>上の帯の並びの切り替え（設定パネルのチェック）。この端末で覚える。JS版 HUDOPT。</summary>
+        public class HudOpt { public bool hud2 = true; }
+        public static readonly HudOpt Opt = new HudOpt();       // 覚えた値は Awake で読む（静的な初期化の中では PlayerPrefs を読めない）
+        public static void SaveOpt() { PlayerPrefs.SetInt("nekorobo.hud2", Opt.hud2 ? 1 : 0); PlayerPrefs.Save(); }
         SettingsPanel settings;
         ShopWin shopWin;
         /// <summary>会話・案内・バン（ストーリーの画面）。</summary>
@@ -53,6 +58,7 @@ namespace Nekorobo
 
         void Awake()
         {
+            Opt.hud2 = PlayerPrefs.GetInt("nekorobo.hud2", 1) != 0;
             var cg = new GameObject("HUD");
             canvas = cg.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -67,6 +73,8 @@ namespace Nekorobo
 
             // ---- 上の帯と右の人ごとの札（JS版 #topbar / #pcards）
             top = new HudTop(root, GetComponent<Game>());
+            // ---- 上の帯の新しい並び（担当からの案・仮。JS版 #hud2）。設定で前の並びと切り替える
+            bar2 = new HudBar(root, GetComponent<Game>());
 
             // ---- 右下：操作
             help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
@@ -165,6 +173,7 @@ namespace Nekorobo
             pops.Clear();
             over.Clear();
             top.Clear();
+            bar2.Clear();
             readyShown = "";
         }
 
@@ -209,7 +218,9 @@ namespace Nekorobo
             else if (shopWin.Open) shopWin.Tick(Time.deltaTime);
             else { if (resultWin.Open) resultWin.Tick(Time.deltaTime); MenuTick(); }
 
-            top.Tick();
+            // 上の帯。新しい並び（HudBar）か前の並び（HudTop）のどちらか
+            top.SetVisible(!Opt.hud2); bar2.SetVisible(Opt.hud2);
+            if (Opt.hud2) bar2.Tick(); else top.Tick();
             // 3・2・1・スタート！
             // JS版と同じ：3.999→3 / 2.999→2 / 1.999→1 / 0.999→スタート！（スタートの間はまだ動けない）
             string label = "";
@@ -254,6 +265,9 @@ namespace Nekorobo
             var kbd = Keyboard.current;
             if (kbd != null && kbd.tabKey.wasPressedThisFrame) settings.Toggle();
             gearBtn.SetActive(!settings.Open);
+            bool tall = Opt.hud2 && game.stage != null && !title.Open;
+            ((RectTransform)gearBtn.transform).anchoredPosition = new Vector2(-12, tall ? -122 : -88);
+            toast.rectTransform.offsetMin = new Vector2(0, tall ? -150 : -110); toast.rectTransform.offsetMax = new Vector2(0, tall ? -126 : -70);
             if (toastT > 0)
             {
                 toastT -= Time.deltaTime;

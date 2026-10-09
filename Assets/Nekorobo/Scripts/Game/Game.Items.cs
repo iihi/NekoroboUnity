@@ -65,6 +65,16 @@ namespace Nekorobo
             new ItemDef { k = "star", n = "無敵", price = 8000, rate = 1.5f, max = 2, col = 0xff7ad9, ds = "10秒間ダメージを受けない。ぶつけた客にもダメージを与えず、壊しても修理費がかからない" },
         };
         public static ItemDef ItemOf(string k) { foreach (var i in ITEMS) if (i.k == k) return i; return null; }
+        /// <summary>持ち替えの順（L1・R1）。上の帯に並べる順と同じ（左から右へ）。JS版 ITEM_ORDER。</summary>
+        public static readonly string[] ITEM_ORDER = { "repair", "banana", "drone", "boomerang", "laser", "ball", "missile", "star" };
+        /// <summary>ITEM_ORDER の順に並べた品物（ITEM_ORDER に無い物は後ろへ）。</summary>
+        static List<ItemDef> ItemsInOrder()
+        {
+            var l = new List<ItemDef>();
+            foreach (var k in ITEM_ORDER) { var it = ItemOf(k); if (it != null) l.Add(it); }
+            foreach (var it in ITEMS) if (!l.Contains(it)) l.Add(it);
+            return l;
+        }
 
         public static readonly UpgradeDef[] UPGRADES =
         {
@@ -93,19 +103,19 @@ namespace Nekorobo
         public void ResetWallets() { NewWallets(); runDone = 0; }
 
         // ================================================================ 選ぶ・使う
-        void FixSlot(Player P)
+        public void FixSlot(Player P)
         {
             var W = WalletOf(P);
             if (P.slot != null && W.Has(P.slot) > 0) return;
             P.slot = null;
-            foreach (var it in ITEMS) if (W.Has(it.k) > 0) { P.slot = it.k; break; }
+            foreach (var it in ItemsInOrder()) if (W.Has(it.k) > 0) { P.slot = it.k; break; }
         }
 
         void CycleItem(Player P, int step)
         {
             var W = WalletOf(P);
             var have = new List<ItemDef>();
-            foreach (var it in ITEMS) if (W.Has(it.k) > 0) have.Add(it);
+            foreach (var it in ItemsInOrder()) if (W.Has(it.k) > 0) have.Add(it);
             if (have.Count == 0) { P.slot = null; return; }
             int cur = have.FindIndex(i => i.k == P.slot), n = have.Count;
             P.slot = have[((cur + step) % n + n) % n].k;

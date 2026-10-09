@@ -39,11 +39,19 @@ namespace Nekorobo
             public RawImage pic; public Texture2D tex; public string key = ""; public Order obj; public float tier; public float downT;
         }
 
+        RectTransform barR;
+        /// <summary>出し入れ（新しい並び HudBar を使っている間は隠す）。</summary>
+        public void SetVisible(bool on)
+        {
+            if (barR.gameObject.activeSelf != on) { barR.gameObject.SetActive(on); pcards.gameObject.SetActive(on); }
+        }
+
         public HudTop(RectTransform root, Game game)
         {
             g = game;
             // ---- 上の帯
             var bar = UiKit.Rect(root, "TopBar");
+            barR = bar;
             bar.anchorMin = new Vector2(0, 1); bar.anchorMax = new Vector2(1, 1); bar.pivot = new Vector2(0.5f, 1);
             bar.sizeDelta = new Vector2(0, 78); bar.anchoredPosition = Vector2.zero;
             UiKit.HRow(bar.gameObject, 9, UiKit.Pad(12, 12, 0, 0));
@@ -223,6 +231,24 @@ namespace Nekorobo
                 next[i].name.text = o.dish.n;
             }
             // コンボ
+            string cb = ComboText(g);
+            combo.text = cb;
+            comboCard.SetActive(cb.Length > 0);
+            // タイムとお金
+            timeTxt.text = Game.FmtTime(g.frames);
+            timeTxt.color = g.result != null && g.result.rec ? Mats.Hex(0xf2b52c) : Color.white;
+            mSales.text = Game.Yen(L.sales);
+            mWreck.text = L.wreck > 0 ? "<color=" + UiKit.Hex(GOLD_D) + ">大暴れ +" + Game.Yen(L.wreck) + "</color>" : "";
+            mAmb.text = g.T.countAmb && L.amb > 0 ? "＋救急" + L.amb + "台" : "";
+            mCost.text = Game.Yen(-(L.repair + L.ambCost));
+            mTotal.text = Game.Yen(L.total);
+            mTotal.color = L.total >= 0 ? GREEN_D : RED_D;
+            TickCards();
+        }
+
+        /// <summary>コンボの文（自分のぶん）。新しい並び（HudBar）でも使う。</summary>
+        public static string ComboText(Game g)
+        {
             var P = g.me;
             string cb = "";
             if (P != null && P.combo >= 2)
@@ -237,18 +263,11 @@ namespace Nekorobo
                 cb += (cb.Length > 0 ? "　" : "") + "<color=#ff9500>" + P.dcombo + "連続 +"
                     + Mathf.RoundToInt(g.T.comboBonus * Mathf.Min(P.dcombo - 1, g.T.comboMax) * 100)
                     + "%<size=12> 残" + P.dcomboT.ToString("0.0") + "秒</size></color>";
-            combo.text = cb;
-            comboCard.SetActive(cb.Length > 0);
-            // タイムとお金
-            timeTxt.text = Game.FmtTime(g.frames);
-            timeTxt.color = g.result != null && g.result.rec ? Mats.Hex(0xf2b52c) : Color.white;
-            mSales.text = Game.Yen(L.sales);
-            mWreck.text = L.wreck > 0 ? "<color=" + UiKit.Hex(GOLD_D) + ">大暴れ +" + Game.Yen(L.wreck) + "</color>" : "";
-            mAmb.text = g.T.countAmb && L.amb > 0 ? "＋救急" + L.amb + "台" : "";
-            mCost.text = Game.Yen(-(L.repair + L.ambCost));
-            mTotal.text = Game.Yen(L.total);
-            mTotal.color = L.total >= 0 ? GREEN_D : RED_D;
+            return cb;
+        }
 
+        void TickCards()
+        {
             // ---- 右の人ごとの札（この画面で動かしている人＝キーボードとパッドだけ。NPC は出さない）
             var loc = g.players.FindAll(q => q.src.kind == "key" || q.src.kind == "pad");
             bool same = cards.Count == loc.Count;
