@@ -46,6 +46,7 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 ### Windows の EXE にする
 
 メニュー「**Nekorobo → Windows で書き出す**」で `Builds/Win/Nekorobo.exe` ができます（git には入れません）。
+EXE は**窓（1280×720、大きさは変えられる）**で始まり、Alt+Enter で全画面と切り替えられます（`-screen-fullscreen 1` を付けると全画面で始まる）。
 EXE も HTML版のフォルダ（nekorobo3d）を直接読みます。このPCの置き方ならそのまま動き、ほかのPCでは環境変数 `NEKOROBO_DATA` に場所を入れます
 （製品にするときは `StreamingAssets/nekorobo3d` へ同梱する前提。手順はまだ作っていません）。
 

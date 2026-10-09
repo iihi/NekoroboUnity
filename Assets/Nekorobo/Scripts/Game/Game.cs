@@ -91,6 +91,23 @@ namespace Nekorobo
         public class Bonus { public Player P; public int? team; public int rank, amt; public bool solo; }
 
         // ================================================================ 起動
+        /// <summary>
+        /// **EXE は窓で始める。**Unity は前回の画面の状態を PC に覚えていて、一度でも全画面で起動すると
+        /// 書き出しの設定（窓）より覚えた方が勝つ。起動の引数 -screen-fullscreen を付けたときだけ、それに従う。
+        /// 遊んでいる途中は Alt+Enter で全画面と窓を切り替えられる。
+        /// ※ 窓そのものはスクリプトより先に、覚えた状態でエンジンが作る。なので全画面を覚えていた回だけ、
+        ///   Unity のロゴの間（約5秒）は全画面のままで、そのあと窓に戻る。戻ると「窓」を覚え直すので、次からは最初から窓
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
+        static void StartWindowed()
+        {
+#if UNITY_STANDALONE && !UNITY_EDITOR
+            if (Screen.fullScreenMode != FullScreenMode.Windowed
+                && System.Array.FindIndex(System.Environment.GetCommandLineArgs(), a => a == "-screen-fullscreen") < 0)
+                Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
+#endif
+        }
+
         void Awake()
         {
             I = this;
