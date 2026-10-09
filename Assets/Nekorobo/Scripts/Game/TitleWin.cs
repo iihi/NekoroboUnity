@@ -11,14 +11,15 @@ namespace Nekorobo
     ///   タイトル ─ 1人プレイ ─ ストーリー（続きから／初めから）
     ///            │           └ フリープレイ（面を選ぶ）
     ///            ├ マルチプレイ ─ ローカル（ルール → 1P〜4Pの枠 → 面を選ぶ）
-    ///            │              └ オンライン（まだ）
+    ///            │              └ オンライン ─ ルームを作る（ルール → 待機）／ルームに参加（一覧か番号 → 待機）
+    ///            │                             待機：ルームID・面（ホストが選ぶ）・ルール・席（空きはNPC）・始める
     ///            └ デバッグ
     ///
     /// カーソルは JS版の MENU と同じ動き：並び順に1つずつ（端で折り返さない）、面の一覧の中だけ ↑↓ で1行ぶん。
     /// 決定は Enter・スペース・パッドの A、戻るは Esc・Backspace・パッドの B。マウスは触ると選び、押すと決定。
     /// 位置と大きさは 1280×720 の画面で CSS と同じ数値（vh はここで px に直してある）。
     /// </summary>
-    public class TitleWin
+    public partial class TitleWin
     {
         readonly Game g;
         readonly RectTransform root;
@@ -35,7 +36,10 @@ namespace Nekorobo
         public bool next;                     // 買い物のあとの「次の面選び」か
         Picker picker;
 
-        class Picker { public string title, note, cur, back; public List<string[]> opts; public System.Action<string> onPick; }
+        class Picker { public string title, note, cur, back; public bool confirm; public List<string[]> opts; public System.Action<string> onPick; }
+        // 文字を入れる画面（ルームID・サーバ）。パッドだけでは打てないので、キーボード前提（JS版 titleAsk）
+        class Ask { public string title, note, value, back; public bool digits; public System.Action<string> onOk; public InputField inp; }
+        Ask ask;
 
         // ---- カーソル
         class Item
@@ -79,6 +83,38 @@ namespace Nekorobo
             var bg = root.gameObject.AddComponent<RawImage>();
             bg.texture = BgTex(); bg.raycastTarget = true;
             root.gameObject.SetActive(false);
+            NetHook();
+        }
+
+        // ---- サーバから何か来たら、開いている画面を描き直す（JS版 NETMOD.on(...)）
+        static bool NetPage(string p) { return p == "Online" || p == "Make" || p == "Join" || p == "Wait"; }
+        void NetHook()
+        {
+            Net.OnState += () => { if (Open && NetPage(page)) Go(page); };
+            Net.OnRoom += m =>
+            {
+                // 入ってきた人にも、いま選んでいる面と空き席のNPCとルールを教える
+                Lobby.SendPick(); Lobby.SendNpc(); Lobby.SendRule();
+                if (Open) Go(Net.Room != null ? "Wait" : "Online");
+            };
+            Net.OnFrom += (id, d) =>
+            {
+                string p = (string)d["p"];
+                if (p == "pick") Lobby.rpick = d["pick"] as Newtonsoft.Json.Linq.JObject;
+                else if (p == "npc" && d["npc"] is Newtonsoft.Json.Linq.JArray na)
+                    for (int i = 0; i < 4; i++) Lobby.rnpc[i] = i < na.Count ? (string)na[i] ?? "off" : "off";
+                else if (p == "rule")
+                {
+                    string md = (string)d["mode"];
+                    if (md == "versus" || md == "coop" || md == "team") Lobby.mode = md;
+                    if (d["team"] is Newtonsoft.Json.Linq.JArray ta)
+                        for (int i = 0; i < 4 && i < ta.Count; i++) Lobby.rteam[i] = ((int?)ta[i] ?? 0) != 0 ? 1 : 0;
+                }
+                else return;
+                if (Open && page == "Wait") Go("Wait");
+            };
+            Net.OnRooms += a => { Lobby.rooms = a; if (Open && page == "Join") Go("Join"); };
+            Net.OnErr += m => { if (Open && (page == "Join" || page == "Online")) Go(page); };
         }
 
         public void OpenPage(string pg)
@@ -94,6 +130,10 @@ namespace Nekorobo
         // ================================================================ ページ
         void Go(string pg)
         {
+            if (pg == "Make" && Net.Room != null) pg = "Wait";            // 作れていれば待機へ
+            // 同じ画面の描き直し（部屋サーバーの知らせ）なら、カーソルを同じボタンへ戻す
+            bool redraw = pg == page && Open && items.Count > 0;
+            string keepKey = redraw && idx < items.Count ? items[idx].key : null;
             page = pg;
             if (box != null) Object.Destroy(box.gameObject);
             items.Clear(); gridItems.Clear(); freeDesc = null;
@@ -114,6 +154,11 @@ namespace Nekorobo
                 case "Local": PageLocal(st); break;
                 case "Pick": def = PagePick(st); break;
                 case "Debug": PageDebug(st); break;
+                case "Online": PageOnline(st); break;
+                case "Make": PageMake(st); break;
+                case "Join": PageJoin(st); break;
+                case "Wait": PageWait(st); break;
+                case "Ask": def = PageAsk(st); break;
                 default: PageTop(st); break;
             }
             // 選んでいるものの説明（下の帯）と、操作の案内
@@ -121,11 +166,13 @@ namespace Nekorobo
             cap = st.Text("", 14, Color.white, TextAnchor.MiddleCenter, 20);
             Shade(cap, 0.6f);
             st.Gap(16);
-            var ft = st.Text("↑↓←→ で選ぶ　Enter・スペース・A で決定　Esc・B で戻る", 12, new Color(1, 1, 1, 0.92f), TextAnchor.MiddleCenter, 20);
+            var ft = st.Text(pg == "Ask" ? "文字を入れて Enter で決定　Esc でやめる" : "↑↓←→ で選ぶ　Enter・スペース・A で決定　Esc・B で戻る",
+                             12, new Color(1, 1, 1, 0.92f), TextAnchor.MiddleCenter, 20);
             Shade(ft, 0.5f);
             st.Finish();
-            // カーソル（開いたときは少しのあいだ決定を受け付けない）
-            lockT = g.T.menuLock; armed = false;
+            // カーソル（開いたときは少しのあいだ決定を受け付けない。描き直しは待ちを引き継ぐ）
+            if (!redraw) { lockT = g.T.menuLock; armed = false; }
+            if (keepKey != null) def = keepKey;
             int d = def != null ? items.FindIndex(x => x.key == def) : -1;
             if (d < 0) d = items.FindIndex(x => !x.off);
             Focus(Mathf.Max(0, d));
@@ -168,22 +215,33 @@ namespace Nekorobo
         {
             Head(st, "マルチプレイ");
             Tiles(st,
-                Tile("ローカル", "green", "local", () => Go("Rule"), "1台の画面で最大4人。枠ごとにキーボード・パッド・NPCを決めます。", "local"),
-                Tile("オンライン", "gold", "online", () => { }, "通信で遊ぶほうは、まだ Unity 版へ移していません（HTML版で遊べます）。", "online", true));
+                Tile("ローカル", "green", "local", () => { Lobby.ruleTo = "Local"; Go("Rule"); }, "1台の画面で最大4人。枠ごとにキーボード・パッド・NPCを決めます。", "local"),
+                Tile("オンライン", "gold", "online", () => Go("Online"), "通信で遊びます。ルールと面を選ぶのはホストです。", "online"));
             Note(st, "マルチは<b>フリープレイだけ</b>です（ストーリーは1人用）。");
             Btn(st, "戻る", "sec", () => Go("Top"), null, true);
         }
 
         string PageRule(Stack st)
         {
-            System.Action<string> pk = m => { mode = m; Go("Local"); };
+            bool toMake = Lobby.ruleTo == "Make";
+            System.Action<string> pk = m =>
+            {
+                if (toMake)
+                {
+                    Lobby.mode = m;
+                    for (int i = 0; i < 4; i++) { Lobby.rnpc[i] = "off"; Lobby.rteam[i] = i % 2; }
+                    Net.CreateRoom(Lobby.rname, Lobby.rpriv);
+                    Go("Make");
+                }
+                else { mode = m; Go("Local"); }
+            };
             Head(st, "ルールを選ぶ");
             Tiles(st,
                 Tile("個人戦", "red", "versus", () => pk("versus"), "売上も修理費も強化も、ひとりずつ。いちばん稼いだ人の勝ち。", "versus"),
                 Tile("チーム戦", "blue", "team", () => pk("team"), "青と赤の2チームで競います。お金と強化はチームでひとつ。人数はそろえなくても遊べます。", "team"),
                 Tile("協力", "green", "coop", () => pk("coop"), "全員でお店ひとつ。みんなで利益を上げます。", "coop"));
-            Btn(st, "戻る", "sec", () => Go("Multi"), null, true);
-            return mode;
+            Btn(st, "戻る", "sec", () => Go(toMake ? "Online" : "Multi"), null, true);
+            return toMake ? Lobby.mode : mode;
         }
 
         void PageLocal(Stack st)
@@ -260,7 +318,7 @@ namespace Nekorobo
                 int c = k % cols, r = k / cols;
                 string v = o[0];
                 bool cur = v == P.cur;
-                var it = BtnAt(grid, c * (bw + gap), r * (bh + gap), bw, bh, "", cur ? "pk" : "dark", () => { P.onPick(v); Go(P.back); }, null, false, "o" + k, 14);
+                var it = BtnAt(grid, c * (bw + gap), r * (bh + gap), bw, bh, "", cur ? "pk" : "dark", () => { P.onPick(v); if (!P.confirm) Go(P.back); }, null, false, "o" + k, 14);
                 it.grid = cols;
                 // 絵を上に大きく、名前を下に。いま選ばれている物には金の札
                 var holder = it.rt;
@@ -341,6 +399,7 @@ namespace Nekorobo
         {
             flist = FreeList();
             if (pick > FREE_SLOTS) pick = 0;
+            bool forRoom = from == "Wait";                    // 部屋の面をホストが決めている
             bool multi = from == "Local";
             var live = multi ? Live() : new List<PlayerSrc> { new PlayerSrc() };
             Head(st, next ? "次のステージを選ぶ" : "フリープレイ");
@@ -367,15 +426,33 @@ namespace Nekorobo
             var fr = freeDesc.rectTransform; fr.anchorMin = Vector2.zero; fr.anchorMax = Vector2.one; fr.offsetMin = new Vector2(16, 8); fr.offsetMax = new Vector2(-16, -9);
             freeDesc.lineSpacing = 1.1f;
             FreeDescSet(pick, false);
-            Note(st, next ? "買い物はここまでです。<b>次に遊ぶ面</b>を選んでください。お金・アイテム・強化はそのまま持ち越します。"
+            Note(st, forRoom ? "この面を<b>部屋の全員</b>で遊びます。決めると待機画面へ戻ります。"
+                   : next ? "買い物はここまでです。<b>次に遊ぶ面</b>を選んでください。お金・アイテム・強化はそのまま持ち越します。"
                          + (multi ? "\n<b>" + live.Count + "人</b>（" + string.Join("・", live.ConvertAll(s => s.Name).ToArray()) + "）／" + Game.ModeName(mode) : "")
                    : multi ? "<b>" + live.Count + "人</b>（" + string.Join("・", live.ConvertAll(s => s.Name).ToArray()) + "）／" + Game.ModeName(mode)
                            : "1人で遊びます。");
             var pickE = pick == FREE_SLOTS ? null : FreePick(pick);
-            BtnRow(st, new[] { next ? "この面で続ける ▶" : "スタート", next ? "やめてタイトルへ" : "戻る" }, new[] { "go", "sec" },
-                   new System.Action[] { () => FreeStart(multi, live), () => { if (next) { next = false; Go("Top"); } else Go(from); } },
+            BtnRow(st, new[] { forRoom ? "この面にする" : next ? "この面で続ける ▶" : "スタート", next && !forRoom ? "やめてタイトルへ" : "戻る" }, new[] { "go", "sec" },
+                   new System.Action[] { () => { if (forRoom) RoomPick(); else FreeStart(multi, live); },
+                                         () => { if (next && !forRoom) { next = false; Go("Top"); } else Go(from); } },
                    new[] { pick != FREE_SLOTS && pickE == null, false });
             return "fst" + pick;
+        }
+
+        /// <summary>部屋で遊ぶ面を決めて、部屋の全員へ配る（JS版 roomPick）。</summary>
+        void RoomPick()
+        {
+            bool rand = pick == FREE_SLOTS;
+            var e = rand ? null : FreePick(pick);
+            if (!rand && e == null) return;
+            if (rand) Lobby.rpick = new Newtonsoft.Json.Linq.JObject { ["random"] = true, ["name"] = "？ ランダム" };
+            else
+            {
+                int si = e.shop != null ? Mathf.Max(0, Shops.All.IndexOf(Shops.Find(e.shop))) : 0;
+                Lobby.rpick = new Newtonsoft.Json.Linq.JObject { ["ref"] = e.refKey, ["name"] = e.n, ["shop"] = si, ["shopName"] = Shops.All[si].n };
+            }
+            Lobby.SendPick();
+            Go("Wait");
         }
 
         void FreeStart(bool multi, List<PlayerSrc> live)
@@ -423,6 +500,25 @@ namespace Nekorobo
                 }
             }
             freeDesc.text = tag + body;
+        }
+
+        /// <summary>
+        /// **本当にやめるか確かめる。**押し間違えるとすぐ終わってしまう所に使う（JS版 titleConfirm）。
+        /// カーソルは**やめない方**から始める。B / Esc も「やめない」（元の画面へ）。
+        /// </summary>
+        void ConfirmOpen(string title, string note, string yesN, string noN, string back, System.Action onYes)
+        {
+            picker = new Picker { title = title, note = note, cur = "no", back = back, confirm = true,
+                opts = new List<string[]> { new[] { "no", noN, "cont" }, new[] { "yes", yesN, "off" } },
+                onPick = v => { if (v == "yes") onYes(); else Go(back); } };
+            Go("Pick");
+        }
+
+        /// <summary>文字を入れる画面を開く（ルームID・サーバ）。</summary>
+        void AskOpen(string title, string note, string value, string back, System.Action<string> onOk, bool digits = false)
+        {
+            ask = new Ask { title = title, note = note, value = value ?? "", back = back, onOk = onOk, digits = digits };
+            Go("Ask");
         }
 
         // ---- 一覧から1つ選ばせる（選んだら元の画面へ戻る）
@@ -478,6 +574,13 @@ namespace Nekorobo
                 up = kb.upArrowKey.isPressed; down = kb.downArrowKey.isPressed; left = kb.leftArrowKey.isPressed; right = kb.rightArrowKey.isPressed;
                 ok = kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed;
                 back = kb.escapeKey.isPressed || kb.backspaceKey.isPressed;
+            }
+            if (page == "Ask" && ask != null)
+            {
+                if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) { AskOk(); return; }
+                if (kb != null && kb.escapeKey.wasPressedThisFrame) { Go(ask.back); return; }
+                if (ask.inp != null && !ask.inp.isFocused) ask.inp.ActivateInputField();
+                up = down = left = right = ok = back = false;            // 打っている字をカーソルの操作にしない
             }
             foreach (var gp in Gamepad.all)
             {
@@ -818,7 +921,7 @@ namespace Nekorobo
         }
 
         /// <summary>1P〜4P の札（角の丸い色板。縁は白、選ぶと金）。</summary>
-        void Seat(RectTransform row, float x, float w, string pn, string ic, string label, string col, System.Action fire, string desc, string key)
+        void Seat(RectTransform row, float x, float w, string pn, string ic, string label, string col, System.Action fire, string desc, string key, string tag = null)
         {
             var c = TC[col];
             var it = new Item { fire = fire, desc = desc, key = key, bob = 3, scale = 1f };
@@ -836,10 +939,19 @@ namespace Nekorobo
             var lb = UiKit.Label(anim, label, 13, Color.white, true, TextAnchor.MiddleCenter);
             var r2 = lb.rectTransform; r2.anchorMin = r2.anchorMax = new Vector2(0.5f, 0); r2.pivot = new Vector2(0.5f, 0); r2.sizeDelta = new Vector2(w, 18); r2.anchoredPosition = new Vector2(0, 13);
             Shade(lb, 0.28f);
+            if (tag != null)
+            {
+                // 名前の下に小さく（部屋の「ホスト」）。そのぶん絵と名前を上へ
+                r2.anchoredPosition = new Vector2(0, 21);
+                var tg = UiKit.Label(anim, tag, 11, new Color(1, 1, 1, 0.85f), true, TextAnchor.MiddleCenter);
+                var r3 = tg.rectTransform; r3.anchorMin = r3.anchorMax = new Vector2(0.5f, 0); r3.pivot = new Vector2(0.5f, 0); r3.sizeDelta = new Vector2(w, 14); r3.anchoredPosition = new Vector2(0, 8);
+                var icn = anim.Find("Ic"); if (icn != null) ((RectTransform)icn).anchoredPosition = new Vector2(0, 8);
+                pnT.rectTransform.anchoredPosition = new Vector2(0, -9);
+            }
             if (col == "grey") hold.gameObject.AddComponent<CanvasGroup>().alpha = 0.6f;
             it.rt = hold; it.anim = anim;
             it.look = on => { ring.color = on ? GOLD : Color.white; if (on) hold.SetAsLastSibling(); };
-            items.Add(it);
+            if (fire != null) items.Add(it);                    // 押せない札（部屋の人が居る席）はカーソルに入れない
         }
 
         /// <summary>面のマス（見取り図の上に名前）。選んである面は金、指が乗っている面は白で囲う。</summary>

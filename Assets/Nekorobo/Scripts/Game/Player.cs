@@ -40,13 +40,15 @@ namespace Nekorobo
         public int index;
         public string lv;
         public int? team;                // チーム戦の青(0)・赤(1)。無ければ交互に分ける
+        public int netId = -1;           // オンラインの相手（kind "net"）のサーバの番号。入力はその人から届く
 
         public string Name
         {
             get
             {
                 return kind == "pad" ? "パッド" + (index + 1)
-                     : kind == "npc" ? "NPC・" + NpcLevels.Get(lv).name : "キーボード";
+                     : kind == "npc" ? "NPC・" + NpcLevels.Get(lv).name
+                     : kind == "net" ? "オンライン" : "キーボード";
             }
         }
 

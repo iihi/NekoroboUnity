@@ -108,8 +108,10 @@ namespace Nekorobo
             if (mj != null) Designs.Register(mj["designs"] as Newtonsoft.Json.Linq.JObject);
             Debug.Log("[Nekorobo] データ: " + DataRoot.Path + "（" + TF.log + "）");
             SetupView();
+            Net.Reset();                                   // 前の再生の続き（つなぎっぱなし・受け口）を残さない。タイトルが受け口を付ける前に
             hud = gameObject.AddComponent<Hud>();
             hud.game = this;
+            NetHook();
         }
 
         async void Start()
@@ -128,7 +130,7 @@ namespace Nekorobo
             else LoadCourseStage(courseIndex);
         }
 
-        void OnDestroy() { if (I == this) I = null; }
+        void OnDestroy() { if (I == this) { I = null; Net.Reset(); } }
 
         void SetupView()
         {
@@ -383,7 +385,9 @@ namespace Nekorobo
             foreach (var P in players)
             {
                 if (P.npc != null) continue;                        // NPC は FixedUpdate で決める
-                P.input = P.src.kind == "pad" ? ReadPadInput(P.src.index) : keyIn;
+                P.input = P.src.kind == "pad" ? ReadPadInput(P.src.index)
+                        : P.src.kind == "net" ? NetInputOf(P)               // オンラインの相手は届いた入力
+                        : keyIn;
             }
 
             var kb = Keyboard.current;

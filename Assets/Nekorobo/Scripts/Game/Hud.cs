@@ -31,6 +31,11 @@ namespace Nekorobo
         public bool EndingOpen { get { return ending != null && ending.Open; } }
         public void ShowEnding() { CloseShop(); resultWin.Close(); ending.Show(); }
         public bool TitleOpen { get { return title != null && title.Open; } }
+        /// <summary>ゲームを始めるので、タイトル・ショップ・結果・エンディングを畳む（オンラインの start）。</summary>
+        public void CloseForGame()
+        {
+            title.Close(); CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
+        }
         /// <summary>タイトルを開く（page は Top / Free など。next なら買い物のあとの「次の面選び」）。</summary>
         public void OpenTitle(string page, bool next = false)
         {
@@ -202,6 +207,7 @@ namespace Nekorobo
         // ------------------------------------------------------------ 毎フレーム
         void Update()
         {
+            Net.Pump();                                    // 部屋サーバーから届いた便りを配る（タイトルの間も）
             var g = game;
             if (g == null) return;
             if (title.Open)
