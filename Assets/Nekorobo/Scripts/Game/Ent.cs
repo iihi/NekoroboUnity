@@ -12,6 +12,8 @@ namespace Nekorobo
         static int seq;
 
         public int id;
+        public int nid;                 // 面を組んだ順の通し番号（オンラインで物を指す。JS版と同じ順）
+        public float[] netLast;         // 前に配った位置（動いていない物は送らない）
         public string kind;
         public bool isFixed;            // 動かない物（壁・床・カウンター）
         public bool infMass;            // 押し返されない物（固定物・車・動く床）。衝撃は無限質量で計算

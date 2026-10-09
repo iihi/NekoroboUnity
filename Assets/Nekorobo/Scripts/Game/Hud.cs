@@ -136,6 +136,47 @@ namespace Nekorobo
         }
 
         public void Toast(string s) { toast.text = s; toastT = 2.2f; }
+
+        // ---- オンラインの知らせ（JS版 #netwarn と #netwait）
+        Image netWarnBg; Text netWarnT;
+        RectTransform netWait; Text netWaitH, netWaitM;
+        /// <summary>上の帯の下に出す1行。赤＝食い違い、青（info）＝ただの案内。空で消す。</summary>
+        public void NetWarn(string txt, bool info)
+        {
+            if (netWarnBg == null)
+            {
+                netWarnBg = UiKit.Img(root, new Color(200 / 255f, 60 / 255f, 40 / 255f, 0.92f), 0, "NetWarn");
+                var r = netWarnBg.rectTransform; r.anchorMin = new Vector2(0, 1); r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(0.5f, 1);
+                netWarnT = UiKit.Label(netWarnBg.transform, "", 13, Color.white, true, TextAnchor.MiddleCenter);
+                UiKit.Stretch(netWarnT.rectTransform);
+            }
+            netWarnBg.color = info ? new Color(40 / 255f, 95 / 255f, 165 / 255f, 0.92f) : new Color(200 / 255f, 60 / 255f, 40 / 255f, 0.92f);
+            var rt = netWarnBg.rectTransform;
+            rt.anchoredPosition = new Vector2(0, Opt.hud2 ? -118 : -78); rt.sizeDelta = new Vector2(0, 30);
+            netWarnT.text = txt ?? "";
+            netWarnBg.gameObject.SetActive(!string.IsNullOrEmpty(txt));
+            netWarnBg.transform.SetAsLastSibling();
+        }
+        /// <summary>人を待っている画面（ゲーム画面に戻さない。戻すと動かないので「固まった」と受け取られる）。</summary>
+        public void NetWait(string head, string msg)
+        {
+            if (netWait == null)
+            {
+                var bg = UiKit.Img(root, new Color(10 / 255f, 14 / 255f, 22 / 255f, 0.82f), 0, "NetWait");
+                bg.raycastTarget = true;
+                netWait = bg.rectTransform; UiKit.Stretch(netWait);
+                netWaitH = UiKit.Label(netWait, "", 28, Color.white, true, TextAnchor.MiddleCenter);
+                var hr = netWaitH.rectTransform; hr.anchorMin = hr.anchorMax = new Vector2(0.5f, 0.5f); hr.sizeDelta = new Vector2(1000, 50); hr.anchoredPosition = new Vector2(0, 40);
+                netWaitM = UiKit.Label(netWait, "", 16, new Color(1, 1, 1, 0.85f), true, TextAnchor.UpperCenter);
+                var mr = netWaitM.rectTransform; mr.anchorMin = mr.anchorMax = new Vector2(0.5f, 0.5f); mr.sizeDelta = new Vector2(1000, 120); mr.anchoredPosition = new Vector2(0, -40);
+                netWaitM.horizontalOverflow = HorizontalWrapMode.Wrap;
+            }
+            netWaitH.text = head; netWaitM.text = msg ?? "";
+            netWait.gameObject.SetActive(true);
+            netWait.SetAsLastSibling();
+        }
+        public void NetWaitHide() { if (netWait != null) netWait.gameObject.SetActive(false); }
+        public bool NetWaitOpen { get { return netWait != null && netWait.gameObject.activeSelf; } }
         public void RefreshSettings() { if (settings != null) settings.Refresh(); }
         public void OpenStageMenu() { if (!MenuOpen) MenuOpenNow(); }
 
@@ -185,6 +226,7 @@ namespace Nekorobo
         /// <summary>数字の吹き出し（売上・故障・コンボ）。JS版 pop。</summary>
         public void Pop(Vector3 world, string text, int col, bool big)
         {
+            if (game != null) game.NetEvPop(world, text, col, big);       // オンライン：ゲストにも同じ吹き出しを
             // JS版の .pop：色つきの太字に白いふち（明るい床の上でも読める）。1秒で上へ流れて消える
             var t = Txt(root, text, big ? 25 : 19, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             t.color = Mats.Hex(col);

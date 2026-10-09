@@ -200,7 +200,7 @@ namespace Nekorobo
         }
 
         // ================================================================ バナナの皮
-        class Banana { public Vector3 p; public Transform mesh; public Player owner; public float t; }
+        class Banana { public Vector3 p; public Transform mesh; public Player owner; public float t; public int nid; }
         readonly List<Banana> bananas = new List<Banana>();
 
         void PlaceBanana(Player P)
@@ -209,10 +209,16 @@ namespace Nekorobo
             var b = p - fwd;
             if (!Tiles.IsFloor(Tiles.At(map, b))) b = p;      // 床の無い所へは置かない
             var c = Coord.Cell(Coord.ToI(b.x), Coord.ToJ(b.z));
-            var m = Part.Add(fxRoot, MeshGen.Sphere(0.22f, 12, 8), Mats.Get(0xf5d020, 0.6f), new Vector3(c.x, 0.07f, c.z), true, "Banana").transform;
-            m.localScale = new Vector3(1, 0.34f, 1.25f);
-            bananas.Add(new Banana { p = c, mesh = m, owner = P });
+            var m = BananaMesh(new Vector3(c.x, 0.07f, c.z));
+            bananas.Add(new Banana { p = c, mesh = m, owner = P, nid = ++nidSeq });
             Say(P, "置いたにゃ！", 0.9f);
+        }
+
+        Transform BananaMesh(Vector3 at)
+        {
+            var m = Part.Add(fxRoot, MeshGen.Sphere(0.22f, 12, 8), Mats.Get(0xf5d020, 0.6f), at, true, "Banana").transform;
+            m.localScale = new Vector3(1, 0.34f, 1.25f);
+            return m;
         }
 
         void UpdateBananas(float dt)
@@ -248,25 +254,31 @@ namespace Nekorobo
         }
 
         // ================================================================ ドローン
-        class Drone { public Player P; public Order order; public Dish dish; public float integ, t; public Transform mesh; }
+        class Drone { public Player P; public Order order; public Dish dish; public float integ, t; public Transform mesh; public int nid; }
         readonly List<Drone> drones = new List<Drone>();
 
         void LaunchDrone(Player P)
         {
             var c = P.carried; if (c == null) return;
+            var g = DroneMesh(c.dish.col);
+            var p = P.ent.rb.position;
+            g.position = new Vector3(p.x, 1.2f, p.z);
+            drones.Add(new Drone { P = P, order = c.order, dish = c.dish, integ = c.integ, mesh = g, nid = ++nidSeq });
+            // 手放すので、すぐ次のオーダーを取りに行ける
+            P.carried = null; P.look.ShowDish(null);
+            Say(P, "ドローン発進にゃ！", 1.2f);
+        }
+
+        Transform DroneMesh(int dishCol)
+        {
             var g = new GameObject("Drone").transform; g.SetParent(fxRoot, false);
             Part.Add(g, MeshGen.Box(0.34f, 0.12f, 0.34f), Mats.Get(0x8fd4ff, 0.4f), Vector3.zero);
             foreach (var d in new[] { new Vector2(-0.22f, -0.22f), new Vector2(0.22f, -0.22f), new Vector2(-0.22f, 0.22f), new Vector2(0.22f, 0.22f) })
                 Part.Add(g, MeshGen.Cylinder(0.14f, 0.14f, 0.02f, 12), Mats.Basic(new Color(0.87f, 0.95f, 1f, 0.55f), true), new Vector3(d.x, 0.08f, d.y), false);
             Part.Add(g, MeshGen.Cylinder(0.14f, 0.12f, 0.03f, 14), Mats.Get(0xfaf7f0, 0.9f), new Vector3(0, -0.16f, 0));
-            var fd = Part.Add(g, MeshGen.Sphere(0.09f, 10, 8), Mats.Get(c.dish.col), new Vector3(0, -0.11f, 0));
+            var fd = Part.Add(g, MeshGen.Sphere(0.09f, 10, 8), Mats.Get(dishCol), new Vector3(0, -0.11f, 0));
             fd.transform.localScale = new Vector3(1, 0.6f, 1);
-            var p = P.ent.rb.position;
-            g.position = new Vector3(p.x, 1.2f, p.z);
-            drones.Add(new Drone { P = P, order = c.order, dish = c.dish, integ = c.integ, mesh = g });
-            // 手放すので、すぐ次のオーダーを取りに行ける
-            P.carried = null; P.look.ShowDish(null);
-            Say(P, "ドローン発進にゃ！", 1.2f);
+            return g;
         }
 
         void UpdateDrones(float dt)
@@ -300,12 +312,21 @@ namespace Nekorobo
         }
 
         // ================================================================ ブーメラン
-        class Boom { public Player owner; public Transform mesh, load; public Material food; public Vector3 dir; public float t; public bool back; public Carried dish; }
+        class Boom { public Player owner; public Transform mesh, load; public Material food; public Vector3 dir; public float t; public bool back; public Carried dish; public int nid; }
         readonly List<Boom> booms = new List<Boom>();
 
         void ThrowBoomerang(Player P)
         {
             var p = P.ent.rb.position; var fwd = Fwd(P);
+            Transform load; Material food;
+            var g = BoomMesh(out load, out food);
+            g.position = new Vector3(p.x + fwd.x * 0.5f, 0.9f, p.z + fwd.z * 0.5f);
+            booms.Add(new Boom { owner = P, mesh = g, load = load, food = food, dir = fwd, nid = ++nidSeq });
+            Say(P, "それっ！", 0.9f);
+        }
+
+        Transform BoomMesh(out Transform load, out Material food)
+        {
             var g = new GameObject("Boomerang").transform; g.SetParent(fxRoot, false);
             var m = Mats.Get(0xe0913a, 0.5f);
             foreach (int sgn in new[] { -1, 1 })
@@ -313,15 +334,13 @@ namespace Nekorobo
                 var arm = Part.Add(g, MeshGen.Box(0.4f, 0.05f, 0.11f), m, Coord.W(sgn * 0.13f, 0, -0.08f));
                 arm.transform.localRotation = Part.Euler3(0, sgn * 0.65f, 0);
             }
-            var load = new GameObject("Load").transform; load.SetParent(g, false);
+            load = new GameObject("Load").transform; load.SetParent(g, false);
             Part.Add(load, MeshGen.Cylinder(0.14f, 0.12f, 0.03f, 14), Mats.Get(0xfaf7f0, 0.9f), new Vector3(0, 0.06f, 0));
-            var food = Mats.NewLit(Color.white);
+            food = Mats.NewLit(Color.white);
             var fd = Part.Add(load, MeshGen.Sphere(0.09f, 10, 8), food, new Vector3(0, 0.11f, 0));
             fd.transform.localScale = new Vector3(1, 0.6f, 1);
             load.gameObject.SetActive(false);
-            g.position = new Vector3(p.x + fwd.x * 0.5f, 0.9f, p.z + fwd.z * 0.5f);
-            booms.Add(new Boom { owner = P, mesh = g, load = load, food = food, dir = fwd });
-            Say(P, "それっ！", 0.9f);
+            return g;
         }
 
         void UpdateBooms(float dt)
@@ -386,14 +405,36 @@ namespace Nekorobo
         }
 
         // ================================================================ ビーム・追尾ミサイル
-        class Shot { public Player owner, target; public Transform mesh, fire; public Vector3 dir; public float t; public bool homing; }
+        class Shot { public Player owner, target; public Transform mesh, fire; public Vector3 dir; public float t; public bool homing; public int nid; }
         readonly List<Shot> shots = new List<Shot>();
 
         void LaunchShot(Player P, bool homing)
         {
             var p = P.ent.rb.position; var fwd = Fwd(P);
-            var g = new GameObject(homing ? "Missile" : "Beam").transform; g.SetParent(fxRoot, false);
             Transform fire;
+            var g = ShotMesh(homing, out fire);
+            g.position = new Vector3(p.x + fwd.x * 0.7f, 0.55f, p.z + fwd.z * 0.7f);
+            g.rotation = Quaternion.FromToRotation(Vector3.right, fwd);
+            Player target = null;
+            if (homing)
+            {
+                float bd = float.MaxValue;
+                foreach (var Q in players)
+                {
+                    if (Q == P || Q.down) continue;
+                    float d = new Vector2(Q.ent.rb.position.x - p.x, Q.ent.rb.position.z - p.z).magnitude;
+                    if (d < bd) { bd = d; target = Q; }
+                }
+            }
+            shots.Add(new Shot { owner = P, mesh = g, fire = fire, dir = fwd, homing = homing, target = target, nid = ++nidSeq });
+            Say(P, homing ? (target != null ? "ロックオンにゃ！" : "撃つにゃ！！") : "ビームにゃ！！", 1.0f);
+            SetFace(P, "fast", 0.8f);
+        }
+
+        /// <summary>ビームか追尾ミサイルの形（進む向きをローカル +X に作る）。</summary>
+        Transform ShotMesh(bool homing, out Transform fire)
+        {
+            var g = new GameObject(homing ? "Missile" : "Beam").transform; g.SetParent(fxRoot, false);
             // 進む向きをローカル +X に作る（three.js と同じ形）
             if (homing)
             {
@@ -410,22 +451,7 @@ namespace Nekorobo
                 fire = Part.Add(g, MeshGen.Cone(0.16f, 0.34f, 10), Mats.Basic(new Color(0.75f, 0.95f, 1f, 0.85f), true), new Vector3(0.85f, 0, 0), false).transform;
                 fire.localRotation = Part.Euler3(0, 0, -Mathf.PI / 2);
             }
-            g.position = new Vector3(p.x + fwd.x * 0.7f, 0.55f, p.z + fwd.z * 0.7f);
-            g.rotation = Quaternion.FromToRotation(Vector3.right, fwd);
-            Player target = null;
-            if (homing)
-            {
-                float bd = float.MaxValue;
-                foreach (var Q in players)
-                {
-                    if (Q == P || Q.down) continue;
-                    float d = new Vector2(Q.ent.rb.position.x - p.x, Q.ent.rb.position.z - p.z).magnitude;
-                    if (d < bd) { bd = d; target = Q; }
-                }
-            }
-            shots.Add(new Shot { owner = P, mesh = g, fire = fire, dir = fwd, homing = homing, target = target });
-            Say(P, homing ? (target != null ? "ロックオンにゃ！" : "撃つにゃ！！") : "ビームにゃ！！", 1.0f);
-            SetFace(P, "fast", 0.8f);
+            return g;
         }
 
         void UpdateShots(float dt)
@@ -495,6 +521,17 @@ namespace Nekorobo
             return g;
         }
 
+        /// <summary>ゲストの手元の照準を出す（吹き出しはホストが出すので、ここでは出さない）。</summary>
+        void StartAimQuiet(Player P)
+        {
+            if (P.aim != null) return;
+            var p = P.ent.rb.position; var fwd = Fwd(P);
+            float d = Mathf.Min(T.ballRange, 4.5f);
+            P.aim = new Vector3(p.x + fwd.x * d, 0.06f, p.z + fwd.z * d);
+            P.aimMesh = AimMesh(P.col);
+            P.aimMesh.position = P.aim.Value;
+        }
+
         void StartAim(Player P)
         {
             if (P.aim != null) return;
@@ -518,6 +555,7 @@ namespace Nekorobo
             int vx = (inp.navRight ? 1 : 0) - (inp.navLeft ? 1 : 0);
             int vz = (inp.navUp ? 1 : 0) - (inp.navDown ? 1 : 0);        // 画面の上 = Unity の +Z
             var a = P.aim.Value;
+            if (P.netAim.HasValue) { a = P.netAim.Value; vx = vz = 0; }   // オンラインの相手：向こうで出した狙いをそのまま
             if (vx != 0 || vz != 0)
             {
                 float k = (vx != 0 && vz != 0) ? 0.7071f : 1;
@@ -553,10 +591,20 @@ namespace Nekorobo
         {
             if (P.aim == null) return false;
             var p = P.ent.rb.position;
+            BallFly(P, p, P.aim.Value, P.col);
+            NetEv("bm", R2(p.x), R2(-p.z), R2(P.aim.Value.x), R2(-P.aim.Value.z), P.col);
+            Say(P, "そこだにゃーっ！", 1.2f);
+            SetFace(P, "fast", 0.9f);
+            return true;
+        }
+
+        /// <summary>弾道ミサイルを a から b へ飛ばす（見た目）。owner が null なら落ちても爆発しない（オンラインのゲスト）。</summary>
+        void BallFly(Player owner, Vector3 p, Vector3 aim, int col)
+        {
             // 形：機首を +Y に作っておく（飛ぶ向きへ向けるのが楽なので）
             var g = new GameObject("Ballistic").transform; g.SetParent(fxRoot, false);
             Part.Add(g, MeshGen.Cylinder(0.11f, 0.11f, 0.72f, 12), Mats.Get(0xf2f4f7, 0.45f), Vector3.zero);
-            Part.Add(g, MeshGen.Cylinder(0.115f, 0.115f, 0.16f, 12), Mats.Get(P.col, 0.4f), new Vector3(0, 0.12f, 0));
+            Part.Add(g, MeshGen.Cylinder(0.115f, 0.115f, 0.16f, 12), Mats.Get(col, 0.4f), new Vector3(0, 0.12f, 0));
             Part.Add(g, MeshGen.Cone(0.11f, 0.34f, 12), Mats.Get(0xe53935, 0.35f), new Vector3(0, 0.53f, 0));
             for (int i = 0; i < 3; i++)
             {
@@ -568,11 +616,8 @@ namespace Nekorobo
             var fire = Part.Add(g, MeshGen.Cone(0.10f, 0.36f, 10), fm, new Vector3(0, -0.55f, 0), false).transform;
             fire.localRotation = Part.Euler3(Mathf.PI, 0, 0);
             g.localScale = Vector3.one * 1.45f;                   // 実寸だと点にしか見えない
-            var mk = AimMesh(P.col); mk.localScale = Vector3.one * 0.8f; mk.position = new Vector3(P.aim.Value.x, 0.05f, P.aim.Value.z);
-            balls.Add(new Ball { owner = P, a = p, b = P.aim.Value, mesh = g, mark = mk, fire = fire, fireM = fm });
-            Say(P, "そこだにゃーっ！", 1.2f);
-            SetFace(P, "fast", 0.9f);
-            return true;
+            var mk = AimMesh(col); mk.localScale = Vector3.one * 0.8f; mk.position = new Vector3(aim.x, 0.05f, aim.z);
+            balls.Add(new Ball { owner = owner, a = p, b = aim, mesh = g, mark = mk, fire = fire, fireM = fm });
         }
 
         void UpdateBalls(float dt)
@@ -595,7 +640,7 @@ namespace Nekorobo
                 if (u < 1) continue;
                 Destroy(b.mesh.gameObject); Destroy(b.mark.gameObject);
                 balls.RemoveAt(i);
-                Explode(b.owner, new Vector3(b.b.x, 0.35f, b.b.z), true, T.ballRadius);
+                if (b.owner != null) Explode(b.owner, new Vector3(b.b.x, 0.35f, b.b.z), true, T.ballRadius);
             }
         }
 
@@ -610,12 +655,9 @@ namespace Nekorobo
         void Explode(Player owner, Vector3 at, bool boom, float radius)
         {
             float R = radius > 0 ? radius : T.blastRadius;
-            var m = Mats.NewBasic(boom ? new Color(1, 0.82f, 0.42f, 0.85f) : new Color(0.74f, 0.95f, 1f, 0.95f), true);
-            var fl = Part.Add(fxRoot, MeshGen.Sphere(1, 16, 12), m, at, false, "Blast").transform;
-            fl.localScale = Vector3.one * 0.35f;
-            blasts.Add(new Blast { mesh = fl, m = m, fast = !boom });
-            if (boom) SpawnPuffs(at); else SpawnFlash(at);
-            SpawnSplash(at, boom ? 0xff9040 : 0xdff6ff, boom ? 14 : 8);
+            // 見た目。ゲスト側にも配る（"bl"）
+            NetEv("bl", R2(at.x), R2(at.y), R2(-at.z), boom ? 1 : 0);
+            ExplodeFx(at, boom);
 
             // 写しを回す（料理を落とすと ents に物が増えるため）
             foreach (var e in ents.ToArray())
@@ -697,6 +739,19 @@ namespace Nekorobo
                 rb.position = t; car.ent.transform.position = t;
                 rb.rotation = car.homeRot; car.ent.transform.rotation = car.homeRot;
             }
+        }
+
+        /// <summary>爆発の見た目（光の玉・モクモクか閃光・飛沫）。</summary>
+        void ExplodeFx(Vector3 at, bool boom)
+        {
+            var m = Mats.NewBasic(boom ? new Color(1, 0.82f, 0.42f, 0.85f) : new Color(0.74f, 0.95f, 1f, 0.95f), true);
+            var fl = Part.Add(fxRoot, MeshGen.Sphere(1, 16, 12), m, at, false, "Blast").transform;
+            fl.localScale = Vector3.one * 0.35f;
+            blasts.Add(new Blast { mesh = fl, m = m, fast = !boom });
+            if (boom) SpawnPuffs(at); else SpawnFlash(at);
+            bool keep = npReplay; npReplay = true;                 // 飛沫は "bl" を受けた側で出すので、別に配らない
+            SpawnSplash(at, boom ? 0xff9040 : 0xdff6ff, boom ? 14 : 8);
+            npReplay = keep;
         }
 
         // ================================================================ 毎フレーム

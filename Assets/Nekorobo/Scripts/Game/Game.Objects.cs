@@ -128,7 +128,7 @@ namespace Nekorobo
                     bc.size = new Vector3(w, Tiles.FloorH, d);
                     bc.sharedMaterial = PMat(0.9f * fr, 0.05f);
                 }
-                ents.Add(e);
+                ents.Add(e); NidAdd(e);
                 var mesh = RaftMesh(rects, cx, cz);
                 mesh.SetParent(stageRoot, false);
                 mesh.position = new Vector3(cx, 0, cz);

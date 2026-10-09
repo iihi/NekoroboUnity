@@ -52,11 +52,9 @@ namespace Nekorobo
         /// <summary>部屋の人を席の番号（1P・2P…）で呼ぶ（名乗る名前はやめた）。</summary>
         public string SeatName(int id) { int i = np.ids.IndexOf(id); return i >= 0 ? (i < 4 ? PNAME[i] : "P" + (i + 1)) : "？"; }
 
-        /// <summary>オンラインの相手の入力（届いたもの）。ゲーム中の同期はこの次の段で入れる。</summary>
-        BotInput NetInputOf(Player P) { return new BotInput(); }
-
         void NetHook()
         {
+            NetSyncHook();
             Net.OnStart += NetStart;
             Net.OnState += () =>
             {
@@ -98,6 +96,7 @@ namespace Nekorobo
         {
             np.role = "off"; np.shopped.Clear(); np.rdy.Clear();
             np.waitHost = false; np.waitShop = false; np.stage = 0;
+            NetStop();
         }
 
         /// <summary>

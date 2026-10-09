@@ -109,6 +109,8 @@ namespace Nekorobo
         public bool prevUse, prevCycle, prevBack;
         public string slot;              // 選んでいるアイテム
         public Vector3? aim;             // 弾道ミサイルの照準（出している間だけ）
+        public Vector3? netAim;          // オンラインの相手が出している照準（届いた値をそのまま使う）
+        public int netDish = -1;         // オンラインのゲスト：いま見せている運んでいる料理
         public Transform aimMesh;
         public PlayerSrc src = new PlayerSrc();
         public int team;                 // チーム戦の青(0)・赤(1)

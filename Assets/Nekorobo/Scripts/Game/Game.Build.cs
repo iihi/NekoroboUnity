@@ -102,6 +102,7 @@ namespace Nekorobo
                 e.home = pos;
             }
             ents.Add(e);
+            NidAdd(e);
             return e;
         }
 
@@ -249,6 +250,10 @@ namespace Nekorobo
             BuildPitLook();
             BuildFloorGrid(floorRects);
 
+            // ---- つながる地形の飾り（白線・レール・橋の欄干）。**欄干の当たり判定は、ここで作る**
+            //      （JS版と同じ順番。物の通し番号 nid がこの順で付くので、オンラインで HTML版と番号をそろえるため）
+            BuildMarks();
+
             // ---- 盤面のまわりを、見えない壁でぐるりと囲う（マスは使わない）
             {
                 var B = bounds; float h = T.wallPhys, th = 3f;
@@ -339,7 +344,6 @@ namespace Nekorobo
                 }
             }
             BuildRoutes();
-            BuildMarks();
             FindTails();
 
             // ---- ロボ（オーダー数が人数で変わるので、先に作る）

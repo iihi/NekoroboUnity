@@ -244,6 +244,7 @@ namespace Nekorobo
             t = 0; frames = 0; shopDmg = 0; oi = 0; done = 0; result = null; shake = 0;
             state = "ready"; readyT = 3.999f;
             ModelStore.ResetSeq(stage.n);                  // 人違いのモデルを配る順番を、面ごとに数え直す
+            nidSeq = 0; byNid.Clear();                     // 物の通し番号は面ごとに 1 から（JS版と同じ）
             BuildStage();
             // 画面の詳しい表示は1人ぶんしか出せないので、キーボードの人を優先し、
             // 居なければ最初の人間、それも居なければ先頭の NPC（JS版と同じ）
@@ -253,6 +254,7 @@ namespace Nekorobo
             SyncCounterPlates();
             FitCamera();
             hud.OnStage();
+            NetAfterBuild();                               // オンライン：ゲストは物理を止める
             TutBegin();                                    // 遊んでいる間の案内（ステージの hints）
         }
 
@@ -341,6 +343,7 @@ namespace Nekorobo
                 i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
                 i.ok = kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed;
             }
+            if (debugUp) i.up = true;                   // 確かめる用（外から「↑を押している」ことにする）
             // パッドを枠に割り当てているときは、キーボードの枠にパッドを流し込まない
             // （流すと1台目のパッドが2人ぶん動かしてしまう）。1人で遊ぶときはどのパッドでも動く
             if (!slots.Exists(s => s.kind == "pad"))
@@ -379,6 +382,7 @@ namespace Nekorobo
 
         void Update()
         {
+            NetTick(Time.deltaTime);                        // オンライン：ホストは配り、ゲストは当てて入力を送る
             if (stage == null || players.Count == 0) return;
             // 入力は毎フレーム拾う（FixedUpdate だと押した瞬間を取りこぼす）
             var keyIn = ReadInput();
@@ -392,7 +396,7 @@ namespace Nekorobo
 
             var kb = Keyboard.current;
             if (hud.ShopOpen || TalkOn || hud.TitleOpen || hud.EndingOpen) return;   // ショップ・会話・タイトル・エンディングの間は、そちらが入力を見る
-            if (kb != null && !hud.MenuOpen)
+            if (kb != null && !hud.MenuOpen && !NpOn)          // オンラインの最中は、やり直しと調子の切り替えをしない（食い違う）
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
                 if (kb.f2Key.wasPressedThisFrame)
@@ -407,6 +411,8 @@ namespace Nekorobo
 
         // ---- 確かめる用の自動運転。自分のロボを NPC（まじめ）に運転させる。遊ぶときは使わない
         [System.NonSerialized] public bool autoPlay;
+        /// <summary>確かめる用。↑を押していることにする（オンラインのゲストの入力を外から試すため）。</summary>
+        [System.NonSerialized] public bool debugUp;
 
         /// <summary>受取位置（カウンターの正面）。</summary>
         public Vector3 PickupPoint() { return counterPos + counterRot * new Vector3(PickupOffset, 0, 0); }
@@ -521,6 +527,8 @@ namespace Nekorobo
         {
             if (stage == null || hud.MenuOpen || TalkOn || hud.TitleOpen) return;      // 会話とタイトルの間は止める（3・2・1 も）
             float dt = Time.fixedDeltaTime;
+            // オンラインのゲスト：計算はホストがする。ここでは演出（弾道ミサイルの弾・爆発の光）だけ進める
+            if (NetGuest) { UpdateBalls(dt); UpdateBlasts(dt); return; }
             t += dt;
             if (state == "ready")
             {
@@ -1279,8 +1287,13 @@ namespace Nekorobo
                 if (g.ring != null) { g.ring.transform.position = g.transform.position + Vector3.up * 0.55f; }
         }
 
-        public void Say(Player P, string text, float dur) { P.msg = text; P.msgT = dur; }
-        public void SetFace(Player P, string f, float d) { P.face = f; P.faceT = d; }
+        public void Say(Player P, string text, float dur) { NetEv("say", P.idx, text, dur); P.msg = text; P.msgT = dur; }
+        public void SetFace(Player P, string f, float d)
+        {
+            // 表情は速いとき毎コマ呼ばれるので、変わったときと、残りが減ってきたときだけ配る
+            if (P.face != f || P.faceT < d * 0.5f) NetEv("fc", P.idx, f, d);
+            P.face = f; P.faceT = d;
+        }
 
         public static string Yen(float v)
         {

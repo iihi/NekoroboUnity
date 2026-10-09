@@ -18,6 +18,7 @@ namespace Nekorobo
         /// <summary>板が飛んで消えるだけの飛沫（料理がこぼれた・着地・池）。速いほど伸びる。</summary>
         public void SpawnSplash(Vector3 pos, int col, int n)
         {
+            NetEv("sp", R2(pos.x), R2(pos.y), R2(-pos.z), col, n);
             for (int i = 0; i < n && splash.Count < 140; i++)
             {
                 var m = Mats.NewBasic(Mats.Hex(col), true, true, false);
@@ -89,6 +90,7 @@ namespace Nekorobo
         /// <summary>画面の上から光の柱が下りてきて、その中に戻る（JS版 respawnMark）。soft は客用の控えめな柱。</summary>
         public void RespawnMark(Vector3 at, int col, bool soft = false)
         {
+            NetEv("rs", R2(at.x), R2(-at.z), col, soft ? 1 : 0);
             var g = new GameObject("RespawnMark").transform; g.SetParent(fxRoot, false); g.position = new Vector3(at.x, 0, at.z);
             float k = soft ? 0.45f : 1, R = BEAM_R * (soft ? 0.62f : 1);
             var c = Mats.Hex(col);
@@ -115,6 +117,7 @@ namespace Nekorobo
         public void RespawnArrow(Ent e, int col)
         {
             if (e == null) return;
+            NetEv("ar", e.nid, col);
             var g = new GameObject("Arrow").transform; g.SetParent(fxRoot, false);
             var em = Mats.NewBasic(Mats.Hex(0x2f2a22), true, false, false);
             var cm = Mats.NewBasic(Mats.Hex(col), true, false, false);
@@ -282,12 +285,25 @@ namespace Nekorobo
             e.rb.angularVelocity = new Vector3((Random.value - 0.5f) * 8, (Random.value - 0.5f) * 6, (Random.value - 0.5f) * 8);
             var d = new Dropped { ent = e, order = c.order, dish = c.dish, integ = Mathf.Max(0, c.integ - T.dropDmg), owner = P };
             dropped.Add(d);
+            NetEv("dd", e.nid, Dishes.All.IndexOf(c.dish), orders.IndexOf(c.order), R2(p.x), R2(p.y + 0.22f), R2(-p.z), Mathf.RoundToInt(d.integ));
             SpawnSplash(p + Vector3.up * 0.15f, c.dish.col, 10);
             return d;
         }
 
+        /// <summary>落ちた料理を、届いた番号のまま作る（オンラインのゲスト。位置は配られてくる）。</summary>
+        void MakeDropped(int nid, Dish dish, Order order, Vector3 at, float integ)
+        {
+            var e = MakeBody("dish", at, new Vector3(0.19f, 0.06f, 0.19f), Quaternion.identity, false, 1.4f, 0.6f, 0.2f, 1.4f);
+            byNid.Remove(e.nid); NidAdd(e, nid);
+            Part.Add(e.transform, MeshGen.Cylinder(0.17f, 0.15f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
+            DishLook.Build(e.transform, dish, 0.1f);
+            GuestFreeze(e);
+            dropped.Add(new Dropped { ent = e, order = order, dish = dish, integ = integ });
+        }
+
         void KillDropped(Dropped d)
         {
+            if (d.ent != null) { NetEv("ddx", d.ent.nid); byNid.Remove(d.ent.nid); }
             dropped.Remove(d);
             ents.Remove(d.ent);
             if (d.ent != null) Destroy(d.ent.gameObject);
