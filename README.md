@@ -133,7 +133,9 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Scenery.cs` | ステージのまわりの飾り（JS版 scenery.js） |
 | `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
-| `Scripts/Net/Net.cs` | 部屋サーバーへの通信口（JS版 net.js / net-ws.js）。WebSocket は TCP の上の自前（握手と文字のフレームだけ） |
+| `Scripts/Net/Net.cs` | オンラインの通信口（JS版 net.js）。**差し替え口**で、決まりと「どの中身を使うか」だけを持つ。ゲーム側はここしか見ない。中身は起動の引数 `-net=名前` か PlayerPrefs `nekorobo.net` で選ぶ（既定 ws） |
+| `Scripts/Net/INetBackend.cs` | 中身が守る形（つなぐ・部屋の出入り・送る、結果は Net.Report〜 で知らせる）。EOS へ移すときは、これを満たす物を作って Net.Backends に1行足す |
+| `Scripts/Net/NetWs.cs` | 中身その1：部屋サーバーへの WebSocket（JS版 net-ws.js）。HTML版と同じサーバ・同じ便り。WebSocket は TCP の上の自前（握手と文字のフレームだけ） |
 | `Scripts/Game/Game.Online.cs` / `TitleWin.Online.cs` | 部屋の状態（Lobby）・始まったときに枠を組む所（JS版 npBegin / start）と、オンライン・ルームを作る・参加・待機の画面 |
 | `Scripts/Game/Game.NetSync.cs` | ゲーム中の同期（JS版 npPayload / npApply / npSendInput）と、結果・ショップの便り。物は面を組んだ順の通し番号（nid）で指す |
 | `Editor/NetReset.cs` | 再生を止めるとき・コンパイルし直す前に、通信を畳む |

@@ -35,6 +35,8 @@ namespace Nekorobo
             bool on = Net.State == "on";
             Head(st, "オンライン");
             Note(st, NetLine());
+            // つなぎ先の欄は、それが要る仕組み（部屋サーバー）のときだけ出す
+            if (Net.NeedsAddr)
             Btn(st, "サーバ：" + (Net.Addr.Length > 0 ? Net.Addr : Net.AddrFromCfg ? "置いた先の設定（net.json）" : "localhost:8123（開発の置き方）") + "　▾", "sec",
                 () => AskOpen("サーバを入れる",
                     "ふつうは空のままでよいです（<b>localhost:8123</b>＝このPCで動かした HTML版の node server.js につなぎます）。\n"
