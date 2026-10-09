@@ -110,11 +110,13 @@ namespace Nekorobo
         {
             if (name != null) Name = name;
             if (conn != null && (State == "on" || State == "connecting")) return;
-            State = "connecting"; Why = "";
-            Fire(OnState);
+            // **知らせる前に接続を作っておく。**先に知らせていたころは、知らせを受けたオンラインの画面が描き直しで
+            // また Connect を呼び、際限なく繰り返してスタックがあふれた（エディタが Reloading Domain で固まる元になった）
             var c = new Conn(Where);
             conn = c;
+            State = "connecting"; Why = "";
             c.Start();
+            Fire(OnState);
         }
 
         public static void Close()

@@ -90,12 +90,13 @@ namespace Nekorobo
         static bool NetPage(string p) { return p == "Online" || p == "Make" || p == "Join" || p == "Wait"; }
         void NetHook()
         {
-            Net.OnState += () => { if (Open && NetPage(page)) Go(page); };
+            // 描き直しはその場でせず、次のコマで（画面を組んでいる途中に知らせが来ても、組み直さない）
+            Net.OnState += () => { if (Open && NetPage(page)) GoLater(page); };
             Net.OnRoom += m =>
             {
                 // 入ってきた人にも、いま選んでいる面と空き席のNPCとルールを教える
                 Lobby.SendPick(); Lobby.SendNpc(); Lobby.SendRule();
-                if (Open) Go(Net.Room != null ? "Wait" : "Online");
+                if (Open) GoLater(Net.Room != null ? "Wait" : "Online");
             };
             Net.OnFrom += (id, d) =>
             {
@@ -111,11 +112,13 @@ namespace Nekorobo
                         for (int i = 0; i < 4 && i < ta.Count; i++) Lobby.rteam[i] = ((int?)ta[i] ?? 0) != 0 ? 1 : 0;
                 }
                 else return;
-                if (Open && page == "Wait") Go("Wait");
+                if (Open && page == "Wait") GoLater("Wait");
             };
-            Net.OnRooms += a => { Lobby.rooms = a; if (Open && page == "Join") Go("Join"); };
-            Net.OnErr += m => { if (Open && (page == "Join" || page == "Online")) Go(page); };
+            Net.OnRooms += a => { Lobby.rooms = a; if (Open && page == "Join") GoLater("Join"); };
+            Net.OnErr += m => { if (Open && (page == "Join" || page == "Online")) GoLater(page); };
         }
+        string goLater;
+        void GoLater(string pg) { goLater = pg; }
 
         public void OpenPage(string pg)
         {
@@ -130,6 +133,7 @@ namespace Nekorobo
         // ================================================================ ページ
         void Go(string pg)
         {
+            goLater = null;
             if (pg == "Make" && Net.Room != null) pg = "Wait";            // 作れていれば待機へ
             // 同じ画面の描き直し（部屋サーバーの知らせ）なら、カーソルを同じボタンへ戻す
             bool redraw = pg == page && Open && items.Count > 0;
@@ -566,6 +570,7 @@ namespace Nekorobo
         public void Tick(float dt)
         {
             if (!Open) return;
+            if (goLater != null) { var pg = goLater; goLater = null; Go(pg); }
             if (lockT > 0) lockT -= dt;
             var kb = Keyboard.current;
             bool up = false, down = false, left = false, right = false, ok = false, back = false;
