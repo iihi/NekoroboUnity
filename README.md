@@ -47,8 +47,13 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 
 メニュー「**Nekorobo → Windows で書き出す**」で `Builds/Win/Nekorobo.exe` ができます（git には入れません）。
 EXE は**窓（1280×720、大きさは変えられる）**で始まり、Alt+Enter で全画面と切り替えられます（`-screen-fullscreen 1` を付けると全画面で始まる）。
-EXE も HTML版のフォルダ（nekorobo3d）を直接読みます。このPCの置き方ならそのまま動き、ほかのPCでは環境変数 `NEKOROBO_DATA` に場所を入れます
-（製品にするときは `StreamingAssets/nekorobo3d` へ同梱する前提。手順はまだ作っていません）。
+この EXE は HTML版のフォルダ（nekorobo3d）を直接読みます（面や数値を直せば、書き出し直さなくても効く）。
+
+**ほかの人に渡すときは「Nekorobo → Windows で書き出す（配る用）」。**`Builds/WinShare` に書き出し、HTML版のデータ
+（stages・assets・tune.json・configs.js・tiles.js・net.json）を EXE の中（`Nekorobo_Data/StreamingAssets/nekorobo3d`）へ写して、
+`Builds/Nekorobo_Win_日付_時刻.zip`（約43MB）にまとめます。受け取った人は展開して `Nekorobo.exe` を起動するだけです。
+データはその時点の HTML版のフォルダの中身なので、面を直したら書き出し直します。
+オンラインは net.json の `ws`（部屋サーバーの場所）が空だと、受け取った人の PC の localhost を探すのでつながりません。
 
 起動の引数（確かめる用）：`-stage=面の名前` でその面をすぐ遊ぶ（HTML版の `?stage=`）、`-shot=保存先.png` で5秒後に画面を撮って終わる、
 `-net=名前` で通信の中身を選ぶ（いまは `ws` だけ）。
@@ -161,7 +166,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState） |
 | `Scripts/Game/SettingsPanel.cs` | 検証用パネル（JS版の右パネル）。保存すると HTML版の tune.json に書く（Unity が知らない項目は残す） |
 | `Scripts/Game/UiKit.cs` | 画面の部品（丸い札・枠・影）。CSS の数字をそのまま写すため |
-| `Editor/BuildWin.cs` | メニュー「Windows で書き出す」（Builds/Win/Nekorobo.exe） |
+| `Editor/BuildWin.cs` | メニュー「Windows で書き出す」（このPC用。HTML版のフォルダを読む）と「（配る用）」（データを同梱して zip） |
 | `Editor/ShaderKeep.cs` | EXE でシェーダーが抜けないようにする（見本の素材と、使った組み合わせの控え） |
 | `Editor/BackgroundStep.cs` | 確かめる用：Unity が裏にあっても遊びを進める（既定は切） |
 | `Editor/NekoroboSetup.cs` | シーンを作る |
