@@ -611,7 +611,10 @@ namespace Nekorobo
                 foreach (float lz in new[] { -1.0f, 0f, 1.0f })
                     Part.Add(hatch, MeshGen.Sphere(0.07f, 10, 8), Mats.Basic(Mats.Hex(0xffb64d)), Coord.W(0, 0.44f, lz), shadow: false);
                 // 「受取口 PICK UP」の看板（受取側＝ローカル +X へ向ける）
-                var sign = Looks.Sign(kitchen, "受取口  PICK UP", 2.6f, 0.65f, Mats.Hex(0x1b1b1b), Mats.Hex(0xffb64d));
+                // JS版の看板の絵は色の空間を指定していない（リニアのまま使う）ので、地は濃い灰色、字は淡いオレンジに出る。
+                // 同じに見せるため、地の色はリニアの値として読み直して渡す（.gamma）。
+                // 字（TextMesh）の色は、Unity でもそのままリニアとして使われるので、元の色のままでよい
+                var sign = Looks.Sign(kitchen, "受取口  PICK UP", 2.6f, 0.65f, Mats.Hex(0x1b1b1b).gamma, Mats.Hex(0xffb64d));
                 sign.transform.localPosition = Coord.W(-0.43f, 1.85f, 0);
                 sign.transform.localRotation = Part.Euler3(0, Mathf.PI / 2, 0);
             }

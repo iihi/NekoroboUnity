@@ -130,7 +130,7 @@ namespace Nekorobo
             else LoadCourseStage(courseIndex);
         }
 
-        void OnDestroy() { if (I == this) { I = null; Net.Reset(); } }
+        void OnDestroy() { if (I == this) { I = null; Net.Reset(); PostFx.Unhook(); } }
 
         void SetupView()
         {
@@ -145,19 +145,31 @@ namespace Nekorobo
             mainCam.clearFlags = CameraClearFlags.SolidColor;
             mainCam.backgroundColor = Mats.Hex(0xdfe6ee);
             mainCam.nearClipPlane = 0.5f;
-            // 光。JS版：半球光（空 白／地面 灰青）＋ 太陽（右上手前から）
+            // 光。JS版：半球光（空 白／地面 灰青、1.25）＋ 太陽（右上手前から、1.5）
+            //
+            // **強さは π で割って入れる。**three.js（r155 から）は光の強さを物理の単位で扱い、
+            // 面の明るさを「色 × 強さ ÷ π」で出す。Unity は π で割らない。
+            // そのまま入れると Unity だけ約3倍明るくなり、白っぽい床や氷の床が白く飛んでいた。
             foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) sun = l;
             if (sun == null) sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.color = Color.white;
-            sun.intensity = 1.35f;
+            sun.intensity = 1.5f / Mathf.PI;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.75f;
+            sun.shadowStrength = 1f;                         // three.js の影は日の光をまるごと消す
             sun.transform.rotation = Quaternion.LookRotation(-Coord.W(7, 16, 6).normalized);
+            // 半球光は、上向きの面ほど空の色、下向きほど地面の色（Unity の三色の環境光で同じになる）。
+            // 環境光の色は画面の色（ガンマ）で渡す決まりなので、リニアで計算してから直す
+            float hk = 1.25f / Mathf.PI;
+            Color sky = Color.white * hk, gnd = Mats.Hex(0x9aa2ad).linear * hk;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.95f, 0.95f, 0.95f);
-            RenderSettings.ambientEquatorColor = new Color(0.80f, 0.82f, 0.85f);
-            RenderSettings.ambientGroundColor = Mats.Hex(0x9aa2ad) * 0.85f;
+            RenderSettings.ambientSkyColor = sky.gamma;
+            RenderSettings.ambientEquatorColor = ((sky + gnd) * 0.5f).gamma;
+            RenderSettings.ambientGroundColor = gnd.gamma;
+            // まわりの景色の映り込みは無し（JS版は映り込みの絵を持っていない）。あると、つやのある氷の床が白く光る
+            RenderSettings.reflectionIntensity = 0f;
+            // 露出・ブルーム・トーンマッピング（JS版 CAM.post）
+            PostFx.Hook();
         }
 
         // ================================================================ 面の読み込み

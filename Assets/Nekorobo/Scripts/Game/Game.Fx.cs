@@ -140,7 +140,8 @@ namespace Nekorobo
         static Texture2D RainbowTex()
         {
             if (rainbowTex != null) return rainbowTex;
-            rainbowTex = new Texture2D(8, 70, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
+            rainbowTex = new Texture2D(8, 70, TextureFormat.RGBA32, false, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
             var px = new Color[8 * 70];
             for (int y = 0; y < 70; y++)
                 for (int x = 0; x < 8; x++)

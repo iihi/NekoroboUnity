@@ -180,7 +180,8 @@ namespace Nekorobo
             Part.Add(rg, MeshGen.Box(0.44f, 0.03f, 0.30f), panel, Coord.W(0, 0.18f, 0.12f));
             Part.Add(rg, MeshGen.Box(0.44f, 0.03f, 0.30f), panel, Coord.W(0, -0.14f, 0.12f));
             // 顔パネル（前 = Unity の +Z）。少し上向きに傾ける
-            L.faceTex = new Texture2D(192, 96, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
+            // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
+            L.faceTex = new Texture2D(192, 96, TextureFormat.RGBA32, false, true) { filterMode = FilterMode.Bilinear };
             var face = Part.Add(rg, MeshGen.Plane(0.48f, 0.25f), Mats.BasicTex(L.faceTex), Coord.W(0, 0.38f, -0.243f), shadow: false);
             // three.js: rotation.y = π（裏返して前へ向ける）, rotation.x = 0.22
             face.transform.localRotation = Part.Euler3(0.22f, Mathf.PI, 0f);

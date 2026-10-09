@@ -126,7 +126,8 @@ namespace Nekorobo
         {
             if (faceMat != null) return faceMat;
             // 目2つと笑った口。JS版 guestFaceTex と同じ絵柄を簡単に描く
-            faceTex = new Texture2D(64, 44, TextureFormat.RGBA32, false);
+            // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
+            faceTex = new Texture2D(64, 44, TextureFormat.RGBA32, false, true);
             var px = new Color32[64 * 44];
             var ink = new Color32(40, 30, 30, 255);
             for (int y = 0; y < 44; y++)
@@ -248,7 +249,8 @@ namespace Nekorobo
                 float y2 = y + (R() - 0.5f) * 5;
                 Stroke(px, N, x, y, x + w, y2, lw, col, a);
             }
-            var t = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
+            var t = new Texture2D(N, N, TextureFormat.RGBA32, true, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
             t.SetPixels(px); t.Apply(true);
             return t;
         }
