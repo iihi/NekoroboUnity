@@ -317,14 +317,20 @@ namespace Nekorobo
                 // タイトルの間は、ゲームの表示を動かさない（後ろの面は止めてある）
                 title.Tick(Time.unscaledDeltaTime);
                 SideTick();
+                Ptr.EndFrame();
                 return;
             }
-            if (g.stage == null) { SideTick(); return; }
+            if (g.stage == null) { SideTick(); Ptr.EndFrame(); return; }
             Story.Tick(Time.deltaTime);
             if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
             else if (ending.Open) ending.Tick(Time.unscaledDeltaTime);
-            else if (shopWin.Open) shopWin.Tick(Time.deltaTime);
-            else { if (resultWin.Open) resultWin.Tick(Time.deltaTime); MenuTick(); }
+            else if (shopWin.Open) { shopWin.Tick(Time.deltaTime); Ptr.CursorOnly(); }    // ショップは自分の指を持っている
+            else
+            {
+                if (resultWin.Open) { resultWin.Tick(Time.deltaTime); if (resultWin.Open && !g.MultiLocal()) Ptr.Tick(Time.unscaledDeltaTime, null); }   // JS版も1台で1人のときだけ
+                MenuTick();
+            }
+            Ptr.EndFrame();                                           // メニューが無ければ、指をしまってカーソルを戻す
 
             // 上の帯。新しい並び（HudBar）か前の並び（HudTop）のどちらか
             top.SetVisible(!Opt.hud2); bar2.SetVisible(Opt.hud2);

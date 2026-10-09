@@ -55,7 +55,6 @@ namespace Nekorobo
         Text cap;
         Text freeDesc;
         readonly List<Item> gridItems = new List<Item>();
-        Vector2 lastMouse;
 
         const int FREE_SLOTS = 31;
         static readonly Color GOLD = Mats.Hex(0xf2b52c), GOLD_D = Mats.Hex(0xd18f10), INK = Mats.Hex(0x3a352c), SUB = Mats.Hex(0x8a8274);
@@ -598,6 +597,8 @@ namespace Nekorobo
                 var bk = items.Find(x => x.back && !x.off);
                 if (bk != null) { Remember(up, down, left, right, ok, back); bk.fire(); return; }
             }
+            // 十字キー・矢印キーを使ったら指は引っ込める（両方出ていると、どちらが効いているのか分からない）
+            if ((up && !pUp) || (down && !pDown) || (left && !pLeft) || (right && !pRight)) Ptr.Hide();
             if (up && !pUp) Step(-1);
             if (down && !pDown) Step(1);
             if (left && !pLeft) Focus(idx - 1);
@@ -605,17 +606,17 @@ namespace Nekorobo
             if (!ok) armed = true;                          // 開いてから一度離した後だけ
             bool fire = ok && !pOk && armed && lockT <= 0;
             Remember(up, down, left, right, ok, back);
-            // マウス：動かしたら触っている所を選ぶ。押したら決定
+            // 指カーソル（マウスかスティック）：動かしたら指の下の物を選ぶ。決定は A・Enter・クリック
+            Ptr.Tick(dt, () => idx < items.Count ? Ptr.Center(items[idx].rt) : null);
+            if (Ptr.Moved)
+            {
+                int hi = HitAt(Ptr.Pos);
+                if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi);
+            }
             var ms = Mouse.current;
             if (ms != null)
             {
                 var mp = ms.position.ReadValue();
-                if ((mp - lastMouse).sqrMagnitude > 0.5f)
-                {
-                    lastMouse = mp;
-                    int hi = HitAt(mp);
-                    if (hi >= 0 && hi != idx) Focus(hi);
-                }
                 if (ms.leftButton.wasPressedThisFrame)
                 {
                     int hi = HitAt(mp);

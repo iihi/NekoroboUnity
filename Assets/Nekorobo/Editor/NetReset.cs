@@ -6,6 +6,7 @@ namespace Nekorobo.EditorTools
     /// **再生を止めるときと、コンパイルし直す前に、オンラインの通信を畳む。**
     /// 畳まずに残すと、受けている途中の WebSocket をつかんだまま、エディタが
     /// 「Reloading Domain」で止まって動かなくなった（実際に起きた）。
+    /// 再生を止めるときは、マウスのカーソルも元に戻す（指カーソル Ptr）。
     /// </summary>
     [InitializeOnLoad]
     public static class NetReset
@@ -15,7 +16,13 @@ namespace Nekorobo.EditorTools
             AssemblyReloadEvents.beforeAssemblyReload += Net.Reset;
             EditorApplication.playModeStateChanged += s =>
             {
-                if (s == PlayModeStateChange.ExitingPlayMode) Net.Reset();
+                if (s == PlayModeStateChange.ExitingPlayMode)
+                {
+                    Net.Reset();
+                    // 指カーソルのまま・消したままで止めると、エディタのカーソルもそのまま残る
+                    UnityEngine.Cursor.SetCursor(null, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto);
+                    UnityEngine.Cursor.visible = true;
+                }
             };
         }
     }

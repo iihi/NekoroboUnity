@@ -125,21 +125,22 @@ namespace Nekorobo
             bool l = false, r = false, ok = false;
             if (kb != null) { l = kb.leftArrowKey.isPressed || kb.upArrowKey.isPressed; r = kb.rightArrowKey.isPressed || kb.downArrowKey.isPressed; ok = kb.enterKey.isPressed || kb.spaceKey.isPressed; }
             foreach (var gp in Gamepad.all) { l |= gp.dpad.left.isPressed; r |= gp.dpad.right.isPressed; ok |= gp.buttonSouth.isPressed; }
+            if ((l && !pL) || (r && !pR)) Ptr.Hide();
             if (l && !pL) Focus(cur - 1);
             if (r && !pR) Focus(cur + 1);
             if (!ok) armed = true;
             bool fire = ok && !pOk && armed && lockT <= 0;
             pL = l; pR = r; pOk = ok;
+            // 指カーソル（マウスかスティック）。乗った方を選ぶ
+            Ptr.Tick(dt, () => Ptr.Center(btnRt[cur]));
+            if (Ptr.Moved)
+                for (int k = 0; k < 2; k++) if (Ptr.Over(btnRt[k]) && cur != k) Focus(k);
             var ms = Mouse.current;
-            if (ms != null)
+            if (ms != null && ms.leftButton.wasPressedThisFrame)
             {
                 var mp = ms.position.ReadValue();
                 for (int k = 0; k < 2; k++)
-                    if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null))
-                    {
-                        if (cur != k) Focus(k);
-                        if (ms.leftButton.wasPressedThisFrame) fire = true;
-                    }
+                    if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null)) { Focus(k); fire = true; }
             }
             if (fire) { Close(); act[cur](); }
         }
