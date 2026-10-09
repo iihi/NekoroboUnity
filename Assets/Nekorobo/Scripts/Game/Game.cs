@@ -124,6 +124,16 @@ namespace Nekorobo
             if (this == null) return;                      // 読んでいる間に止められた
             Debug.Log("[Nekorobo] モデル: " + string.Join(" ／ ", ModelStore.Log));
             course = Course.Load(courseName);
+            // 起動の引数（EXE で確かめる用。JS版の ?stage= に当たる）
+            //   -stage=面の名前  … その面をすぐ遊ぶ（stages/名前.json）
+            //   -shot=保存先.png … 少し遊ばせてから画面を撮って終わる
+            string shot = null;
+            foreach (var a in System.Environment.GetCommandLineArgs())
+            {
+                if (a.StartsWith("-stage=")) stageFile = a.Substring(7);
+                if (a.StartsWith("-shot=")) shot = a.Substring(6);
+            }
+            if (shot != null) StartCoroutine(ShotAndQuit(shot));
             // 何も指定が無ければタイトルから（JS版と同じ）。stageFile を入れたときは、その面をすぐ遊ぶ
             if (!string.IsNullOrEmpty(stageFile)) LoadFile(stageFile, shopName);
             else if (startAtTitle) hud.OpenTitle("Top");
@@ -131,6 +141,16 @@ namespace Nekorobo
         }
 
         void OnDestroy() { if (I == this) { I = null; Net.Reset(); PostFx.Unhook(); } }
+
+        /// <summary>起動の引数 -shot=。5秒待って画面を撮り、終わる（EXE の見た目を外から確かめる用）。</summary>
+        System.Collections.IEnumerator ShotAndQuit(string path)
+        {
+            yield return new WaitForSecondsRealtime(5f);
+            ScreenCapture.CaptureScreenshot(path);
+            yield return new WaitForSecondsRealtime(1.5f);
+            Debug.Log("[Nekorobo] 画面を撮りました: " + path);
+            Application.Quit();
+        }
 
         void SetupView()
         {

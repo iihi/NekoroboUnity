@@ -43,6 +43,21 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 | 結果で R | もう一度 |
 | ショップ | ←→↑↓ で指を動かし、Enter・スペース（パッドは A）で買う。Z（パッドは Y）で購入完了。マウスでも買える。R で最初から、T でタイトルへ |
 
+### Windows の EXE にする
+
+メニュー「**Nekorobo → Windows で書き出す**」で `Builds/Win/Nekorobo.exe` ができます（git には入れません）。
+EXE も HTML版のフォルダ（nekorobo3d）を直接読みます。このPCの置き方ならそのまま動き、ほかのPCでは環境変数 `NEKOROBO_DATA` に場所を入れます
+（製品にするときは `StreamingAssets/nekorobo3d` へ同梱する前提。手順はまだ作っていません）。
+
+起動の引数（確かめる用）：`-stage=面の名前` でその面をすぐ遊ぶ（HTML版の `?stage=`）、`-shot=保存先.png` で5秒後に画面を撮って終わる、
+`-net=名前` で通信の中身を選ぶ（いまは `ws` だけ）。
+
+**素材やモデルを増やして EXE だけ色がおかしい（ピンク・何も出ない）ときは、シェーダーの控えを取り直します。**
+素材を全部コードで作っているので、使われていないと思われたシェーダーが書き出しから外れるためです（エディタでは起きません）。
+再生中に面をひと通り表示してから、メニュー「Nekorobo → シェーダーの控えを取る」（先に「控えを空にする」）。
+控えは `Assets/Nekorobo/Settings/NkShaders.shadervariants` で、Graphics 設定の Preloaded Shaders に入ります。
+`Mats` が使う URP のシェーダーは、見本の素材（`Resources/Mats`）で残します。
+
 パッドは HTML版と同じ割り当てです（A/R2 加速、B/L2 バック、X ジャンプ、Y アイテム、L1/R1 持ち替え。持ち替えは上の帯の並び＝リペア→バナナ→ドローン→ブーメラン→レーザー→弾道ミサイル→追尾ミサイル→無敵の順）。
 パッドを枠に割り当てていなければ、どのパッドでもキーボードの人を動かせます。
 
@@ -145,6 +160,8 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState） |
 | `Scripts/Game/SettingsPanel.cs` | 検証用パネル（JS版の右パネル）。保存すると HTML版の tune.json に書く（Unity が知らない項目は残す） |
 | `Scripts/Game/UiKit.cs` | 画面の部品（丸い札・枠・影）。CSS の数字をそのまま写すため |
+| `Editor/BuildWin.cs` | メニュー「Windows で書き出す」（Builds/Win/Nekorobo.exe） |
+| `Editor/ShaderKeep.cs` | EXE でシェーダーが抜けないようにする（見本の素材と、使った組み合わせの控え） |
 | `Editor/BackgroundStep.cs` | 確かめる用：Unity が裏にあっても遊びを進める（既定は切） |
 | `Editor/NekoroboSetup.cs` | シーンを作る |
 

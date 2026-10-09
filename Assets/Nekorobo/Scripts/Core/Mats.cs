@@ -22,6 +22,7 @@ namespace Nekorobo
         {
             get
             {
+                if (lit == null) lit = FromTemplate("Mats/NkLit");
                 if (lit == null) lit = Shader.Find("Universal Render Pipeline/Lit");
                 if (lit == null) lit = Shader.Find("Standard");
                 return lit;
@@ -31,10 +32,22 @@ namespace Nekorobo
         {
             get
             {
+                if (unlit == null) unlit = FromTemplate("Mats/NkUnlit");
                 if (unlit == null) unlit = Shader.Find("Universal Render Pipeline/Unlit");
                 if (unlit == null) unlit = Shader.Find("Unlit/Color");
                 return unlit;
             }
+        }
+
+        /// <summary>
+        /// 見本の素材（Resources/Mats）からシェーダーを取る。**EXE ではこれが要る。**
+        /// 素材を全部コードで作っているので、見本が無いと URP のシェーダーが書き出しから外れ、Shader.Find が null を返す
+        /// （Editor/ShaderKeep.cs が見本を作る）。
+        /// </summary>
+        static Shader FromTemplate(string path)
+        {
+            var m = Resources.Load<Material>(path);
+            return m != null ? m.shader : null;
         }
 
         public static Color Hex(int hex)
