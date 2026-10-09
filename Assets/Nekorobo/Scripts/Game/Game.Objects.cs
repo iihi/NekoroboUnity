@@ -128,7 +128,7 @@ namespace Nekorobo
                     bc.size = new Vector3(w, Tiles.FloorH, d);
                     bc.sharedMaterial = PMat(0.9f * fr, 0.05f);
                 }
-                ents.Add(e); NidAdd(e);
+                ents.Add(e);       // 番号（nid）は付けない。JS版の makeRaftBody も付けない（位置は "rp" で届く）
                 var mesh = RaftMesh(rects, cx, cz);
                 mesh.SetParent(stageRoot, false);
                 mesh.position = new Vector3(cx, 0, cz);

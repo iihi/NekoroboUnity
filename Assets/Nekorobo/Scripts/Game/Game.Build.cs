@@ -262,8 +262,9 @@ namespace Nekorobo
                     MakeBody("fence", new Vector3(x, h / 2f, z), new Vector3(ex, h / 2f, ez), Quaternion.identity, true, 0, 0.3f, 0.1f);
                 put(B.x0 - th / 2, cz, th / 2, hd + th);
                 put(B.x1 + th / 2, cz, th / 2, hd + th);
-                put(cx, B.z0 - th / 2, hw + th, th / 2);
+                // 奥・手前の順は JS版に合わせる（Unity の z は反転しているので z1 が先）
                 put(cx, B.z1 + th / 2, hw + th, th / 2);
+                put(cx, B.z0 - th / 2, hw + th, th / 2);
             }
             // ---- 落ちたものの受け皿
             {
