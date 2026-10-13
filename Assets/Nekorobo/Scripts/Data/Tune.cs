@@ -14,7 +14,7 @@ namespace Nekorobo
     public class Tune
     {
         [Header("操作（SI単位）")]
-        public float thrust = 18, reverseRatio = 0.55f, steerAccel = 14, steerMax = 3.0f,
+        public float thrust = 18, reverseRatio = 0.75f, steerAccel = 14, steerMax = 3.0f,
                      lateralGrip = 3.0f, linDamp = 4.3f;
         [Header("吹っ飛び")]
         public float knockback = 2.0f, knockUp = 1.6f;

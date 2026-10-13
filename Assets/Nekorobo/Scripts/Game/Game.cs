@@ -414,8 +414,12 @@ namespace Nekorobo
             {
                 const float dz = 0.35f;
                 var st = gp.leftStick.ReadValue();
-                if (st.y > dz || gp.dpad.up.isPressed) i.up = i.navUp = true;
-                if (st.y < -dz || gp.dpad.down.isPressed) i.down = i.navDown = true;
+                // スティックは左右の旋回だけ。上下では進まない（前進は A/R2、バックは B/L2。JS版と同じ）。
+                // 上下は画面の中のカーソル（nav）には今までどおり使う
+                if (st.y > dz) i.navUp = true;
+                if (st.y < -dz) i.navDown = true;
+                if (gp.dpad.up.isPressed) i.up = i.navUp = true;
+                if (gp.dpad.down.isPressed) i.down = i.navDown = true;
                 if (st.x < -dz || gp.dpad.left.isPressed) i.left = i.navLeft = true;
                 if (st.x > dz || gp.dpad.right.isPressed) i.right = i.navRight = true;
                 if (gp.buttonSouth.isPressed || gp.rightTrigger.ReadValue() > dz) i.up = true;
