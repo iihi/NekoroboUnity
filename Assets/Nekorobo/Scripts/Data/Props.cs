@@ -11,6 +11,8 @@ namespace Nekorobo
         public int w = 1, d = 1, vi;
         public float h = 2, drive, maxScale = float.PositiveInfinity;
         public bool solid = true, hide, keepY, skinned;
+        // まわりの動き（Ambient）：flat＝地面のパッチ（影を落とさない・少し浮かす）、walk＝通行人、flock＝鳥（3羽で回る）、bob＝水に浮かぶ
+        public bool flat, walk, flock, bob;
         public string col = "#cccccc", win, roof, sign;
         // 届いたモデル
         public List<string> model;
@@ -222,6 +224,7 @@ namespace Nekorobo
                 if (o["rotDeg"] is JArray) { var a = (JArray)o["rotDeg"]; P.rotDeg = new Vector3(a[0].Value<float>(), a[1].Value<float>(), a[2].Value<float>()); }
                 if (o["offset"] is JArray) { var a = (JArray)o["offset"]; P.offset = new Vector3(a[0].Value<float>(), a[1].Value<float>(), a[2].Value<float>()); }
                 P.keepY = J.B(o, "keepY", P.keepY); P.skinned = J.B(o, "skinned", P.skinned);
+                P.flat = J.B(o, "flat", P.flat); P.walk = J.B(o, "walk", P.walk); P.flock = J.B(o, "flock", P.flock); P.bob = J.B(o, "bob", P.bob);
                 n++;
             }
             return n;

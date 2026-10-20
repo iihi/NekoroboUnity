@@ -317,6 +317,9 @@ namespace Nekorobo
         }
 
         // ================================================================ 置いた物（車・動く床・置き物）
+        /// <summary>盤面の外の地面の高さ（まわりの地面の縁 −0.92 に乗せる）。</summary>
+        const float OUT_Y = -0.92f;
+
         /// <summary>カタログの置き物（ビル・木・街の小物・乗り物）。JS版 buildStage の「カタログの置き物」。</summary>
         bool BuildProp(StageObj o, Vector3 b, float W, float D)
         {
@@ -328,7 +331,8 @@ namespace Nekorobo
                 for (int dj = 0; dj < D && !onFloor; dj++)
                     if (Tiles.IsFloor(Tiles.At(map, new Vector3(b.x - W / 2 + di + 0.5f, 0, b.z + D / 2 - dj - 0.5f)))) onFloor = true;
             bool rt = HasRoute(o);
-            float drive = (!rt && o.speed > 0) ? o.speed.Value : 0;
+            // 通行人と鳥の speed は歩く・飛ぶ速さ（車にはしない）
+            float drive = (!rt && o.speed > 0 && !pr.walk && !pr.flock) ? o.speed.Value : 0;
             if (pr.solid && drive == 0 && (onFloor || rt))
             {
                 var half = Props.Half(pr, W, D);
@@ -346,10 +350,15 @@ namespace Nekorobo
                         }
             }
             // 見た目は回す前の大きさ（カタログの w×d）で作って、あとから回す
-            var holder = new GameObject("PropHolder_" + pr.k).transform;
-            holder.SetParent(stageRoot, false);
-            var look = PropLooks.Build(holder, pr, pr.w, pr.d);
-            PropModel(pr, holder, look);
+            System.Func<Transform> make = () =>
+            {
+                var hd = new GameObject("PropHolder_" + pr.k).transform;
+                hd.SetParent(stageRoot, false);
+                var lk = PropLooks.Build(hd, pr, pr.w, pr.d);
+                PropModel(pr, hd, lk);
+                return hd;
+            };
+            var holder = make();
             if (drive > 0)
             {
                 // 走る乗り物。当たり判定は運動学ボディ（押されない）で、見た目はその中へ
@@ -361,10 +370,33 @@ namespace Nekorobo
                 cars.Add(new Car { ent = car, speed = drive, dir = Coord.Dir(o.rot), home = car.transform.position, homeRot = car.transform.rotation, vk = pr.kind });
                 return true;
             }
-            holder.position = b;
+            // 盤面の外（マスの無い所）に置いた物は、地面の高さへ下ろす（床の高さのままだと、まわりの地面から 0.9m 浮いて見えた）。
+            // 地面のパッチ（flat）は少しだけ浮かせて、地面の板とちらつかないようにする
+            bool onBoard = false;
+            for (int di = 0; di < W && !onBoard; di++)
+                for (int dj = 0; dj < D && !onBoard; dj++)
+                    if (Tiles.At(map, new Vector3(b.x - W / 2 + di + 0.5f, 0, b.z + D / 2 - dj - 0.5f)) != ' ') onBoard = true;
+            holder.position = new Vector3(b.x, (onBoard ? 0 : OUT_Y) + (pr.flat ? 0.005f : 0), b.z);
             holder.rotation = Coord.RotX(o.rot);
             if (rt) routeMesh[o] = holder;
-            else { var rf = RaftAt(b); if (rf != null) holder.SetParent(rf.mesh, true); }
+            else
+            {
+                var rf = RaftAt(b);
+                if (rf != null) holder.SetParent(rf.mesh, true);
+                // まわりの動き（Ambient）。通行人は dist マス先で引き返す。鳥は3羽で、置いた所の上を回る
+                else if (pr.walk) Ambient.Add("walk", holder, J.F(o.raw, "dist", 6) * Coord.Tile, o.speed > 0 ? o.speed.Value : 1.1f);
+                else if (pr.flock)
+                {
+                    Ambient.Add("bird", holder);
+                    for (int k = 1; k < 3; k++)
+                    {
+                        var h2 = make();
+                        h2.position = holder.position; h2.rotation = holder.rotation;
+                        Ambient.Add("bird", h2);
+                    }
+                }
+                else if (pr.bob) Ambient.Add("bob", holder);
+            }
             return true;
         }
 
@@ -377,8 +409,11 @@ namespace Nekorobo
             {
                 if (holder == null || gen != buildGen) return;    // 読み終わる前に面を組み直した
                 float h;
-                ModelStore.Apply(holder, look, pr.k, null, new Vector3(pr.w * 0.88f, pr.h, pr.d * 0.88f), out h,
-                                 footY: 0, foot: new Vector2(pr.w, pr.d));
+                var mt = ModelStore.Apply(holder, look, pr.k, null, new Vector3(pr.w * 0.88f, pr.h, pr.d * 0.88f), out h,
+                                          footY: 0, foot: new Vector2(pr.w, pr.d));
+                // 地面のパッチは影を落とさない（薄い板の影は、まだらな筋になるだけ）
+                if (mt != null && pr.flat)
+                    foreach (var r in mt.GetComponentsInChildren<Renderer>(true)) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             });
         }
 

@@ -595,6 +595,7 @@ namespace Nekorobo
             if (stage == null) return;
             UpdateFlow(Time.deltaTime);
             TickLiquid(Time.deltaTime);
+            Ambient.Tick(Time.deltaTime);
             TickFx(Time.deltaTime);
             SyncLooks();
             ApplyCamera();

@@ -308,6 +308,7 @@ namespace Nekorobo
                 r.receiveShadows = true;
             }
             if (opts != null) Repaint(inst, opts);
+            Ambient.FxAttach(inst);              // 素材の名前が fx_ の部品（風車の羽・旗・煙…）を動かす
             return outer;
         }
 

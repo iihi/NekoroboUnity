@@ -79,10 +79,13 @@ namespace Nekorobo
             await System.Threading.Tasks.Task.WhenAll(jobs);
         }
 
+        /// <summary>作り直したモデル（assets/oc/…）。実寸[m]・正面が +Z なので、縮尺 1 で回さない。</summary>
+        static readonly HashSet<GameObject> ocRoots = new HashSet<GameObject>();
+
         static async System.Threading.Tasks.Task LoadList(string theme, string kind, List<string> srcs)
         {
             var roots = new List<GameObject>();
-            foreach (var s in srcs) { var g = await ModelStore.LoadGlb(s); if (g != null) roots.Add(g); }
+            foreach (var s in srcs) { var g = await ModelStore.LoadGlb(s); if (g != null) { roots.Add(g); if (s.StartsWith("oc/")) ocRoots.Add(g); } }
             if (roots.Count == 0) return;
             Dictionary<string, List<GameObject>> d;
             if (!models.TryGetValue(theme, out d)) models[theme] = d = new Dictionary<string, List<GameObject>>();
@@ -219,8 +222,9 @@ namespace Nekorobo
             h = 0; r = 0; face = k == "building";
             var src = roots[Mathf.Min(roots.Count - 1, (int)(rnd() * roots.Count))];
             var g = new GameObject("SceneryModel").transform;
+            bool oc = ocRoots.Contains(src);
             var outer = new GameObject("Rot").transform; outer.SetParent(g, false);
-            outer.localRotation = Part.Euler3(0, Mathf.PI, 0);       // 正面（-Z）を手前（カメラ）へ
+            outer.localRotation = oc ? Quaternion.identity : Part.Euler3(0, Mathf.PI, 0);   // 正面（-Z）を手前（カメラ）へ。作り直したモデルは回さない
             var inst = Object.Instantiate(src, outer, false);
             inst.SetActive(true);
             inst.transform.localPosition = Vector3.zero;
@@ -243,7 +247,7 @@ namespace Nekorobo
             }
             float mh = bb.size.y;
             if (!any || mh <= 1e-4f) { Object.Destroy(g.gameObject); return null; }
-            float s = Mathf.Min(MODEL_SCALE, maxH / mh);
+            float s = Mathf.Min(oc ? 1 : MODEL_SCALE, maxH / mh);
             h = mh * s;
             if (h < 0.3f) { Object.Destroy(g.gameObject); return null; }
             outer.localScale = Vector3.one * s;
@@ -258,8 +262,194 @@ namespace Nekorobo
         /// 並べる。bounds は three.js の向き（z0 が奥、z1 が手前）。clear は置かない帯（同じ向き）。
         /// 戻り値は背景の色。
         /// </summary>
+        // ---------------------------------------------------------------- 島（JS版 buildIsland）
+        // 角を丸めた厚い板（上は地面の色、横は土の層か石垣）と、まわりの海・岸の白い泡。座標は three.js の向きで数えて、z を反転して置く
+        const float ISLAND_TOP = -0.94f, ISLAND_T = 2.4f, SEA_Y = -2.2f, ISL_BEV = 0.25f;
+
+        /// <summary>角を丸めた長方形のふち（three.js の (x, z)）。角は quadraticCurveTo と同じ2次の曲線で seg 分割。</summary>
+        static List<Vector2> RoundRect(float x0, float z0, float x1, float z1, float r, int seg = 10)
+        {
+            var pts = new List<Vector2>();
+            System.Action<Vector2, Vector2, Vector2> curve = (a, c, b) =>
+            {
+                for (int i = 1; i <= seg; i++)
+                {
+                    float t = (float)i / seg;
+                    pts.Add((1 - t) * (1 - t) * a + 2 * (1 - t) * t * c + t * t * b);
+                }
+            };
+            pts.Add(new Vector2(x0 + r, z0));
+            pts.Add(new Vector2(x1 - r, z0)); curve(new Vector2(x1 - r, z0), new Vector2(x1, z0), new Vector2(x1, z0 + r));
+            pts.Add(new Vector2(x1, z1 - r)); curve(new Vector2(x1, z1 - r), new Vector2(x1, z1), new Vector2(x1 - r, z1));
+            pts.Add(new Vector2(x0 + r, z1)); curve(new Vector2(x0 + r, z1), new Vector2(x0, z1), new Vector2(x0, z1 - r));
+            pts.Add(new Vector2(x0, z0 + r)); curve(new Vector2(x0, z0 + r), new Vector2(x0, z0), new Vector2(x0 + r, z0));
+            return pts;
+        }
+
+        /// <summary>島の側面の絵（256×256）。石垣（stone）か土の層（soil）。v=0（絵の上）が島の上の縁。</summary>
+        static Texture2D SideTex(string kind, int gCol)
+        {
+            const int N = 256;
+            var px = new Color[N * N];
+            System.Action<int, int, int, int, Color> fill = (x, y, w, h, c) =>
+            {
+                for (int yy = Mathf.Max(0, y); yy < Mathf.Min(N, y + h); yy++)
+                    for (int xx = Mathf.Max(0, x); xx < Mathf.Min(N, x + w); xx++)
+                    {
+                        int i = yy * N + xx; var d = px[i];
+                        px[i] = new Color(d.r + (c.r - d.r) * c.a, d.g + (c.g - d.g) * c.a, d.b + (c.b - d.b) * c.a, 1);
+                    }
+            };
+            System.Func<float, float, float, float, Color> rgba = (r, g, b, a) => new Color(r / 255f, g / 255f, b / 255f, a);
+            if (kind == "stone")
+            {
+                // 石垣：段ごとにずらした石。上は笠石、下は水に濡れて濃い
+                fill(0, 0, N, N, Mats.Hex(0x6e6a62));
+                int rows = 7; float rh = N / (float)rows;
+                for (int r = 0; r < rows; r++)
+                {
+                    int x = -(r % 2) * 30;
+                    while (x < N)
+                    {
+                        int w = 48 + ((x * 7 + r * 13) % 22 + 22) % 22;
+                        int v = 150 + ((x * 3 + r * 29) % 40 + 40) % 40;
+                        fill(x + 3, Mathf.RoundToInt(r * rh + 3), w - 6, Mathf.RoundToInt(rh - 6), rgba(v, v - 6, v - 18, 1));
+                        fill(x + 8, Mathf.RoundToInt(r * rh + 6), w - 16, 4, rgba(255, 255, 255, 0.18f));
+                        x += w;
+                    }
+                }
+                fill(0, 0, N, 18, Mats.Hex(0xc8c2b4));                       // 笠石
+                fill(0, 3, N, 4, rgba(255, 255, 255, 0.35f));
+                for (int y = 190; y < N; y++) fill(0, y, N, 1, rgba(40, 60, 60, 0.55f * (y - 190) / 66f));
+            }
+            else
+            {
+                // 土の層：上に草のふち、茶色の層、小石
+                int[] lay = { 0x8a5a36, 0x7a4e2e, 0x946440, 0x6a4428 };
+                for (int k = 0; k < 4; k++) fill(0, 30 + k * 57, N, 57, Mats.Hex(lay[k]));
+                for (int i = 0; i < 70; i++)
+                {
+                    int x = (i * 97) % N, y = 40 + (i * 61) % 210; float r = 3 + (i % 4) * 2;
+                    var c = Mats.Hex(i % 3 != 0 ? 0xa88a6a : 0x5a3a22);
+                    for (int yy = (int)(y - r); yy <= (int)(y + r); yy++)
+                        for (int xx = (int)(x - r * 1.4f); xx <= (int)(x + r * 1.4f); xx++)
+                        {
+                            float dx = (xx + 0.5f - x) / (r * 1.4f), dy = (yy + 0.5f - y) / r;
+                            if (dx * dx + dy * dy <= 1) fill(xx, yy, 1, 1, c);
+                        }
+                }
+                fill(0, 0, N, 30, Mats.Hex(gCol));
+                for (int x = 0; x < N; x += 16)                                // 草のふちのギザギザ
+                    for (int y = 28; y < 42; y++)
+                    {
+                        float half = 8 * (1 - (y - 28) / 14f);
+                        fill(Mathf.RoundToInt(x + 8 - half), y, Mathf.RoundToInt(half * 2), 1, Mats.Hex(gCol));
+                    }
+            }
+            // 配列の 0 行目（Unity の絵の下＝v=0）に canvas の上を置く（JS版の flipY:false と同じ向き）
+            var t = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            t.SetPixels(px); t.Apply(true);
+            return t;
+        }
+
+        /// <summary>海の絵（256×256。小さな波の線）。</summary>
+        static Texture2D SeaTex()
+        {
+            const int N = 256;
+            var px = new Color[N * N];
+            var bg = Mats.Hex(0x3f9fcf);
+            for (int i = 0; i < px.Length; i++) px[i] = bg;
+            for (int i = 0; i < 14; i++)
+            {
+                int x = (i * 83) % N, y = (i * 47) % N;
+                foreach (int ox in new[] { 0, -N })
+                    for (float a = Mathf.PI * 1.15f; a <= Mathf.PI * 1.85f; a += 0.02f)
+                    {
+                        float cx = x + ox + Mathf.Cos(a) * 12, cy = y + 10 + Mathf.Sin(a) * 12;
+                        for (int dy = -2; dy <= 2; dy++)
+                            for (int dx = -2; dx <= 2; dx++)
+                            {
+                                int X = (int)cx + dx, Y = (int)cy + dy;
+                                if (X < 0 || X >= N || Y < 0 || Y >= N || dx * dx + dy * dy > 4) continue;
+                                int k = (N - 1 - Y) * N + X;
+                                px[k] = Color.Lerp(px[k], Color.white, 0.35f);
+                            }
+                    }
+            }
+            var t = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+            t.SetPixels(px); t.Apply(true);
+            return t;
+        }
+
+        /// <summary>島を組む。m は [左, 奥, 右, 手前] = 盤面の縁から島の縁までのマス数。戻り値は島の範囲（three.js の向き）。</summary>
+        static Rect BuildIsland(Transform group, float bx0, float bx1, float bz0, float bz1, int[] m, string side, bool withSea, int gCol)
+        {
+            var rect = Rect.MinMaxRect(bx0 - m[0], bz0 - m[1], bx1 + m[2], bz1 + m[3]);
+            const float R = 2.5f;
+            var ring = RoundRect(rect.xMin, rect.yMin, rect.xMax, rect.yMax, R);
+            float top = ISLAND_TOP, bot = ISLAND_TOP - ISLAND_T - ISL_BEV * 2;
+            // 上の面（扇に分ける。形は凸なので中心から）
+            var tv = new List<Vector3>(); var tt = new List<int>();
+            var cen = rect.center;
+            tv.Add(new Vector3(cen.x, top, -cen.y));
+            foreach (var p in ring) tv.Add(new Vector3(p.x, top, -p.y));
+            for (int i = 1; i <= ring.Count; i++) { int a = i, b = i % ring.Count + 1; tt.Add(0); tt.Add(b); tt.Add(a); }
+            var topMesh = new Mesh { name = "IslandTop" };
+            topMesh.SetVertices(tv); topMesh.SetTriangles(tt, 0); topMesh.RecalculateNormals(); topMesh.RecalculateBounds();
+            if (Vector3.Dot(topMesh.normals[0], Vector3.up) < 0) { tt.Reverse(); topMesh.SetTriangles(tt, 0); topMesh.RecalculateNormals(); }
+            Part.Add(group, topMesh, Mats.Get(gCol), Vector3.zero, false, "IslandTop");
+            // 横の面。横は 2.5m で絵1枚、縦は側面の高さで1枚
+            var sv = new List<Vector3>(); var su = new List<Vector2>(); var st = new List<int>();
+            float len = 0;
+            for (int i = 0; i <= ring.Count; i++)
+            {
+                var p = ring[i % ring.Count];
+                if (i > 0) len += (p - ring[i - 1]).magnitude;
+                sv.Add(new Vector3(p.x, top, -p.y)); su.Add(new Vector2(len * 0.4f, 0));
+                sv.Add(new Vector3(p.x, bot, -p.y)); su.Add(new Vector2(len * 0.4f, 1));
+                if (i > 0) { int o = (i - 1) * 2; st.AddRange(new[] { o, o + 2, o + 1, o + 1, o + 2, o + 3 }); }
+            }
+            var sideMesh = new Mesh { name = "IslandSide" };
+            sideMesh.SetVertices(sv); sideMesh.SetUVs(0, su); sideMesh.SetTriangles(st, 0); sideMesh.RecalculateNormals(); sideMesh.RecalculateBounds();
+            // 外向きでなければ裏返す
+            var n0 = sideMesh.normals[0]; var out0 = new Vector3(sv[0].x - cen.x, 0, sv[0].z + cen.y);
+            if (Vector3.Dot(n0, out0) < 0) { var rev = new List<int>(); for (int i = 0; i < st.Count; i += 3) { rev.Add(st[i]); rev.Add(st[i + 2]); rev.Add(st[i + 1]); } sideMesh.SetTriangles(rev, 0); sideMesh.RecalculateNormals(); }
+            Part.Add(group, sideMesh, Mats.Textured(SideTex(side == "stone" ? "stone" : "soil", gCol), Color.white, 1f, Vector2.one), Vector3.zero, false, "IslandSide");
+            if (withSea)
+            {
+                var seaMat = Mats.Textured(SeaTex(), Color.white, 1f, new Vector2(110, 110));
+                var sea = Part.Add(group, MeshGen.FlatUp(600, 600), seaMat, new Vector3(cen.x, SEA_Y, -cen.y), false, "Sea");
+                sea.GetComponent<MeshRenderer>().receiveShadows = false;
+                // 岸の白い泡（島の形より少し大きい輪）
+                const float F = 0.45f;
+                var outer = RoundRect(rect.xMin - F - cen.x, rect.yMin - F - cen.y, rect.xMax + F - cen.x, rect.yMax + F - cen.y, R + F);
+                var inner = RoundRect(rect.xMin - cen.x, rect.yMin - cen.y, rect.xMax - cen.x, rect.yMax - cen.y, R);
+                var fv = new List<Vector3>(); var ft = new List<int>();
+                for (int i = 0; i < outer.Count; i++) { fv.Add(new Vector3(outer[i].x, 0, -outer[i].y)); fv.Add(new Vector3(inner[i].x, 0, -inner[i].y)); }
+                for (int i = 0; i < outer.Count; i++)
+                {
+                    int a = i * 2, b = ((i + 1) % outer.Count) * 2;
+                    ft.AddRange(new[] { a, b, a + 1, a + 1, b, b + 1 });
+                    ft.AddRange(new[] { a, a + 1, b, a + 1, b + 1, b });          // 両面
+                }
+                var foamMesh = new Mesh { name = "Foam" };
+                foamMesh.SetVertices(fv); foamMesh.SetTriangles(ft, 0); foamMesh.RecalculateNormals(); foamMesh.RecalculateBounds();
+                var foamMat = Mats.NewBasic(new Color(1, 1, 1, 0.7f), true, true, false);
+                var foam = Part.Add(group, foamMesh, foamMat, new Vector3(cen.x, SEA_Y + 0.03f, -cen.y), false, "Foam");
+                Ambient.AddSea(seaMat, foam.transform, foamMat);
+            }
+            foreach (var r in group.GetComponentsInChildren<Renderer>(true)) { r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; r.receiveShadows = false; }
+            return rect;
+        }
+
+        /// <summary>
+        /// 並べる。bounds は three.js の向き（z0 が奥、z1 が手前）。clear は置かない帯（同じ向き）。戻り値は背景の色。
+        /// island … ステージを島にする。[左, 奥, 右, 手前] = 盤面の縁から島の縁までのマス数。縁に土（soil）か石垣（stone）の側面を見せ、
+        ///          まわりは海（islandSea が false なら空に浮かぶ島）。ジオラマのように舞台が区切られる。
+        /// </summary>
         public static Color Build(Transform parent, float bx0, float bx1, float bz0, float bz1, float depth, int seed,
-                                  string theme, bool sea, bool props, List<Rect> clear)
+                                  string theme, bool sea, bool props, List<Rect> clear,
+                                  int[] island = null, string islandSide = "soil", bool islandSea = true)
         {
             var set = SetOf(theme);
             var pal = set.pal;
@@ -272,7 +462,9 @@ namespace Nekorobo
             int gCol = sea ? 0x2a5f7a : set.ground;
             // ---- 地面と、部屋のすぐ外の縁
             root = group;
-            Add(MeshGen.FlatUp(w + depth * 2 + 60, d + depth * 2 + 60), gCol).P(cx, -0.94f, cz);
+            Rect? isl = null;
+            if (island != null && island.Length >= 4) isl = BuildIsland(group, bx0, bx1, bz0, bz1, island, islandSide, islandSea, gCol);
+            else Add(MeshGen.FlatUp(w + depth * 2 + 60, d + depth * 2 + 60), gCol).P(cx, -0.94f, cz);
             Add(MeshGen.FlatUp(w + gap * 2 + 1.8f, d + gap * 2 + 1.8f), sea ? 0x1f4c62 : set.rim).P(cx, -0.92f, cz);
 
             var lowProps = set.props.FindAll(p => p.near && p.h0 <= NEAR_MAX);
@@ -323,6 +515,8 @@ namespace Nekorobo
                 foreach (var q in placed) if (Mathf.Sqrt((q.x - x) * (q.x - x) + (q.y - z) * (q.y - z)) < q.z + rad) { hit = true; break; }
                 if (!hit && clear != null)
                     foreach (var c in clear) if (x > c.xMin - rad && x < c.xMax + rad && z > c.yMin - rad && z < c.yMax + rad) { hit = true; break; }
+                // 島のときは、島の外（海の上）に置かない
+                if (!hit && isl != null && (x < isl.Value.xMin + rad || x > isl.Value.xMax - rad || z < isl.Value.yMin + rad || z > isl.Value.yMax - rad)) hit = true;
                 if (hit) { if (mm != null) Object.Destroy(mm.gameObject); continue; }
                 Transform obj = mm;
                 if (obj == null)
@@ -340,7 +534,8 @@ namespace Nekorobo
                 placed.Add(new Vector3(x, z, rad));
             }
             root = null;
-            return Mats.Hex(sea ? 0xbcd8e6 : set.bg);
+            Ambient.FxAttach(group.gameObject);           // 飾りのモデルの中の動く部品（風車・旗・煙）
+            return Mats.Hex(isl != null && islandSea ? 0xbfe0ee : sea ? 0xbcd8e6 : set.bg);
         }
     }
 }

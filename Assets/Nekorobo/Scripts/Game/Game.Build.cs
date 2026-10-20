@@ -77,6 +77,7 @@ namespace Nekorobo
             inst.SetActive(true);
             foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
             { r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true; }
+            Ambient.FxAttach(inst);              // 料亭の暖簾（素材 fx_wave_）などを揺らす
             return inst;
         }
 
@@ -471,7 +472,13 @@ namespace Nekorobo
             int seed = 90210;
             foreach (var ch in (C.n ?? "")) seed = (seed * 31 + ch) & 0x7fffff;
             seed += Shops.All.IndexOf(shop) * 13;
-            var bg = Scenery.Build(stageRoot, bounds.x0, bounds.x1, -bounds.z1, -bounds.z0, depth, seed, shop.n, sea, props, clear);
+            // ステージを島にする（まわりを海か空にして、ジオラマのように区切る）。[左, 奥, 右, 手前] のマス数
+            int[] island = null;
+            if (C.raw["island"] is Newtonsoft.Json.Linq.JArray ia && ia.Count >= 4)
+                island = new[] { (int)ia[0], (int)ia[1], (int)ia[2], (int)ia[3] };
+            string iside = J.S(C.raw, "islandSide", "soil");
+            bool isea = !(C.raw["islandSea"] != null && C.raw["islandSea"].Type == Newtonsoft.Json.Linq.JTokenType.Boolean && !(bool)C.raw["islandSea"]);
+            var bg = Scenery.Build(stageRoot, bounds.x0, bounds.x1, -bounds.z1, -bounds.z0, depth, seed, shop.n, sea, props, clear, island, iside, isea);
             if (mainCam != null) mainCam.backgroundColor = bg;
         }
 
