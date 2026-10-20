@@ -25,7 +25,10 @@ namespace Nekorobo
     ///   ホスト   … Lobby の持ち主。抜けたら EOS が次の人へ移す
     ///   始める   … 持ち主が playing を立て、{t:"start", room, cfg} を全員へ P2P で送る（自分にも知らせる）。
     ///              room は**ホストが見ている並び**を入れる（全員で同じ並びにしないと、誰がどのロボか食い違う）
-    ///   便り     … {t:"to", d} を P2P で送る。受けたら Net.ReportFrom
+    ///   便り     … {t:"to", d} を P2P で送る。受けたら Net.ReportFrom。
+    ///              **ホストを中心にした形**：参加者はホストとしかつながない。参加者からの全員宛て（all）・
+    ///              ほかの参加者宛て（at）はホストが取り次ぎ、もとの送り主の番号（from）を付ける。
+    ///              全員どうしでつなぐと、4人で6本になり、つながらない組が1つでもあると送り待ちがたまるため
     ///
     /// **P2P は1回に 1170 バイトまで**なので、長い便りは切って送る（頭の1バイトが 1 なら続きあり、0 なら最後）。
     /// 確実・順番どおり（ReliableOrdered）で送るので、切った物は届いた順につなげばよい。
@@ -55,6 +58,7 @@ namespace Nekorobo
         readonly Dictionary<string, List<byte>> partial = new Dictionary<string, List<byte>>();
         readonly byte[] rbuf = new byte[P2PInterface.MAX_PACKET_SIZE];
         ulong nAuth, nStatus, nMemUpd, nLobUpd, nReq;
+        ProductUserId owner;         // いまの部屋の持ち主（ホスト）。部屋の中身を作り直すたびに覚え直す
 
         static LobbyInterface Lb { get { return EosHost.P.GetLobbyInterface(); } }
         static P2PInterface P2p { get { return EosHost.P.GetP2PInterface(); } }
@@ -135,7 +139,7 @@ namespace Nekorobo
             { if (g == gen && lobby != null && (string)d.LobbyId == lobby) RoomChanged(null); });
             var r = new AddNotifyPeerConnectionRequestOptions { LocalUserId = me, SocketId = SOCK };
             nReq = P2p.AddNotifyPeerConnectionRequest(ref r, null, (ref OnIncomingConnectionRequestInfo d) =>
-            { if (g == gen) Accept(d.RemoteUserId); });
+            { if (g == gen && (AmHost || (owner != null && Same(d.RemoteUserId, owner)))) Accept(d.RemoteUserId); });
             var e = new AddNotifyAuthExpirationOptions();
             nAuth = Co.AddNotifyAuthExpiration(ref e, null, (ref AuthExpirationCallbackInfo d) => { if (g == gen) Login(g); });
 
@@ -155,7 +159,7 @@ namespace Nekorobo
                 if (nAuth != 0) Co.RemoveNotifyAuthExpiration(nAuth);
             }
             nStatus = nMemUpd = nLobUpd = nReq = nAuth = 0;
-            me = null; lobby = null; lastRoom = null;
+            me = null; lobby = null; lastRoom = null; owner = null;
             users.Clear(); partial.Clear();
         }
 
@@ -255,9 +259,9 @@ namespace Nekorobo
                     if (d.ResultCode == Result.NotFound) { Err(g, "その番号の部屋がありません"); return; }
                     if (d.ResultCode != Result.Success) { Err(g, "部屋に入れません（" + d.ResultCode + "）"); return; }
                     lobby = d.LobbyId;
-                    AcceptAll();
                     Modify(g, h => MAttr(h, "name", Cut(Net.Name, 16, "")), null);
-                    RoomChanged(new JObject { ["you"] = IdOf(me) });
+                    RoomChanged(new JObject { ["you"] = IdOf(me) });   // ここで持ち主（owner）を覚える
+                    AcceptHost();
                 });
             });
             return true;
@@ -319,13 +323,40 @@ namespace Nekorobo
             return true;
         }
 
+        /// <summary>
+        /// 部屋の中へ届ける。**ホストを中心にした形**で、参加者はホストとしかつながない。
+        ///   ホスト … 宛て先へ直接送る（全員宛てなら全員へ）
+        ///   参加者 … いつもホストへ送る。全員宛ては all、ほかの参加者宛ては at を付け、ホストが取り次ぐ
+        /// </summary>
         public bool Send(JObject d, int? id)
         {
             if (lobby == null || me == null) return false;
             var m = new JObject { ["t"] = "to", ["d"] = d };
-            if (id == null) return SendAll(m);
             ProductUserId to;
-            return users.TryGetValue(id.Value, out to) && SendTo(Bytes(m), to);
+            if (AmHost)
+            {
+                if (id == null) return SendAll(m);
+                return users.TryGetValue(id.Value, out to) && SendTo(Bytes(m), to);
+            }
+            if (owner == null) return false;
+            if (id == null) m["all"] = true;
+            else if (id.Value != IdOf(owner)) m["at"] = id.Value;
+            return SendTo(Bytes(m), owner);
+        }
+
+        bool AmHost { get { return owner != null && me != null && Same(owner, me); } }
+
+        /// <summary>
+        /// ホスト：参加者から来た便りを、ほかの参加者へ取り次ぐ（送り主の番号 from を付ける）。
+        /// 操作の便り（p:"in"）はホストしか使わないので取り次がない（1人あたり毎秒25通あり、無駄が大きい）。
+        /// </summary>
+        void Relay(ProductUserId src, int srcId, JObject d, bool all, int? at)
+        {
+            if ((string)d["p"] == "in") return;
+            var b = Bytes(new JObject { ["t"] = "to", ["d"] = d, ["from"] = srcId });
+            ProductUserId to;
+            if (all) { foreach (var u in Members()) if (!Same(u, src)) SendTo(b, u); }
+            else if (at != null && users.TryGetValue(at.Value, out to) && !Same(to, me)) SendTo(b, to);
         }
 
         // ---------------------------------------------------------------- 部屋の出入りの知らせ
@@ -337,7 +368,7 @@ namespace Nekorobo
             switch (st)
             {
                 case LobbyMemberStatus.Joined:
-                    Accept(who);
+                    if (AmHost) Accept(who);                     // 参加者どうしはつながない
                     RoomChanged(new JObject { ["joined"] = id });
                     break;
                 case LobbyMemberStatus.Left:
@@ -360,15 +391,18 @@ namespace Nekorobo
         void Gone(int g)
         {
             CloseAll();
-            lobby = null; lastRoom = null;
+            lobby = null; lastRoom = null; owner = null;
             Do(g, () => Net.ReportRoom(null, new JObject { ["t"] = "left" }));
         }
 
         /// <summary>部屋の中身を作り直して知らせる。extra が null なら、中身が前と同じときは知らせない。</summary>
         void RoomChanged(JObject extra)
         {
+            var was = owner;
             var r = BuildRoom();
             if (r == null) return;
+            // ホストが替わったら、新しいホストからのつながりを受ける（参加者のとき）
+            if (owner != null && !AmHost && (was == null || !Same(was, owner))) AcceptHost();
             string s = r.ToString(Formatting.None);
             if (extra == null && s == lastRoom) return;
             lastRoom = s;
@@ -390,7 +424,7 @@ namespace Nekorobo
                 LobbyDetailsInfo? info;
                 uint max = det.CopyInfo(ref io, out info) == Result.Success && info.HasValue ? info.Value.MaxMembers : MAX;
                 var oo = new LobbyDetailsGetLobbyOwnerOptions();
-                var owner = det.GetLobbyOwner(ref oo);
+                owner = det.GetLobbyOwner(ref oo);              // 覚えておく（便りの送り先を決めるのに使う）
                 var mc = new LobbyDetailsGetMemberCountOptions();
                 uint cnt = det.GetMemberCount(ref mc);
                 var players = new JArray();
@@ -418,7 +452,7 @@ namespace Nekorobo
             var o = new LeaveLobbyOptions { LocalUserId = me, LobbyId = lobby };
             Lb.LeaveLobby(ref o, null, (ref LeaveLobbyCallbackInfo d) => { });
             CloseAll();
-            lobby = null; lastRoom = null;
+            lobby = null; lastRoom = null; owner = null;
         }
 
         // ---------------------------------------------------------------- Lobby の小道具
@@ -516,8 +550,8 @@ namespace Nekorobo
             P2p.AcceptConnection(ref o);
         }
 
-        /// <summary>部屋の全員と、つながりを受ける用意をしておく（入った直後）。</summary>
-        void AcceptAll() { foreach (var u in Members()) Accept(u); }
+        /// <summary>入った直後に、ホストからのつながりを受ける用意をしておく（参加者どうしはつながない）。</summary>
+        void AcceptHost() { if (owner != null) Accept(owner); }
 
         void CloseConn(ProductUserId u)
         {
@@ -607,7 +641,19 @@ namespace Nekorobo
             {
                 case "to":
                     var d = m["d"] as JObject;
-                    Do(g, () => Net.ReportFrom(id, d));
+                    if (d == null) break;
+                    bool all = (bool?)m["all"] == true;
+                    int? at = (int?)m["at"];
+                    if (AmHost && (all || at != null))
+                    {
+                        // 参加者からの、全員宛て／ほかの参加者宛ての便り。全員宛てなら自分も受け、ほかへ取り次ぐ
+                        if (all) Do(g, () => Net.ReportFrom(id, d));
+                        Relay(peer, id, d, all, at);
+                        break;
+                    }
+                    // ホストが取り次いだ物なら、もとの送り主の番号で受ける
+                    int src = owner != null && Same(peer, owner) && m["from"] != null ? (int)m["from"] : id;
+                    Do(g, () => Net.ReportFrom(src, d));
                     break;
                 case "start":
                     var room = m["room"] as JObject;
