@@ -59,11 +59,17 @@ namespace Nekorobo
             public int seOn = -2;               // カーソルの音を鳴らした所（品物の番号、-3＝購入完了）
             public float nx = -1, ny = -1; public bool netSeen;          // オンラインの相手の指（割合で届く）
             public float lockT, buyT; public bool pOk, pUse;
+            public string navK = ""; public float navT;   // 矢印キー・十字キーの押しっぱなし（少し待ってから続けて跳ぶ）
             public RectTransform el; public Text tag; public Image tagBg; public Image tagPoor;
         }
         class CardUi
         {
-            public Good gd; public RectTransform r; public CanvasGroup cg; public Image hov;
+            public Good gd; public RectTransform r; public CanvasGroup cg; public Image hov, hovWhite, hovGlow;
+            public void Hov(bool on, Color col)
+            {
+                hov.enabled = hovWhite.enabled = hovGlow.enabled = on;
+                if (on) { hov.color = col; hovGlow.color = col; }
+            }
             public PillUi price, mine, cap; public Text own;
             public float hitX, hitY, hitW, hitH;      // 指の動ける箱の中での位置（y は下向き）
         }
@@ -318,8 +324,11 @@ namespace Nekorobo
             c.r = bg.rectTransform;
             c.cg = bg.gameObject.AddComponent<CanvasGroup>();
             Ring(bg.transform, new Color(1, 1, 1, 0.55f), 3, 14);
-            // 指している人の色で縁取る（CSS の inset 3px の影）
-            c.hov = Ring(bg.transform, Color.white, 3, 11, 3);
+            // 選択枠。指している人の色で縁取る。矢印キー・十字キーで選ぶときはこれが頼りなので、太く・外へ光らせる
+            // （CSS の inset 0 0 0 5px 色, 0 0 0 3px #fff, 0 0 16px 4px 色）
+            c.hov = Ring(bg.transform, Color.white, 5, 11, 3);
+            c.hovWhite = Ring(bg.transform, Color.white, 3, 17, -3);
+            c.hovGlow = Glow(bg.transform, 14, 4, 16);
             c.hov.enabled = false;
             // 絵（白い板に乗せる。4:3、高さは 100 まで）
             float ih = Mathf.Min(h - 18, 100), iw = ih * 4 / 3f;
@@ -463,18 +472,42 @@ namespace Nekorobo
                 }
                 if (c.P.src.kind == "npc") { NpcTick(c, dt); continue; }
                 var inp = c.P.input;
-                // 方向は nav*（十字とスティック）だけを見る。A は加速と兼用なので
-                int vx = (inp.navRight ? 1 : 0) - (inp.navLeft ? 1 : 0);
-                int vy = (inp.navDown ? 1 : 0) - (inp.navUp ? 1 : 0);
-                if (vx != 0 || vy != 0)
+                // この画面で動かしている人（キーボード・パッド）は、入力ごとに動かし方を分ける。
+                //   矢印キー・十字キー … **品物から品物へ1つずつ跳ぶ**（選択枠）
+                //   スティック          … 指が自由に動く（マウスと同じ）
+                // 前は矢印キー・十字キーでも指が自由に動くだけで、狙った品物に止めにくかった
+                bool moved = false;
+                float sp = Mathf.Max(320, gw) / Mathf.Max(0.2f, g.T.ptrCross);
+                if (c.P.src.kind == "key" || c.P.src.kind == "pad")
                 {
-                    float k = (vx != 0 && vy != 0) ? 0.7071f : 1f;          // 斜めでも速くならないように
-                    float sp = Mathf.Max(320, gw) / Mathf.Max(0.2f, g.T.ptrCross);
-                    c.x = Mathf.Clamp(c.x + vx * sp * k * dt, 0, gw);
-                    c.y = Mathf.Clamp(c.y + vy * sp * k * dt, 0, gh);
+                    int dx = inp.dpLeft ? -1 : inp.dpRight ? 1 : 0;
+                    int dy = dx != 0 ? 0 : inp.dpUp ? -1 : inp.dpDown ? 1 : 0;
+                    string key = dx != 0 || dy != 0 ? dx + "," + dy : "";
+                    if (key == "") c.navK = "";
+                    else if (c.navK != key) { c.navK = key; c.navT = 0.38f; Jump(c, dx, dy); moved = true; }
+                    else if ((c.navT -= dt) <= 0) { c.navT = 0.12f; Jump(c, dx, dy); moved = true; }
+                    if (inp.axX != 0 || inp.axY != 0)
+                    {
+                        c.x = Mathf.Clamp(c.x + inp.axX * sp * dt, 0, gw);
+                        c.y = Mathf.Clamp(c.y + inp.axY * sp * dt, 0, gh);
+                        moved = true;
+                    }
+                }
+                else
+                {
+                    // 方向は nav*（十字とスティック）だけを見る。A は加速と兼用なので
+                    int vx = (inp.navRight ? 1 : 0) - (inp.navLeft ? 1 : 0);
+                    int vy = (inp.navDown ? 1 : 0) - (inp.navUp ? 1 : 0);
+                    if (vx != 0 || vy != 0)
+                    {
+                        float k = (vx != 0 && vy != 0) ? 0.7071f : 1f;          // 斜めでも速くならないように
+                        c.x = Mathf.Clamp(c.x + vx * sp * k * dt, 0, gw);
+                        c.y = Mathf.Clamp(c.y + vy * sp * k * dt, 0, gh);
+                        moved = true;
+                    }
                 }
                 Over(c);
-                if (vx != 0 || vy != 0)
+                if (moved)
                 {
                     // 自分の指が別の品物（か「購入完了」）に乗ったら、カーソルの音
                     int on = c.onRdy ? -3 : c.idx;
@@ -617,6 +650,34 @@ namespace Nekorobo
             Buy(c);
         }
 
+        /// <summary>
+        /// 指を、(dx, dy) の向きにある**いちばん近い品物（か「購入完了」）**の真ん中へ跳ばす（JS版 shopJump）。
+        /// 向きから外れている物ほど遠いとみなすので、横に並んだ物は横、縦は縦へ素直に移る。y は下向き。
+        /// </summary>
+        void Jump(Cur c, int dx, int dy)
+        {
+            var all = new List<Rect>();
+            foreach (var cd in cards) all.Add(new Rect(cd.hitX, cd.hitY, cd.hitW, cd.hitH));
+            all.Add(rdyRect);
+            int onI = c.onRdy ? all.Count - 1 : c.idx;
+            // いま乗っている物の真ん中から測る（何にも乗っていなければ指の位置から）
+            Vector2 o = onI >= 0 ? all[onI].center : new Vector2(c.x, c.y);
+            int best = -1; float bs = 1e9f;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (i == onI) continue;
+                var m = all[i].center; float ax = m.x - o.x, ay = m.y - o.y;
+                float along = ax * dx + ay * dy, side = Mathf.Abs(ax * dy - ay * dx);
+                if (along < 4) continue;                       // 逆向き・真横は選ばない
+                float sc = along + side * 2.5f;
+                if (sc < bs) { bs = sc; best = i; }
+            }
+            if (best < 0 && onI < 0)                           // 何にも乗っていない＋その向きに無い → いちばん近い物
+                for (int i = 0; i < all.Count; i++) { float d = (all[i].center - o).magnitude; if (d < bs) { bs = d; best = i; } }
+            if (best < 0) return;
+            c.x = all[best].center.x; c.y = all[best].center.y;
+        }
+
         void Over(Cur c)
         {
             c.idx = -1;
@@ -692,7 +753,7 @@ namespace Nekorobo
                     cd.own.text = sb.ToString().TrimEnd();
                     cd.own.gameObject.SetActive(cd.own.text.Length > 0);
                 }
-                cd.hov.enabled = false;
+                cd.Hov(false, Color.white);
             }
             // 指カーソル
             bool anyRdyHov = false;
@@ -721,7 +782,7 @@ namespace Nekorobo
                            + (maxed ? " 最大" : " " + Game.Yen(cost));
                 c.tagBg.color = maxed ? Mats.Hex(0x8b93a0) : col;
                 c.tagPoor.enabled = !maxed && W.cash < cost;            // 所持金が足りない物は赤で囲う
-                if (!c.ready && IsViewer(c.P)) { cards[c.idx].hov.enabled = true; cards[c.idx].hov.color = col; }
+                if (!c.ready && IsViewer(c.P)) cards[c.idx].Hov(true, col);
             }
             if (!anyRdyHov) readyHov.enabled = false;
             // 購入完了のボタン（この画面の人のぶん）
@@ -776,6 +837,39 @@ namespace Nekorobo
             r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
             r.anchoredPosition = new Vector2(x, -y); r.sizeDelta = new Vector2(w, h);
             return t;
+        }
+
+        /// <summary>
+        /// 外へ広がる光（CSS の box-shadow 0 0 blur spread）。親の外側だけに出す（内側は透明）。
+        /// 角の丸み radius の箱から、spread だけ広げて blur でぼかした形。色は Image の color。
+        /// </summary>
+        static Image Glow(Transform parent, float radius, float spread, float blur)
+        {
+            float ext = spread + blur * 1.5f;
+            int cr = Mathf.CeilToInt(radius + ext);                 // 角の大きさ（切り分ける幅）
+            int N = cr * 2 + 2;
+            var px = new Color32[N * N];
+            float sg = blur / 2;                                    // CSS の blur はσの2倍
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    // 角の丸い箱（外から ext 内側）の外への距離 d
+                    float qx = Mathf.Max(0, Mathf.Abs(x + 0.5f - N / 2f) - (N / 2f - ext - radius));
+                    float qy = Mathf.Max(0, Mathf.Abs(y + 0.5f - N / 2f) - (N / 2f - ext - radius));
+                    float d = Mathf.Sqrt(qx * qx + qy * qy) - radius;
+                    // 箱の中は出さない。外は spread の縁を中心に、ガウスでぼかした縁（ロジスティックで近似）
+                    float a = d <= 0 ? 0 : 1f / (1 + Mathf.Exp(1.702f * (d - spread) / sg));
+                    px[y * N + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255));
+                }
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels32(px); tex.Apply(false);
+            var sp = Sprite.Create(tex, new Rect(0, 0, N, N), new Vector2(0.5f, 0.5f), 100, 0, SpriteMeshType.FullRect, new Vector4(cr, cr, cr, cr));
+            var b = UiKit.Img(parent, Color.white, 0, "Glow");
+            b.sprite = sp; b.type = Image.Type.Sliced; b.fillCenter = false;
+            UiKit.Stretch(b.rectTransform, -ext);
+            var le = b.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
+            b.transform.SetAsFirstSibling();
+            return b;
         }
 
         /// <summary>角の丸い枠を、親いっぱい（inset だけ内側）に重ねる。</summary>

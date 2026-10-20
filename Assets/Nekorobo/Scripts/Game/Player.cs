@@ -9,6 +9,9 @@ namespace Nekorobo
         public bool up, down, left, right, jump, use, cycle, cycleBack;
         // 照準・カーソル用（十字とスティックだけ。パッドの A は加速と兼用なので入れない）
         public bool navUp, navDown, navLeft, navRight;
+        // ショップの指を動かす入力。dp* は矢印キー・十字キー（品物から品物へ1つずつ跳ぶ）、ax/ay はスティックの傾き（自由に動く。y は下が＋）
+        public bool dpUp, dpDown, dpLeft, dpRight;
+        public float axX, axY;
         // 決定と戻る（ショップの指・結果の画面）。遊んでいる間は誰も見ない
         public bool ok, back;
     }

@@ -30,6 +30,8 @@ namespace Nekorobo
                      guestDmg = 0.43f, guestTough = 1.0f, guestOut = 100;
         [Header("池・海")]
         public float seaPenalty = 10.0f, waterDrag = 3.0f, waterDmg = 2.5f, lavaBurn = 9.0f;
+        // NPC が家具（テーブル・イス・ベンチ）を避ける強さ。そのマスを通るときに足す手間（ふつうの床が1）。0 で避けない
+        public float npcAvoid = 6;
         [Header("アイテム（まだ移していない）")]
         public float bananaSlip = 2.0f, bananaSpin = 5.5f, droneSpeed = 4.6f, invTime = 10,
                      boomSpeed = 11, boomOut = 0.6f, boomR = 0.8f, missileSpeed = 16.0f,

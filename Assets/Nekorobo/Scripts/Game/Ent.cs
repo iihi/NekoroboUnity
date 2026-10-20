@@ -40,6 +40,7 @@ namespace Nekorobo
 
         // 落ちた・浸かった
         public bool sunk;
+        public bool taken;              // 救急車に乗せた客（クリアのあと）
         public float wet;
         public int fellN;
         public float fellAt = -99f;

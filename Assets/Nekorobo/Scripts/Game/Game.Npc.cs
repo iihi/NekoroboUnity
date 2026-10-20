@@ -96,7 +96,7 @@ namespace Nekorobo
         /// 動く床の帯は待てば渡れるので高いコスト（15）で通す。ほかに道があればそちらを選ぶくらい高い。
         /// 置き物のマスは通れない（行き先そのものは除く。客が木箱の横に立っていても届けられるように）。
         /// </summary>
-        List<Vector2Int> FindPath(Vector2Int from, Vector2Int to, bool wade)
+        List<Vector2Int> FindPath(Vector2Int from, Vector2Int to, bool wade, Dictionary<Vector2Int, float> extra = null)
         {
             if (from == to) return new List<Vector2Int> { to };
             System.Func<Vector2Int, float> h = c => Mathf.Abs(c.x - to.x) + Mathf.Abs(c.y - to.y);
@@ -128,6 +128,9 @@ namespace Nekorobo
                     if (c == null && moverLanes.Contains(nk)) c = 15f;
                     if (nk != to && propBlock.Contains(nk)) c = null;
                     if (c == null) continue;
+                    // 家具の居るマスは通りにくくする（行き先そのものは除く）
+                    float ex;
+                    if (extra != null && nk != to && extra.TryGetValue(nk, out ex)) c += ex;
                     float ng = cg + c.Value;
                     float old;
                     if (gOf.TryGetValue(nk, out old) && old <= ng) continue;
@@ -136,6 +139,46 @@ namespace Nekorobo
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// NPC の道探しで「通りにくいマス」（JS版 npcAvoidMap）。家具（テーブル・イス・ベンチ）のマスと、そのまわり1マス（3割）。
+        /// **通れなくはしない。**家具は吹っ飛んで動くし、狭い店では間を抜けるしかないこともあるので、
+        /// 「回り込める道があれば、そちらを選ぶ」くらいの手間を足すだけ（T.npcAvoid）。
+        /// まわりにも足すのは、家具のすぐ脇をかすめると曲がるときに角へ当たって、かえって壊すから。
+        /// 家具は動くので、0.25秒ごとに数え直す（NPC が何人居ても1回）。客のマスは入れない（遠回りが増えて遅くなるだけだった）。
+        /// </summary>
+        Dictionary<Vector2Int, float> avoidMap; float avoidT = -1;
+        Dictionary<Vector2Int, float> NpcAvoidMap()
+        {
+            float k = T.npcAvoid;
+            if (k <= 0) return null;
+            if (avoidMap != null && t - avoidT < 0.25f && t >= avoidT) return avoidMap;
+            var m = avoidMap ?? new Dictionary<Vector2Int, float>();
+            m.Clear();
+            float rim = k * 0.3f;
+            foreach (var e in furni)
+            {
+                if (e == null || e.sunk || e.rb == null) continue;
+                var q = e.rb.position;
+                if (q.y < -0.8f) continue;                         // 池や穴の底に沈んでいる物は数えない
+                // 向きは見ず、長いほうの辺で四角く取る（回っていても、はみ出さないように）
+                float r = Mathf.Max(e.size.x > 0 ? e.size.x : 0.6f, e.size.z > 0 ? e.size.z : 0.6f) / 2;
+                int i0 = Coord.ToI(q.x - r + 0.05f), i1 = Coord.ToI(q.x + r - 0.05f);
+                int j0 = Coord.ToJ(q.z + r - 0.05f), j1 = Coord.ToJ(q.z - r + 0.05f);     // Unity の z は向きが逆
+                for (int i = i0 - 1; i <= i1 + 1; i++)
+                    for (int j = j0 - 1; j <= j1 + 1; j++)
+                    {
+                        bool inside = i >= i0 && i <= i1 && j >= j0 && j <= j1;
+                        float v = inside ? k : rim;
+                        if (v <= 0) continue;
+                        var key = new Vector2Int(i, j);
+                        float old;
+                        if (!m.TryGetValue(key, out old) || old < v) m[key] = v;
+                    }
+            }
+            avoidMap = m; avoidT = t;
+            return m;
         }
 
         /// <summary>そこに乗れるか。動く床の上も「乗れる」として数える（JS版 npcCanStand）。</summary>
@@ -276,7 +319,7 @@ namespace Nekorobo
                     var s = Tiles.NearestFloor(map, goalPos);
                     if (s != null) to = CellOf(s.Value);
                 }
-                N.path = FindPath(from, to, lv.wade);
+                N.path = FindPath(from, to, lv.wade, NpcAvoidMap());
                 N.node = 0; N.replan = 0.5f; N.goalCell = gCell;
             }
 
@@ -292,7 +335,9 @@ namespace Nekorobo
                 if (N.node < N.path.Count) aim = Coord.Cell(N.path[N.node].x, N.path[N.node].y);
             }
             float distGoal = new Vector2(goalPos.x - p.x, goalPos.z - p.z).magnitude;
-            if (distGoal < 2.0f) aim = goalPos;            // 近くまで来たら直接狙う
+            // 近くまで来たら直接狙う。**2m では早すぎた。**客はテーブルに着いているので、
+            // 2m 手前からまっすぐ向かうと、テーブルやイスを突っ切ってしまう
+            if (distGoal < (T.npcAvoid > 0 ? 1.4f : 2.0f)) aim = goalPos;
 
             // ---- 体当たり。決めるのは 0.6秒に1回だけ。決めたら少しの間そこへ向かう。
             // まず配膳を優先する（運んでいる間・受取口に注文が残っている間は狙わない。暴走だけは例外）

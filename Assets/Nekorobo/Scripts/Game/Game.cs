@@ -416,6 +416,7 @@ namespace Nekorobo
                 i.cycle = kb.xKey.isPressed;
                 i.cycleBack = kb.cKey.isPressed;
                 i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
+                i.dpUp = i.up; i.dpDown = i.down; i.dpLeft = i.left; i.dpRight = i.right;
                 i.ok = kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed;
             }
             if (debugUp) i.up = true;                   // 確かめる用（外から「↑を押している」ことにする）
@@ -444,8 +445,13 @@ namespace Nekorobo
                 // 上下は画面の中のカーソル（nav）には今までどおり使う
                 if (st.y > dz) i.navUp = true;
                 if (st.y < -dz) i.navDown = true;
-                if (gp.dpad.up.isPressed) i.up = i.navUp = true;
-                if (gp.dpad.down.isPressed) i.down = i.navDown = true;
+                if (gp.dpad.up.isPressed) i.up = i.navUp = i.dpUp = true;
+                if (gp.dpad.down.isPressed) i.down = i.navDown = i.dpDown = true;
+                if (gp.dpad.left.isPressed) i.dpLeft = true;
+                if (gp.dpad.right.isPressed) i.dpRight = true;
+                // **スティックの傾きはそのまま持っておく**（ショップでは十字キーは跳ぶ、スティックは自由に動かす、と分ける）
+                if (Mathf.Abs(st.x) > 0.22f && i.axX == 0) i.axX = st.x;
+                if (Mathf.Abs(st.y) > 0.22f && i.axY == 0) i.axY = -st.y;
                 if (st.x < -dz || gp.dpad.left.isPressed) i.left = i.navLeft = true;
                 if (st.x > dz || gp.dpad.right.isPressed) i.right = i.navRight = true;
                 if (gp.buttonSouth.isPressed || gp.rightTrigger.ReadValue() > dz) i.up = true;
@@ -602,6 +608,7 @@ namespace Nekorobo
             SyncLooks();
             ApplyCamera();
             TutArrowTick();
+            AmbulanceTick(Time.deltaTime);
         }
 
         // ================================================================ 1/60秒ごとの更新（JS版 step）
@@ -901,7 +908,7 @@ namespace Nekorobo
             var guest = a.kind == "guest" ? a : (b.kind == "guest" ? b : null);
             var fur = (a.kind == "table" || a.kind == "chair") ? a : ((b.kind == "table" || b.kind == "chair") ? b : null);
             var rp = isRobot ? hitP[0].ent.rb.position : a.Pos;
-            bool noisy = false;
+            bool noisy = false, furniHit = false;
             float lw = isRobot ? EffLight(hitP[0]) : 1;
             bool harmless = InvOn(blame);
 
@@ -980,8 +987,20 @@ namespace Nekorobo
                     float pGain = blame != null ? Mathf.Min(100, blame.shopDmg + d) - blame.shopDmg : 0;
                     shopDmg += gGain;
                     if (blame != null) { blame.shopDmg += pGain; blame.comboDmg += Mathf.Min(gGain, pGain); }
-                    noisy = true;
+                    noisy = true; furniHit = true;
                 }
+            }
+            // 案内の「ひとこと」へ知らせる（遊んでいる本人が絡んだときだけ数える）
+            if (tut != null)
+            {
+                var carE = a.kind == "car" ? a : (b.kind == "car" ? b : null);
+                var car = carE != null ? cars.Find(c => c.ent == carE) : null;
+                foreach (var P in hitP)
+                {
+                    if (guest != null) TutEv("hit:guest", P);
+                    if (car != null) TutEv(car.vk == "train" ? "hit:train" : "hit:car", P);
+                }
+                if (furniHit && blame != null) TutEv("hit:furni", blame);
             }
             // **ぶつかった音は1回の衝突につき1つ。**何に当たったかで選び、強さで大きさを変える。
             // ロボの絡まない家具どうしの連鎖は、小さめにする（何十個も同時に鳴るので）
@@ -1178,8 +1197,8 @@ namespace Nekorobo
             Respawned(e, sv, 0xffffff, true);
             if (e.hp > 0)
             {
+                // 「助けた！」の文字は出さない（要らないと言われた）。光の柱で戻ったことは分かる
                 e.hp = Mathf.Max(0, e.hp - GuestHurt(T.guestOut));
-                hud.Pop(sv + Vector3.up, "助けた！", e.hp > 0 ? 0x4aa8e0 : 0xe53935, true);
                 if (e.hp <= 0) GuestDown(e);
             }
         }
@@ -1367,10 +1386,17 @@ namespace Nekorobo
             };
             hud.Story.Bang(cleared, cleared ? "\u2572(^o^)\u2571" : (players.Count > 1 ? "全員が動けなくなった" : "動けなくなった"), () =>
             {
-                if (hud.ShopOpen) return;
-                var after = entry != null && entry.raw != null ? entry.raw["after"] : null;
-                if (cleared && after != null) { TutEnd(); TalkOpen(after, showRes, null); }
-                else showRes();
+                if (hud.ShopOpen || hud.TitleOpen) return;
+                System.Action go = () =>
+                {
+                    if (hud.ShopOpen || hud.TitleOpen) return;
+                    // ストーリー：クリアしたら店主のひとこと（ボーナスを渡す）。読み終わってから結果へ
+                    var after = entry != null && entry.raw != null ? entry.raw["after"] : null;
+                    if (cleared && after != null) { TutEnd(); TalkOpen(after, showRes, null); }
+                    else showRes();
+                };
+                // 昇天した客が居たら、救急車が迎えに来てから結果へ
+                if (cleared) AmbulanceRun(go); else go();
             });
         }
 

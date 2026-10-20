@@ -53,6 +53,7 @@ namespace Nekorobo
             g = game;
             root = UiKit.Rect(parent, "Story");
             UiKit.Stretch(root);
+            BuildArrow();
             BuildBang();
             BuildTut();
             BuildTalk();
@@ -277,6 +278,121 @@ namespace Nekorobo
         }
 
         public void TutHide() { tutRoot.gameObject.SetActive(false); }
+
+        // ================================================================ 案内の矢印
+        // **画面に重ねる平面の「⇩」**（JS版 #tutArrow の SVG と同じ形）。指す物の上に置いて、上下に弾ませる。
+        // 絵は SVG の座標（52×54）で描いて、46×48 で出す。影（drop-shadow 0 3px 3px）も絵に焼き込む。
+        RawImage arrow;
+        const float AR_PAD = 6, AR_W = 52 + AR_PAD * 2, AR_H = 54 + AR_PAD * 2 + 4, AR_K = 46f / 52f;
+
+        void BuildArrow()
+        {
+            arrow = UiKit.Rect(root, "TutArrow").gameObject.AddComponent<RawImage>();
+            arrow.raycastTarget = false;
+            arrow.texture = ArrowTex();
+            var r = arrow.rectTransform;
+            r.anchorMin = r.anchorMax = Vector2.zero;
+            r.sizeDelta = new Vector2(AR_W * AR_K, AR_H * AR_K);
+            // 置く点は絵の下のまん中（SVG の (26, 54)）。JS版の translate(-50%, -100%)
+            r.pivot = new Vector2((26 + AR_PAD) / AR_W, 1 - (54 + AR_PAD) / AR_H);
+            arrow.gameObject.SetActive(false);
+        }
+
+        /// <summary>矢印を画面の点 sp（WorldToScreenPoint）に出す。bounce は上へ持ち上げる量（CSS の px）。</summary>
+        public void ArrowAt(Vector3 sp, float bounce)
+        {
+            var cv = root.GetComponentInParent<Canvas>();
+            float k = cv != null ? cv.scaleFactor : 1;
+            arrow.rectTransform.position = new Vector3(sp.x, sp.y + bounce * k, 0);
+            if (!arrow.gameObject.activeSelf) arrow.gameObject.SetActive(true);
+        }
+        public void ArrowHide() { if (arrow.gameObject.activeSelf) arrow.gameObject.SetActive(false); }
+
+        static Texture2D arrowTex;
+        static Texture2D ArrowTex()
+        {
+            if (arrowTex != null) return arrowTex;
+            const float S = 3;                                     // SVG の 1 単位を何ピクセルで描くか
+            int W = Mathf.CeilToInt(AR_W * S), H = Mathf.CeilToInt(AR_H * S);
+            // M16 3h20v23h13L26 51 3 26h13z
+            var poly = new[] { new Vector2(16, 3), new Vector2(36, 3), new Vector2(36, 26), new Vector2(49, 26),
+                               new Vector2(26, 51), new Vector2(3, 26), new Vector2(16, 26) };
+            var hl = new[] { new Vector2(20, 7), new Vector2(26, 7), new Vector2(26, 27) };   // M20 7h6v20（光）
+            System.Func<Vector2, Vector2, Vector2, float> seg = (p, a, b) =>
+            {
+                var d = b - a; float t = Mathf.Clamp01(Vector2.Dot(p - a, d) / d.sqrMagnitude);
+                return (a + d * t - p).magnitude;
+            };
+            System.Func<Vector2, bool> inside = p =>
+            {
+                bool c = false;
+                for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
+                    if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
+                        p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x) c = !c;
+                return c;
+            };
+            Color fill = Mats.Hex(0xffc83a), ink = Mats.Hex(0x2f2a22), shine = Mats.Hex(0xfff3c4);
+            var col = new Color[W * H]; var al = new float[W * H];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    // テクスチャは下から上。SVG は上から下
+                    var p = new Vector2((x + 0.5f) / S - AR_PAD, (H - 1 - y + 0.5f) / S - AR_PAD);
+                    float dEdge = 1e9f;
+                    for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++) dEdge = Mathf.Min(dEdge, seg(p, poly[j], poly[i]));
+                    float sd = inside(p) ? -dEdge : dEdge;                // 中なら負
+                    float a = Mathf.Clamp01(0.5f - (sd - 1.75f) * S);     // 線（3.5）の外側まで
+                    float st = Mathf.Clamp01((sd + 1.75f) * S + 0.5f);    // 線の内側の縁から先は線の色
+                    var c = Color.Lerp(fill, ink, st);
+                    float dh = Mathf.Min(seg(p, hl[0], hl[1]), seg(p, hl[1], hl[2]));
+                    float h = Mathf.Clamp01(0.5f - (dh - 1.5f) * S) * 0.8f * (1 - st);
+                    c = Color.Lerp(c, shine, h);
+                    col[y * W + x] = c; al[y * W + x] = a;
+                }
+            // 影：形の透明度をぼかして、下へずらす（CSS の 3px は SVG の 3/AR_K 単位）
+            var sh = Blur(al, W, H, Mathf.RoundToInt(1.5f / AR_K * S));
+            int dy = Mathf.RoundToInt(3 / AR_K * S);
+            var px = new Color[W * H];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    int sy = y + dy;
+                    float sa = sy < H ? sh[sy * W + x] * 0.4f : 0;
+                    float a = al[y * W + x];
+                    float oa = a + sa * (1 - a);
+                    var c = oa > 0 ? (col[y * W + x] * a + Color.black * sa * (1 - a)) / oa : Color.clear;
+                    c.a = oa;
+                    px[y * W + x] = c;
+                }
+            arrowTex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            arrowTex.SetPixels(px); arrowTex.Apply(false);
+            return arrowTex;
+        }
+
+        /// <summary>箱ぼかしを3回（ガウスぼかしの代わり）。r は半径のピクセル数。</summary>
+        static float[] Blur(float[] src, int W, int H, int r)
+        {
+            var a = (float[])src.Clone(); var b = new float[W * H];
+            int rr = Mathf.Max(1, Mathf.RoundToInt(r * 0.8f));
+            for (int pass = 0; pass < 3; pass++)
+            {
+                for (int y = 0; y < H; y++)
+                    for (int x = 0; x < W; x++)
+                    {
+                        float s = 0; int n = 0;
+                        for (int k = -rr; k <= rr; k++) { int xx = x + k; if (xx >= 0 && xx < W) s += a[y * W + xx]; n++; }
+                        b[y * W + x] = s / n;
+                    }
+                for (int y = 0; y < H; y++)
+                    for (int x = 0; x < W; x++)
+                    {
+                        float s = 0; int n = 0;
+                        for (int k = -rr; k <= rr; k++) { int yy = y + k; if (yy >= 0 && yy < H) s += b[yy * W + x]; n++; }
+                        a[y * W + x] = s / n;
+                    }
+            }
+            return a;
+        }
 
         void TutTick(float dt)
         {

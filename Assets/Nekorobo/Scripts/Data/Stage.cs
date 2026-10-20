@@ -40,7 +40,7 @@ namespace Nekorobo
         public float? wallHigh, camDist;
         public bool stall, camFix;
         public List<string> dishes;
-        public JArray zones, hints;
+        public JArray zones, hints, react;
         public JObject tune, raw;
         public Dictionary<string, List<string>> floorPaint;   // マスごとに塗った床の絵 { デザイン: ["i,j", …] }
 
@@ -75,6 +75,7 @@ namespace Nekorobo
             if (ds != null) { c.dishes = new List<string>(); foreach (var d in ds) c.dishes.Add((string)d); }
             c.zones = o["zones"] as JArray;
             c.hints = o["hints"] as JArray;
+            c.react = o["react"] as JArray;
             c.tune = o["tune"] as JObject;
             if (o["floorPaint"] is JObject fp)
             {
@@ -180,6 +181,7 @@ namespace Nekorobo
     {
         public string n;
         public List<CourseEntry> stages = new List<CourseEntry>();
+        public JArray react;         // 出来事への店主のひとこと（ストーリーの全部の面で効く）
 
         /// <summary>stages/course.json（ストーリー）や free.json（フリープレイ）を読む。</summary>
         public static Course Load(string name)
@@ -188,6 +190,7 @@ namespace Nekorobo
             var c = new Course();
             if (o == null) return c;
             c.n = J.S(o, "n", name);
+            c.react = o["react"] as JArray;
             var arr = o["stages"] as JArray;
             if (arr != null)
                 foreach (var t in arr)

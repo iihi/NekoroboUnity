@@ -10,6 +10,13 @@ namespace Nekorobo
     ///
     /// 案内はステージの hints に1つずつ順に並べる。
     ///   { "say":"文", "arrow":"counter", "until":"pick", "max":12, "ok":"いいぞ！", "need":"items" }
+    /// **出来事への店主のひとこと**（react）。順番の案内とは別に、起きたときに1回だけ話す。
+    ///   { "on":"hit:furni", "say":"気をつけて！", "r":2.2, "sec":4 }
+    ///   on … hit:guest（客にぶつけた）/ hit:furni（家具を壊した）/ hit:car・hit:train（はねられた）、
+    ///        ほかは until と同じ書き方（lava・water・sea・ice・near:mover・near:ramp・zone:0 など）
+    ///   r … near のときの近さ[m]　sec … 出しておく秒数
+    /// 面の react と、ストーリーのときはコース（course.json）の react の両方が効く。
+    /// 「近くまで来たら初めて話す」「ぶつかって初めて注意する」のように、先回りして全部しゃべらないための仕組み。
     /// 出すのは、この画面で遊ぶ人が1人のときだけ（NPC のライバルは数えない）。
     /// </summary>
     public partial class Game
@@ -48,16 +55,28 @@ namespace Nekorobo
             public JArray steps; public int i; public float t, okT; public Player P;
             public int del; public float dmg, hurt, jump; public string slot; public int items;
             public Dictionary<char, List<Vector3>> tiles;
+            public List<JObject> react = new List<JObject>(); public List<bool> reactDone = new List<bool>();
+            public HashSet<string> ev = new HashSet<string>();
+            public float reactT; public string reactSay = "";
         }
+
+        /// <summary>出来事を知らせる（衝突など、その場でしか分からないもの）。遊んでいる本人のときだけ数える。</summary>
+        void TutEv(string k, Player P) { if (tut != null && (P == null || P == tut.P)) tut.ev.Add(k); }
         Tut tut;
-        Transform tutArrow;
 
         void TutBegin()
         {
             TutEnd();
             var humans = players.FindAll(P => P.src.kind == "key" || P.src.kind == "pad");
-            if (!hints || stage.hints == null || stage.hints.Count == 0 || humans.Count != 1) return;
-            tut = new Tut { steps = stage.hints, P = humans[0], tiles = new Dictionary<char, List<Vector3>>() };
+            var react = new List<JObject>();
+            if (entry != null && course != null && course.react != null) foreach (var r in course.react) if (r is JObject) react.Add((JObject)r);
+            if (stage.react != null) foreach (var r in stage.react) if (r is JObject) react.Add((JObject)r);
+            var steps = stage.hints ?? new JArray();
+            if (!hints || (steps.Count == 0 && react.Count == 0) || humans.Count != 1) return;
+            tut = new Tut { steps = steps, P = humans[0], tiles = new Dictionary<char, List<Vector3>>() };
+            tut.react = react; foreach (var r in react) tut.reactDone.Add(false);
+            // 比べる元（react だけの面でも、until と同じ判定を使うので要る）
+            TutBase();
             // 地形の文字ごとのマス（「凍りの床を指す」のように使う）
             foreach (var kv in map)
             {
@@ -65,31 +84,23 @@ namespace Nekorobo
                 if (!tut.tiles.TryGetValue(kv.Value, out l)) tut.tiles[kv.Value] = l = new List<Vector3>();
                 l.Add(Coord.Cell(kv.Key.x, kv.Key.y));
             }
-            // 矢印。下向きの四角錐を縁取りして、どこから見ても分かるようにする（何にも隠れない）
-            var g = new GameObject("TutArrow").transform;
-            g.SetParent(stageRoot, false);
-            var sh = Resources.Load<Shader>("Shaders/Overlay");
-            if (sh == null) sh = Shader.Find("Nekorobo/Overlay");
-            System.Action<float, float, int, bool, int> mk = (r, h, col, back, q) =>
-            {
-                var m = new Material(sh); m.SetColor("_Color", Mats.Hex(col));
-                m.SetFloat("_Cull", back ? 1 : 2); m.renderQueue = 4000 + q;
-                var p = Part.Add(g, MeshGen.Cone(r, h, 4), m, Vector3.zero, shadow: false);
-                p.transform.localRotation = Quaternion.Euler(180, 45, 0);
-            };
-            mk(0.42f, 0.84f, 0x2f2a22, true, 0);
-            mk(0.34f, 0.68f, 0xffc83a, false, 1);
-            g.gameObject.SetActive(false);
-            tutArrow = g;
-            TutStep();
+            // 矢印は**画面に重ねる平面の「⇩」**（StoryUi）。前は立体の四角錐で、角度によって形が変わって見えていた
+            if (tut.steps.Count > 0) TutStep();
+            else hud.Story.TutHide();
         }
 
         void TutEnd()
         {
-            if (tutArrow != null) Destroy(tutArrow.gameObject);
-            tutArrow = null;
             tut = null;
-            if (hud != null) hud.Story.TutHide();
+            if (hud != null) { hud.Story.TutHide(); hud.Story.ArrowHide(); }
+        }
+
+        void TutBase()
+        {
+            var P = tut.P;
+            tut.t = 0; tut.okT = 0;
+            tut.del = P.delivered; tut.dmg = shopDmg; tut.hurt = P.botDmg; tut.jump = P.lastJump;
+            tut.slot = P.slot; tut.items = ItemTotal(P);
         }
 
         int ItemTotal(Player P)
@@ -116,15 +127,16 @@ namespace Nekorobo
                 tut.i++;
             }
             if (tut.i >= tut.steps.Count) { hud.Story.TutHide(); return; }
-            tut.t = 0; tut.okT = 0;
-            tut.del = P.delivered; tut.dmg = shopDmg; tut.hurt = P.botDmg; tut.jump = P.lastJump;
-            tut.slot = P.slot; tut.items = ItemTotal(P);
+            TutBase();
             TutRender(false, true);
         }
 
         void TutRender(bool ok, bool pop)
         {
-            if (tut == null || tut.i >= tut.steps.Count || TalkOn) { if (hud != null && tut == null) hud.Story.TutHide(); return; }
+            if (tut == null || TalkOn) { if (hud != null && tut == null) hud.Story.TutHide(); return; }
+            // 出来事へのひとこと。順番の案内より先に出す
+            if (tut.reactT > 0) { hud.Story.TutShow(tut.reactSay, "", false, pop); return; }
+            if (tut.i >= tut.steps.Count) { hud.Story.TutHide(); return; }
             var s = tut.steps[tut.i] as JObject;
             int n = tut.steps.Count;
             hud.Story.TutShow(ok ? "◎ " + (J.S(s, "ok") ?? "いいぞ！") : (J.S(s, "say") ?? ""),
@@ -231,7 +243,7 @@ namespace Nekorobo
                 case "near":
                     {
                         var t = TutTarget(a);
-                        return t != null && new Vector2(t.Value.x - p.x, t.Value.z - p.z).magnitude < 2.2f;
+                        return t != null && new Vector2(t.Value.x - p.x, t.Value.z - p.z).magnitude < J.F(s, "r", 2.2f);
                     }
                 case "zone":
                     {
@@ -246,11 +258,42 @@ namespace Nekorobo
             return false;
         }
 
+        /// <summary>出来事へのひとこと。起きたら1回だけ、sec 秒出す（出している間は順番の案内を待たせる）。</summary>
+        void TutReactTick(float dt)
+        {
+            if (tut.reactT > 0)
+            {
+                tut.reactT -= dt;
+                if (tut.reactT <= 0) TutRender(false, true);    // 順番の案内へ戻す
+                return;
+            }
+            if (tut.okT > 0) return;                            // 「できた」の合図の最中は待つ
+            for (int i = 0; i < tut.react.Count; i++)
+            {
+                if (tut.reactDone[i]) continue;
+                var r = tut.react[i];
+                string on = J.S(r, "on") ?? "";
+                bool hit = on.StartsWith("hit:") ? tut.ev.Contains(on)
+                         : TutDone(new JObject { ["until"] = on, ["r"] = r["r"] ?? new JValue(2.2f) });
+                if (!hit) continue;
+                tut.reactDone[i] = true;
+                tut.reactT = J.F(r, "sec", 4); if (tut.reactT <= 0) tut.reactT = 4;
+                tut.reactSay = J.S(r, "say") ?? "";
+                TutRender(false, true);
+                SeUi("talk_open");
+                break;
+            }
+            tut.ev.Clear();                                     // 起きた瞬間だけ見る（あとから出しなおさない）
+        }
+
         /// <summary>1/60 秒ごと（FixedUpdate）。できたら「いいぞ！」を少し出して次へ。</summary>
         void TutTick(float dt)
         {
+            if (tut == null) return;
+            if (state == "play") TutReactTick(dt);
             if (tut == null || tut.i >= tut.steps.Count) return;
             if (state != "play") return;
+            if (tut.reactT > 0) return;                         // ひとことの間は、順番の案内を進めない
             if (tut.okT > 0)
             {
                 tut.okT -= dt;
@@ -266,16 +309,22 @@ namespace Nekorobo
             if (TutDone(tut.steps[tut.i] as JObject)) { tut.okT = 1.1f; TutRender(true, true); SeUi("tut_ok"); }
         }
 
-        /// <summary>矢印を指す物の上で跳ねさせる（毎フレーム）。できた合図を出している間と結果では消す。</summary>
+        /// <summary>
+        /// 矢印（画面に重ねる平面の「⇩」）を指す物の上で跳ねさせる（毎フレーム）。
+        /// できた合図を出している間と結果では消す。
+        /// </summary>
         void TutArrowTick()
         {
-            if (tut == null || tutArrow == null) return;
-            bool live = state != "result" && tut.i < tut.steps.Count;
-            if (!live) { tutArrow.gameObject.SetActive(false); hud.Story.TutHide(); return; }
+            if (tut == null) return;
+            bool has = tut.i < tut.steps.Count;
+            if (state == "result" || (!has && tut.reactT <= 0)) { hud.Story.ArrowHide(); hud.Story.TutHide(); return; }
+            if (!has) { hud.Story.ArrowHide(); return; }
             var s = tut.steps[tut.i] as JObject;
             Vector3? tg = tut.okT > 0 || s == null ? null : TutTarget(s["arrow"]);
-            tutArrow.gameObject.SetActive(tg != null);
-            if (tg != null) tutArrow.position = tg.Value + Vector3.up * (0.75f + Mathf.Abs(Mathf.Sin(t * 4.2f)) * 0.32f);
+            if (tg == null || mainCam == null) { hud.Story.ArrowHide(); return; }
+            var sp = mainCam.WorldToScreenPoint(tg.Value + Vector3.up * 0.55f);
+            if (sp.z <= 0) { hud.Story.ArrowHide(); return; }
+            hud.Story.ArrowAt(sp, Mathf.Abs(Mathf.Sin(t * 4.2f)) * 14);
         }
 
         // ================================================================ 続きから（ストーリーの途中経過）
