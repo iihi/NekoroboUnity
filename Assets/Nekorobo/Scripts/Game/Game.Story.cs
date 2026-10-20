@@ -263,7 +263,7 @@ namespace Nekorobo
                 return;
             }
             tut.t += dt;
-            if (TutDone(tut.steps[tut.i] as JObject)) { tut.okT = 1.1f; TutRender(true, true); }
+            if (TutDone(tut.steps[tut.i] as JObject)) { tut.okT = 1.1f; TutRender(true, true); SeUi("tut_ok"); }
         }
 
         /// <summary>矢印を指す物の上で跳ねさせる（毎フレーム）。できた合図を出している間と結果では消す。</summary>

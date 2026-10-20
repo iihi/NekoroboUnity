@@ -137,6 +137,7 @@ namespace Nekorobo
         {
             // モデル（glb）は遊ぶ前に全部読む（JS版 loadAssets と同じ）。客は18人ぶん
             hud.Toast("モデルを読み込み中…");
+            Sound.Init();                                  // 効果音（se.json から裏で作る）と BGM
             Props.LoadCatalog();                           // 置き物のカタログ（catalog.json・models.json の props）
             await ModelStore.LoadAll();
             await Scenery.LoadModels();                    // まわりの飾りのモデル（木・建物…）
@@ -461,6 +462,7 @@ namespace Nekorobo
         void Update()
         {
             NetTick(Time.deltaTime);                        // オンライン：ホストは配り、ゲストは当てて入力を送る
+            SoundTick();                                    // BGM の場面と、M キーの音の ON/OFF
             if (stage == null || players.Count == 0) return;
             // 入力は毎フレーム拾う（FixedUpdate だと押した瞬間を取りこぼす）
             var keyIn = ReadInput();
@@ -754,6 +756,7 @@ namespace Nekorobo
                 var jv = rb.linearVelocity;
                 rb.linearVelocity = new Vector3(jv.x, EffJumpSpd(P), jv.z);
                 P.lastJump = t; P.airborne = true; SetFace(P, "fast", 0.4f);
+                Se("jump", rb.position, P);
                 // 空中の横の速さの上限＝飛距離 ÷ 滞空時間。ジャンプ台の上で跳んだときは抑えない（台の勢いで遠くへ飛ぶ物なので）
                 var jp = rb.position;
                 bool onRamp = ents.Exists(e => e.kind == "ramp" && new Vector2(e.Pos.x - jp.x, e.Pos.z - jp.z).magnitude < 1.3f);
@@ -765,6 +768,7 @@ namespace Nekorobo
                 float fall = Mathf.Max(0, -P.prevVy);
                 if (fall > 1.5f)
                 {
+                    Se("land", rb.position, P, 1, Mathf.Clamp(fall / 5, 0.4f, 1));
                     if (P.carried != null && !InvOn(P))
                         P.carried.integ = Mathf.Max(0, P.carried.integ - fall * 2.2f * P.carried.dish.frag);
                     shake = Mathf.Min(12, shake + fall * 1.2f);
@@ -830,6 +834,7 @@ namespace Nekorobo
                     P.carried = new Carried { dish = ord.dish, integ = 100, order = ord };
                     P.look.ShowDish(ord.dish);
                     Say(P, "ピックアップにゃ！", 1.1f);
+                    Se("pick", p, P);
                     oi++;
                     SyncCounterPlates();
                 }
@@ -860,6 +865,7 @@ namespace Nekorobo
             hud.Pop(at + Vector3.up * 0.7f, Yen(sale) + " (" + Mathf.RoundToInt(tier * 100) + "%)", 0x1a9e4b, true);
             if (steps > 0)
                 hud.Pop(at + Vector3.up * 1.15f, P.dcombo + " 連続 +" + Mathf.RoundToInt(T.comboBonus * steps * 100) + "%", 0xff9500, true);
+            Se("serve", at, P, Mathf.Pow(2, Mathf.Min(steps, 7) * 2 / 12f));
             Say(P, steps > 0 ? P.dcombo + "連続にゃ！" : (tier >= 1 ? "完璧にゃ！" : (tier <= 0.5f ? "ごめんにゃ…" : "おまちにゃ！")), 1.3f);
             if (done >= orders.Count) Finish(true);
         }
@@ -914,12 +920,14 @@ namespace Nekorobo
                         P.broken = Random.value < 0.5f ? "left" : "right";
                         Say(P, (P.broken == "left" ? "左" : "右") + "に曲がれないにゃ！！", 2.4f);
                         hud.Pop(pp + Vector3.up * 1.0f, "旋回系 故障！", 0xff3b30, true);
+                        Se("broken", pp, P);
                     }
                     if (!P.brokenDrive && P.botDmg >= T.breakDrive)
                     {
                         P.brokenDrive = true; P.misT = 0;
                         Say(P, "エンジンが変にゃ！！", 2.4f);
                         hud.Pop(pp + Vector3.up * 1.2f, "駆動系 故障！", 0xff3b30, true);
+                        Se("broken", pp, P);
                     }
                     if (P.botDmg >= 100) DownPlayer(P, 0);
                 }
@@ -975,6 +983,12 @@ namespace Nekorobo
                     noisy = true;
                 }
             }
+            // **ぶつかった音は1回の衝突につき1つ。**何に当たったかで選び、強さで大きさを変える。
+            // ロボの絡まない家具どうしの連鎖は、小さめにする（何十個も同時に鳴るので）
+            {
+                string kind = hitP.Count == 2 ? "clash" : (guest != null && isRobot) ? "guest" : (fur != null && noisy) ? "crash" : isRobot ? "bump" : null;
+                if (kind != null) Se(kind, rp, hitP.Count > 0 ? hitP[0] : null, 1, Mathf.Clamp(j / (T.hitThreshold * 4), 0.25f, 1) * (isRobot ? 1 : 0.5f));
+            }
             if (hitP.Count == 2 && j >= T.dropImpulse)
             {
                 var A = hitP[0]; var B2 = hitP[1];
@@ -993,6 +1007,7 @@ namespace Nekorobo
                 {
                     var cp = a.player == P ? b.Pos : a.Pos;
                     hud.Pop(cp + Vector3.up * 0.6f, P.combo + " combo", 0xff3b30, P.combo >= 4);
+                    Se("combo", cp, P, Mathf.Pow(2, Mathf.Min(P.combo - 2, 10) / 12f));
                 }
                 PayWreck(P);
             }
@@ -1015,6 +1030,7 @@ namespace Nekorobo
         {
             if (e.ring != null) return;
             hud.Pop(e.Pos + Vector3.up * 0.8f, "☆", 0xe8b400, true);
+            Se("faint", e.Pos);
             e.ring = Part.Add(stageRoot, MeshGen.Torus(0.2f, 0.035f, 8, 20), Mats.Get(0xe8b400), e.Pos, shadow: false, name: "DownRing");
             e.ring.transform.rotation = Part.Euler3(Mathf.PI / 2, 0, 0);
         }
@@ -1029,6 +1045,7 @@ namespace Nekorobo
             if (P.carried != null) DropDish(P, Vector3.zero);
             SetFace(P, "dead", 99);
             Say(P, P.revT > 0 ? "たすけてにゃ～！" : "もうダメにゃ…", 3.0f);
+            if (P.revT > 0) Se("down", P.ent.rb.position, P, 1.3f, 0.6f); else Se("down", P.ent.rb.position, P);
             hud.Pop(P.ent.rb.position + Vector3.up * 1.2f, P.revT > 0 ? "おちた！ " + Mathf.RoundToInt(P.revT) + "秒" : "リタイア", 0xe53935, true);
             P.ent.rb.linearVelocity = Vector3.zero; P.ent.rb.angularVelocity = Vector3.zero;
             if (P.ring != null) P.ring.SetActive(false);
@@ -1050,11 +1067,20 @@ namespace Nekorobo
                     DropBack(P.ent, sp, 0.6f);
                     P.ent.rb.rotation = Coord.RotFace(P.spawnRot);
                     Respawned(P.ent, sp, P.col, false);
+                    Se("revive", new Vector3(sp.x, 0.5f, sp.z), P);
                     SetFace(P, "norm", 99);
                     Say(P, "もどったにゃ！", 1.6f);
                     if (P.ring != null) P.ring.SetActive(true);
                 }
             }
+        }
+
+        /// <summary>浸かったばかりか、まだ動いている物（JS版 stirs）。しぶきはこれだけに出す。</summary>
+        static bool Stirs(Ent e)
+        {
+            if (e.wet < 0.8f) return true;
+            var v = e.rb.linearVelocity;
+            return new Vector2(v.x, v.z).magnitude > 0.8f;
         }
 
         // ================================================================ 池・溶岩・海・穴（JS版 updateHazards の後半）
@@ -1080,6 +1106,17 @@ namespace Nekorobo
                 float foot = p.y - (e.size.y > 0 ? e.size.y / 2 : 0.5f);
                 if (td == null || !td.liquid || foot > -0.06f) { e.wet = 0; continue; }
                 if (rafts.Count > 0 && OverRaftNow(p)) { e.wet = 0; continue; }   // いかだの上なら水ではない
+                // **入った瞬間にしぶきをまとめて上げる**（ロボ・客・家具）。音はロボと客だけ。
+                // 海に落ちたロボは wet を増やさないので、印として小さな値を入れておく（入れないと毎フレーム出る）
+                if (e.wet <= 0)
+                {
+                    int col = td.burn ? 0xff7a2a : td.deadly ? 0x8fc8ea : 0x9fd8f0;
+                    bool big = e.player != null || e.kind == "guest";
+                    SpawnSplash(new Vector3(p.x, 0.08f, p.z), col, big ? 14 : 8);
+                    if (td.burn) SpawnSplash(new Vector3(p.x, 0.1f, p.z), 0xffd060, big ? 6 : 3);   // 火の粉
+                    if (big) Se(td.burn ? "sizzle" : "splash", p, e.player, 1, e.player != null ? 1 : 0.6f);
+                    e.wet = 1e-6f;
+                }
                 if (td.deadly)
                 {
                     if (e.kind == "guest") { RescueGuest(e); continue; }
@@ -1111,7 +1148,7 @@ namespace Nekorobo
                         e.hp = Mathf.Max(0, e.hp - GuestHurt(T.lavaBurn * 1.2f * dt));
                         if (was > 0 && e.hp <= 0) GuestDown(e);
                     }
-                    if (Random.value < 12 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0xff7a2a, 1);
+                    if (Stirs(e) && Random.value < 12 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0xff7a2a, 1);
                 }
                 else
                 {
@@ -1127,7 +1164,7 @@ namespace Nekorobo
                         e.hp = Mathf.Max(0, e.hp - GuestHurt(T.waterDmg * 0.6f * dt));
                         if (was > 0 && e.hp <= 0) GuestDown(e);
                     }
-                    if (Random.value < 6 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0x9fd8f0, 1);
+                    if (Stirs(e) && Random.value < 6 * dt) SpawnSplash(new Vector3(p.x, 0.05f, p.z), 0x9fd8f0, 1);
                 }
             }
         }

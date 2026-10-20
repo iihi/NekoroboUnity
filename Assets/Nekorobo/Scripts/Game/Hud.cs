@@ -46,6 +46,65 @@ namespace Nekorobo
             title.OpenPage(page);
         }
         GameObject gearBtn;
+        Image sndBtn; RawImage sndIcon;
+        static Texture2D sndOnTex, sndOffTex;
+
+        /// <summary>音の ON/OFF を切り替える（ボタン・M キー）。ON にしたら、鳴ることが分かるように一つ鳴らす。</summary>
+        public void FlipSound()
+        {
+            bool wasOff = Sound.Off;
+            Sound.SetOff(!wasOff);
+            ShowSound();
+            if (wasOff) StartCoroutine(OkLater());
+        }
+        System.Collections.IEnumerator OkLater() { yield return new WaitForSecondsRealtime(0.06f); Game.SeUi("ok"); }
+
+        void ShowSound()
+        {
+            if (sndOnTex == null) { sndOnTex = SpeakerTex(false); sndOffTex = SpeakerTex(true); }
+            bool off = Sound.Off;
+            sndIcon.texture = off ? sndOffTex : sndOnTex;
+            sndBtn.color = off ? new Color(0.48f, 0.5f, 0.55f, 0.95f) : new Color(0.16f, 0.19f, 0.24f, 0.9f);
+        }
+
+        /// <summary>スピーカーの絵（JS版の SVG と同じ形）。off なら波の代わりに ×。48×48、24単位の座標で描く。</summary>
+        static Texture2D SpeakerTex(bool off)
+        {
+            const int N = 48; const float S = N / 24f;
+            var px = new Color32[N * N];
+            System.Func<float, float, bool> body = (x, y) =>
+            {
+                // M4 9h4l5-4v14l-5-4H4z（y は下向き）
+                if (x >= 4 && x <= 8 && y >= 9 && y <= 15) return true;
+                if (x >= 8 && x <= 13) { float k = (x - 8) / 5f; return y >= 9 - 4 * k && y <= 15 + 4 * k; }
+                return false;
+            };
+            System.Func<float, float, float, float, float, float, float> seg = (x, y, ax, ay, bx, by) =>
+            {
+                float dx = bx - ax, dy = by - ay, t = Mathf.Clamp01(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy));
+                float qx = ax + dx * t - x, qy = ay + dy * t - y; return Mathf.Sqrt(qx * qx + qy * qy);
+            };
+            System.Func<float, float, float, float, float, float, float> arc = (x, y, cx, cy, r, a1) =>
+            {
+                // 中心 (cx, cy)・半径 r の右側の弧（-a1〜a1 ラジアン）までの距離
+                float a = Mathf.Atan2(y - cy, x - cx);
+                if (Mathf.Abs(a) > a1) return 99;
+                return Mathf.Abs(Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) - r);
+            };
+            for (int py = 0; py < N; py++)
+                for (int qx = 0; qx < N; qx++)
+                {
+                    float x = (qx + 0.5f) / S, y = (N - 1 - py + 0.5f) / S;
+                    bool on = body(x, y);
+                    float d = off ? Mathf.Min(seg(x, y, 16, 9, 21, 15), seg(x, y, 21, 9, 16, 15))
+                                  : Mathf.Min(arc(x, y, 13, 12, 3.6f, 0.98f), arc(x, y, 13, 12, 7.5f, 0.82f));
+                    if (d <= 1.1f) on = true;
+                    px[py * N + qx] = on ? new Color32(255, 255, 255, 255) : new Color32(255, 255, 255, 0);
+                }
+            var t = new Texture2D(N, N, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
+            t.SetPixels32(px); t.Apply(false);
+            return t;
+        }
         float readyAnim; string readyShown = "";
         GameObject menuPanel;
         Text menuText;
@@ -132,6 +191,21 @@ namespace Nekorobo
                 var t = UiKit.Label(im.transform, "⚙", 22, Color.white, false, TextAnchor.MiddleCenter);
                 UiKit.Stretch(t.rectTransform);
                 gearBtn = im.gameObject;
+            }
+            // ---- 音の ON/OFF（歯車の下）。M キーでも切り替わる。BGM も効果音もまとめて止める
+            {
+                var im = UiKit.Img(root, new Color(0.16f, 0.19f, 0.24f, 0.9f), 10, "Sound");
+                im.raycastTarget = true;
+                var r = im.rectTransform; r.anchorMin = r.anchorMax = new Vector2(1, 1); r.pivot = new Vector2(1, 1);
+                r.sizeDelta = new Vector2(36, 36); r.anchoredPosition = new Vector2(-12, -132);
+                var b = im.gameObject.AddComponent<Button>(); b.targetGraphic = im;
+                b.navigation = new Navigation { mode = Navigation.Mode.None };
+                b.onClick.AddListener(() => { FlipSound(); UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null); });
+                var ic = UiKit.Rect(im.transform, "Icon").gameObject.AddComponent<RawImage>();
+                ic.raycastTarget = false;
+                var ir = ic.rectTransform; ir.anchorMin = ir.anchorMax = new Vector2(0.5f, 0.5f); ir.sizeDelta = new Vector2(24, 24);
+                sndBtn = im; sndIcon = ic;
+                ShowSound();
             }
 
             // ---- お知らせ（調子を変えたときなど）
@@ -344,6 +418,7 @@ namespace Nekorobo
                 readyShown = label; readyAnim = 0;
                 center.text = label;
                 bool go = label == "スタート！";
+                if (label != "") Game.SeUi(go ? "go" : "count");
                 center.fontSize = go ? 74 : 110;
                 center.color = go ? Mats.Hex(0xffd24a) : Color.white;
             }
@@ -381,6 +456,10 @@ namespace Nekorobo
             gearBtn.SetActive(!settings.Open);
             bool tall = Opt.hud2 && game.stage != null && !title.Open;
             ((RectTransform)gearBtn.transform).anchoredPosition = new Vector2(-12, tall ? -122 : -88);
+            // 音のボタンはタイトルの上でも押せるように、いちばん手前へ
+            sndBtn.gameObject.SetActive(!settings.Open);
+            sndBtn.rectTransform.anchoredPosition = new Vector2(-12, tall ? -166 : -132);
+            sndBtn.transform.SetAsLastSibling();
             toast.rectTransform.offsetMin = new Vector2(0, tall ? -150 : -110); toast.rectTransform.offsetMax = new Vector2(0, tall ? -126 : -70);
             if (toastT > 0)
             {
@@ -427,12 +506,15 @@ namespace Nekorobo
                 if (MenuOpen) menuPanel.SetActive(false); else MenuOpenNow();
             }
             if (!MenuOpen) return;
+            int was = menuCur;
             if (kb.downArrowKey.wasPressedThisFrame) menuCur = Mathf.Min(menuAct.Count - 1, menuCur + 1);
             if (kb.upArrowKey.wasPressedThisFrame) menuCur = Mathf.Max(0, menuCur - 1);
             if (kb.pageDownKey.wasPressedThisFrame) menuCur = Mathf.Min(menuAct.Count - 1, menuCur + 10);
             if (kb.pageUpKey.wasPressedThisFrame) menuCur = Mathf.Max(0, menuCur - 10);
+            if (menuCur != was) Game.SeUi("cur");
             if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
             {
+                Game.SeUi("ok");
                 menuPanel.SetActive(false);
                 if (menuCur < menuAct.Count) menuAct[menuCur]();
                 return;

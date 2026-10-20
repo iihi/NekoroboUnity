@@ -594,6 +594,12 @@ namespace Nekorobo
             switch (k)
             {
                 case "rs": RespawnMark(FromJs((float)e[1], 0, (float)e[2]), (int)e[3], (int)e[4] != 0); break;
+                case "se":
+                    {
+                        Vector3? at = e[2].Type != JTokenType.Null ? FromJs((float)e[2], (float)e[3], (float)e[4]) : (Vector3?)null;
+                        Se((string)e[1], at, null, e.Count > 5 ? (float)e[5] : 1, e.Count > 6 ? (float)e[6] : 1, true);
+                        break;
+                    }
                 case "bm": BallFly(null, FromJs((float)e[1], 0, (float)e[2]), FromJs((float)e[3], 0.06f, (float)e[4]), (int)e[5]); break;
                 case "bl": ExplodeFx(FromJs((float)e[1], (float)e[2], (float)e[3]), (int)e[4] != 0); break;
                 case "ar": { Ent en; if (byNid.TryGetValue((int)e[1], out en)) RespawnArrow(en, (int)e[2]); break; }

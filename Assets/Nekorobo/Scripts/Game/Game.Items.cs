@@ -120,6 +120,7 @@ namespace Nekorobo
             int cur = have.FindIndex(i => i.k == P.slot), n = have.Count;
             P.slot = have[((cur + step) % n + n) % n].k;
             Say(P, ItemOf(P.slot).n, 0.8f);
+            Se("cycle", P.ent.rb.position, P, 1, 0.7f);
         }
 
         bool CanUse(Player P, ItemDef it)
@@ -157,9 +158,11 @@ namespace Nekorobo
             if (P.slot == null) return;
             var it = ItemOf(P.slot);
             if (W.Has(it.k) <= 0) return;
-            if (!CanUse(P, it)) { Say(P, "いま使えないにゃ", 0.9f); return; }
+            if (!CanUse(P, it)) { Say(P, "いま使えないにゃ", 0.9f); Se("ng", null, P, 1, 0.6f); return; }
             if (DoUse(P, it))
             {
+                // 使った音。弾道ミサイルは打ち上げ（BallFly）で鳴らす
+                if (it.k != "ball") Se("it_" + it.k, P.ent.rb.position, P);
                 if (it.ammo > 0)
                 {
                     // 1発ぶん減らす。撃ち切ったらパックごと無くなる
@@ -249,6 +252,7 @@ namespace Nekorobo
             P.slipSpin = (Random.value < 0.5f ? -1 : 1) * T.bananaSpin;
             Say(P, "つるっ！！", 1.2f);
             SetFace(P, "hit", 1.0f);
+            Se("slip", P.ent.rb.position, P);
             hud.Pop(P.ent.rb.position + Vector3.up * 0.9f, "つるっ！", 0xf5d020, true);
             if (P.carried != null) P.carried.integ = Mathf.Max(0, P.carried.integ - 22 * P.carried.dish.frag);
         }
@@ -618,6 +622,7 @@ namespace Nekorobo
             g.localScale = Vector3.one * 1.45f;                   // 実寸だと点にしか見えない
             var mk = AimMesh(col); mk.localScale = Vector3.one * 0.8f; mk.position = new Vector3(aim.x, 0.05f, aim.z);
             balls.Add(new Ball { owner = owner, a = p, b = aim, mesh = g, mark = mk, fire = fire, fireM = fm });
+            Se("it_ball", new Vector3(p.x, 0.5f, p.z), null, 1, 1, true);   // 参加者の画面でもここを通る（"bm"）ので配らない
         }
 
         void UpdateBalls(float dt)
@@ -748,6 +753,7 @@ namespace Nekorobo
             var fl = Part.Add(fxRoot, MeshGen.Sphere(1, 16, 12), m, at, false, "Blast").transform;
             fl.localScale = Vector3.one * 0.35f;
             blasts.Add(new Blast { mesh = fl, m = m, fast = !boom });
+            Se(boom ? "boom" : "zap_hit", at, null, 1, 1, true);
             if (boom) SpawnPuffs(at); else SpawnFlash(at);
             bool keep = npReplay; npReplay = true;                 // 飛沫は "bl" を受けた側で出すので、別に配らない
             SpawnSplash(at, boom ? 0xff9040 : 0xdff6ff, boom ? 14 : 8);

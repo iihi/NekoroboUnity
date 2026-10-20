@@ -56,6 +56,7 @@ namespace Nekorobo
         class Cur
         {
             public Player P; public float x, y; public int idx = -1; public bool onRdy, placed, armed, ready;
+            public int seOn = -2;               // カーソルの音を鳴らした所（品物の番号、-3＝購入完了）
             public float nx = -1, ny = -1; public bool netSeen;          // オンラインの相手の指（割合で届く）
             public float lockT, buyT; public bool pOk, pUse;
             public RectTransform el; public Text tag; public Image tagBg; public Image tagPoor;
@@ -439,7 +440,7 @@ namespace Nekorobo
                     if (inside && ms.leftButton.wasPressedThisFrame)
                     {
                         mc.x = mx; mc.y = my; Over(mc);
-                        if (mc.onRdy) mc.ready = !mc.ready;
+                        if (mc.onRdy) { mc.ready = !mc.ready; Game.SeUi(mc.ready ? "ok" : "back"); }
                         else if (mc.idx >= 0 && !mc.ready) Buy(mc);
                     }
                 }
@@ -473,13 +474,19 @@ namespace Nekorobo
                     c.y = Mathf.Clamp(c.y + vy * sp * k * dt, 0, gh);
                 }
                 Over(c);
+                if (vx != 0 || vy != 0)
+                {
+                    // 自分の指が別の品物（か「購入完了」）に乗ったら、カーソルの音
+                    int on = c.onRdy ? -3 : c.idx;
+                    if (on != c.seOn) { if (on != -1) Game.SeUi("cur", 0.7f); c.seOn = on; }
+                }
                 if (!inp.ok) c.armed = true;                        // 一度離すまで決定しない
                 if (inp.ok && !c.pOk && c.armed && c.lockT <= 0)
                 {
-                    if (c.onRdy) c.ready = !c.ready;                // 下の「購入完了」の上なら Y/Z と同じ
+                    if (c.onRdy) { c.ready = !c.ready; Game.SeUi(c.ready ? "ok" : "back"); }   // 下の「購入完了」の上なら Y/Z と同じ
                     else if (!c.ready) Buy(c);
                 }
-                if (inp.use && !c.pUse && c.lockT <= 0) c.ready = !c.ready;
+                if (inp.use && !c.pUse && c.lockT <= 0) { c.ready = !c.ready; Game.SeUi(c.ready ? "ok" : "back"); }
                 c.pOk = inp.ok; c.pUse = inp.use;
             }
 
@@ -492,7 +499,9 @@ namespace Nekorobo
             if (any && all) { g.ShopDone(); return; }
             if (t > 0)
             {
+                int was = Mathf.CeilToInt(t);
                 t -= dt;
+                if (t > 0 && t <= 5 && Mathf.CeilToInt(t) != was) Game.SeUi("tick");   // 残り5秒から1秒ごと
                 if (t <= 0) { g.ShopDone(); return; }
             }
             Refresh();
@@ -624,10 +633,12 @@ namespace Nekorobo
         {
             if (c.idx < 0 || c.idx >= goods.Count) return;
             var gd = goods[c.idx]; var W = g.WalletOf(c.P);
-            if (gd.Full(W)) { msg = gd.n + "はもう最大です"; return; }
+            float sv = c.P.src.kind == "npc" ? 0.5f : 1;    // NPC の買い物は控えめに
+            if (gd.Full(W)) { msg = gd.n + "はもう最大です"; Game.SeUi("ng", sv); return; }
             // 足りなければ買えない（借金はやめた）
-            if (W.cash < gd.Cost(W)) { msg = "所持金が足りません（" + gd.n + " " + Game.Yen(gd.Cost(W)) + "）"; return; }
+            if (W.cash < gd.Cost(W)) { msg = "所持金が足りません（" + gd.n + " " + Game.Yen(gd.Cost(W)) + "）"; Game.SeUi("ng", sv); return; }
             msg = "";
+            Game.SeUi("buy", sv);
             if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
         }
 

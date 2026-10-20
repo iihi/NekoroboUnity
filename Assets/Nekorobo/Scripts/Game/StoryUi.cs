@@ -133,6 +133,7 @@ namespace Nekorobo
             if (ls == null || ls.Count == 0) { if (onDone != null) onDone(); return; }
             lines = ls; li = 0; done = onDone;
             prevKey = true;                 // 押したままの指で読み飛ばさない
+            Game.SeUi("talk_open");
             var tt = (title ?? "").Split('　');
             talkTitleSmall.text = tt.Length > 1 ? tt[0] : "";
             talkTitle.text = tt.Length > 1 ? tt[1] : tt[0];
@@ -177,6 +178,7 @@ namespace Nekorobo
 
         void TalkNext()
         {
+            Game.SeUi("talk");
             if (++li >= lines.Count) TalkClose(false);
             else TalkRender();
         }
@@ -323,6 +325,7 @@ namespace Nekorobo
         public void Bang(bool cleared, string sub, System.Action then)
         {
             bangText.text = cleared ? "STAGE CLEAR!" : "FAILED…";
+            Game.SeUi(cleared ? "clear" : "fail");
             bangSub.text = sub;
             var top = cleared ? Mats.Hex(0x63d47f) : Mats.Hex(0xff8f7c);
             var bot = cleared ? Mats.Hex(0x4cbf68) : Mats.Hex(0xe8604a);

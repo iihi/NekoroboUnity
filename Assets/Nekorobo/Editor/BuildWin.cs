@@ -25,7 +25,7 @@ namespace Nekorobo.EditorTools
 
         // 同梱する物（HTML版のフォルダから）。Unity が読むのはこれだけ（DataRoot を使っている所）
         static readonly string[] DataDirs = { "stages", "assets" };
-        static readonly string[] DataFiles = { "tune.json", "configs.js", "tiles.js", "net.json" };
+        static readonly string[] DataFiles = { "tune.json", "configs.js", "tiles.js", "net.json", "se.json" };   // se.json＝効果音のレシピ
 
         [MenuItem("Nekorobo/Windows で書き出す")]
         public static void Build() { Run(Dir, false); }

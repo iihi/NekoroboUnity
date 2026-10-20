@@ -113,6 +113,7 @@ namespace Nekorobo
 
         void Focus(int i)
         {
+            if (Mathf.Clamp(i, 0, 1) != cur && Open) Game.SeUi("cur");
             cur = Mathf.Clamp(i, 0, 1);
             for (int k = 0; k < 2; k++) btnRing[k].enabled = k == cur;
         }
@@ -142,7 +143,7 @@ namespace Nekorobo
                 for (int k = 0; k < 2; k++)
                     if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null)) { Focus(k); fire = true; }
             }
-            if (fire) { Close(); act[cur](); }
+            if (fire) { Game.SeUi("ok"); Close(); act[cur](); }
         }
 
         static void Place(RectTransform r, float x, float y, float w, float h)

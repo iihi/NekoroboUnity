@@ -595,7 +595,7 @@ namespace Nekorobo
             if (back && !pBack)
             {
                 var bk = items.Find(x => x.back && !x.off);
-                if (bk != null) { Remember(up, down, left, right, ok, back); bk.fire(); return; }
+                if (bk != null) { Remember(up, down, left, right, ok, back); Game.SeUi("back"); bk.fire(); return; }
             }
             // 十字キー・矢印キーを使ったら指は引っ込める（両方出ていると、どちらが効いているのか分からない）
             if ((up && !pUp) || (down && !pDown) || (left && !pLeft) || (right && !pRight)) Ptr.Hide();
@@ -620,10 +620,10 @@ namespace Nekorobo
                 if (ms.leftButton.wasPressedThisFrame)
                 {
                     int hi = HitAt(mp);
-                    if (hi >= 0) { Focus(hi); if (!items[hi].off) { items[hi].fire(); return; } }
+                    if (hi >= 0) { Focus(hi); if (!items[hi].off) { Game.SeUi(items[hi].back ? "back" : "ok"); items[hi].fire(); return; } }
                 }
             }
-            if (fire && idx < items.Count && !items[idx].off) { items[idx].fire(); return; }
+            if (fire && idx < items.Count && !items[idx].off) { Game.SeUi(items[idx].back ? "back" : "ok"); items[idx].fire(); return; }
             // 選んでいる物を、ふわっと上下させる（板は 1.15 秒、ボタンは 1.1 秒）
             float tt = Time.unscaledTime;
             for (int i = 0; i < items.Count; i++)
@@ -671,6 +671,7 @@ namespace Nekorobo
             i = Mathf.Clamp(i, 0, items.Count - 1);
             while (i >= 0 && i < items.Count && items[i].off) i += dir;
             if (i < 0 || i >= items.Count) return;
+            if (i != idx && items.Count > 0) Game.SeUi("cur");    // 開いたとき（同じ所に立てるだけ）は鳴らさない
             idx = i;
             for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx);
             if (cap != null) cap.text = items[idx].desc ?? "";

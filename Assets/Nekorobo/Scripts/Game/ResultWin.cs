@@ -293,7 +293,7 @@ namespace Nekorobo
                     btn.navigation = new Navigation { mode = Navigation.Mode.None };
                     var cb = btn.colors; cb.highlightedColor = new Color(0.96f, 0.96f, 0.96f); btn.colors = cb;
                     int idx = g.players.IndexOf(P);
-                    btn.onClick.AddListener(() => { if (Time.unscaledTime - shownAt > g.T.menuLock) { ok[idx] = !ok[idx]; Refresh(); } });
+                    btn.onClick.AddListener(() => { if (Time.unscaledTime - shownAt > g.T.menuLock) { ok[idx] = !ok[idx]; Game.SeUi("ok"); Refresh(); } });
                 }
                 okBtns.Add(b);
             }
@@ -380,7 +380,7 @@ namespace Nekorobo
                     continue;
                 }
                 bool now = P.input.ok;
-                if (now && !prevOk[i] && armed) { ok[i] = true; redraw = true; }
+                if (now && !prevOk[i] && armed) { if (!ok[i]) Game.SeUi("ok"); ok[i] = true; redraw = true; }
                 prevOk[i] = now;
             }
             // 自動送り。既定は 0（＝進まない）。0 より大きいときだけ数える

@@ -288,6 +288,7 @@ namespace Nekorobo
             dropped.Add(d);
             NetEv("dd", e.nid, Dishes.All.IndexOf(c.dish), orders.IndexOf(c.order), R2(p.x), R2(p.y + 0.22f), R2(-p.z), Mathf.RoundToInt(d.integ));
             SpawnSplash(p + Vector3.up * 0.15f, c.dish.col, 10);
+            Se("drop", p, P);
             return d;
         }
 
@@ -316,6 +317,7 @@ namespace Nekorobo
             d.order.taker = P;
             P.look.ShowDish(d.dish);
             Say(P, d.owner == P ? "拾い直したにゃ" : "いただきにゃ！", 1.2f);
+            Se("pick", P.ent.rb.position, P);
             KillDropped(d);
         }
 

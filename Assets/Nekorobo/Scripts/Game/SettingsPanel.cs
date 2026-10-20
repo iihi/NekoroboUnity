@@ -31,6 +31,10 @@ namespace Nekorobo
         // ---- つまみの表（JS版 TUNE_SPEC と同じ。アイテムの欄は移したら足す）
         struct Spec { public string k, n, sec; public float min, max, step; public int dec; public bool chk; }
         static Spec Sec(string s) { return new Spec { sec = s }; }
+        /// <summary>音のつまみの値（Control が名前で読み書きする）。</summary>
+        public class SndOpt { public float seVol, bgmVol; public bool seMute, bgmMute; }
+        readonly SndOpt snd = new SndOpt();
+
         static Spec S(string k, string n, float min, float max, float step, int dec = 0) { return new Spec { k = k, n = n, min = min, max = max, step = step, dec = dec }; }
         static Spec C(string k, string n) { return new Spec { k = k, n = n, chk = true }; }
 
@@ -101,6 +105,7 @@ namespace Nekorobo
         public SettingsPanel(RectTransform root, Game game)
         {
             g = game;
+            Sound.Init();                       // 音の一覧（試聴のボタン）を作るので、先に se.json を読んでおく
             EnsureEventSystem();
             // ---- 右の板（全部の高さ）。中はスクロール
             var p = UiKit.Img(root, BG, 0, "Settings");
@@ -198,6 +203,25 @@ namespace Nekorobo
             Button(HRow(), "いま全員にアイテムを全部持たせる", () => g.GiveAllItems());
             Button(HRow(), "ショップを開く（見た目の確認）", () => g.OpenShop());
             Label("Z で使う（弾道ミサイルは長押しで照準、離して発射）、X / C で持ち替え（上の帯の並びの順）。パッドは Y で使う、R1 / L1 で持ち替え。", 11, NOTE, false);
+
+            // ---- 音（JS版の右の検証パネルの「音」）。大きさと消すはこの端末で覚える
+            Section("音（M で全部の ON/OFF）");
+            snd.seVol = Mathf.Round(Sound.Volume * 100); snd.seMute = Sound.Muted;
+            snd.bgmVol = Mathf.Round(Sound.BgmVolume * 100); snd.bgmMute = Sound.BgmMuted;
+            Control(S("seVol", "効果音の大きさ(%)", 0, 100, 1, 0), snd, k => Sound.SetVolume(snd.seVol / 100f));
+            Control(C("seMute", "効果音を消す"), snd, k => Sound.SetMute(snd.seMute));
+            Control(S("bgmVol", "BGM の大きさ(%)", 0, 100, 1, 0), snd, k => Sound.SetBgmVolume(snd.bgmVol / 100f));
+            Control(C("bgmMute", "BGM を消す"), snd, k => Sound.SetBgmMute(snd.bgmMute));
+            Label("試しに鳴らす（中身は HTML版の se.json）", 11, NOTE, false);
+            {
+                Transform srow2 = null; int n = 0;
+                foreach (var k in Sound.Names)
+                {
+                    if (n++ % 3 == 0) srow2 = HRow();
+                    string kk = k;
+                    Button(srow2, Sound.Label(k), () => Sound.Play(kk));
+                }
+            }
 
             // ---- 今の収支
             Section("今の収支（ライブ検算）");
