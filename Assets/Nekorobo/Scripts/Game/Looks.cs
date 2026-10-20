@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace Nekorobo
 {
@@ -295,6 +296,10 @@ namespace Nekorobo
         /// 壁の飾り1枚。表はローカルの -Z（カメラ側。three.js の板の表と同じ）。
         /// 絵は板と字を重ねて組む（JS版は canvas に描いている。中身は同じ）。
         /// </summary>
+        /// <summary>黒板とメニュー表に書く料理と、お店の値段の倍率（組む前に Game が入れる）。</summary>
+        public static List<Dish> Menu;
+        public static float MenuPrice = 1;
+
         public static GameObject DecoMesh(Transform parent, DecoKind D)
         {
             var g = new GameObject("Deco_" + D.k);
@@ -321,27 +326,34 @@ namespace Nekorobo
                 tm.characterSize = size / 256f * D.h / 6.4f;
                 go.GetComponent<MeshRenderer>().sharedMaterial = Fonts.UI.material;
             };
+            // 品名と値段の1行（JS版 menuRow）。字の大きさは全部の行で同じにして、**長い品名は横に詰めて**収める
+            var menu = Menu != null && Menu.Count > 0 ? Menu : Dishes.All;
+            System.Action<Dish, float, float, float, float, int, int> row = (d, y, px, xl, xr, nameCol, yenCol) =>
+            {
+                string yen = "¥" + Mathf.RoundToInt(d.price * MenuPrice);
+                txt(xr, y, yen, yenCol, px, TextAnchor.MiddleRight);
+                txt(xl, y, d.n, nameCol, px, TextAnchor.MiddleLeft);
+                // 値段の幅（だいたい 0.6 字ぶん × 字数）と8px のすき間を除いた幅に、品名が収まらなければ横に縮める
+                var nm = t.GetChild(t.childCount - 1).GetComponent<TextMesh>();
+                var mr = nm.GetComponent<MeshRenderer>();
+                float room = (xr - xl - yen.Length * px * 0.6f - 8) / 256f * D.w;
+                float wNow = mr.bounds.size.x / Mathf.Max(1e-4f, t.lossyScale.x);
+                if (wNow > room && wNow > 0) { var ls = nm.transform.localScale; nm.transform.localScale = new Vector3(ls.x * room / wNow, ls.y, ls.z); }
+            };
             switch (D.k)
             {
                 case "board":
                     rect(0, 0, 256, 256, 0x8a6a44); rect(14, 14, 228, 228, 0x2f4038);
                     txt(128, 44, "本日のおすすめ", 0xf2efe2, 30, TextAnchor.MiddleCenter);
                     rect(40, 65, 176, 2, 0xcfe0c8);
-                    for (int i = 0; i < 4; i++)
-                    {
-                        var d = Dishes.All[i];
-                        txt(40, 104 + i * 38, d.n, 0xe8e4d2, 26, TextAnchor.MiddleLeft);
-                        txt(216, 104 + i * 38, "¥" + d.price, 0xe8e4d2, 26, TextAnchor.MiddleRight);
-                    }
+                    for (int i = 0; i < 4 && i < menu.Count; i++) row(menu[i], 104 + i * 38, 24, 32, 256 - 32, 0xe8e4d2, 0xe8e4d2);
                     break;
                 case "menu":
                     rect(0, 0, 256, 256, 0xfbf6ea); rect(0, 0, 256, 52, 0xc0483a);
                     txt(128, 27, "MENU", 0xfff8e8, 34, TextAnchor.MiddleCenter);
-                    for (int i = 0; i < 5; i++)
+                    for (int i = 0; i < 5 && i < menu.Count; i++)
                     {
-                        var d = Dishes.All[i];
-                        txt(26, 84 + i * 34, d.n, 0x3a332a, 22, TextAnchor.MiddleLeft);
-                        txt(230, 84 + i * 34, "¥" + d.price, 0x8a7a5a, 22, TextAnchor.MiddleRight);
+                        row(menu[i], 84 + i * 34, 22, 22, 256 - 22, 0x3a332a, 0x8a7a5a);
                         rect(26, 101 + i * 34, 204, 1, 0xe0d8c4);
                     }
                     break;

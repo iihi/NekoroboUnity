@@ -280,8 +280,8 @@ namespace Nekorobo
         Dropped SpillDish(Carried c, Vector3 p, Vector3 v, Vector3 kick, Player P)
         {
             var e = MakeBody("dish", p + Vector3.up * 0.22f, new Vector3(0.19f, 0.06f, 0.19f), Quaternion.identity, false, 1.4f, 0.6f, 0.2f, 1.4f);
-            Part.Add(e.transform, MeshGen.Cylinder(0.17f, 0.15f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
-            DishLook.Build(e.transform, c.dish, 0.1f);
+            var pl = Part.Add(e.transform, MeshGen.Cylinder(0.17f, 0.15f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
+            DishLook.Build(e.transform, c.dish, 0.1f, pl);
             e.rb.linearVelocity = new Vector3(v.x * 0.5f + kick.x, 2.0f, v.z * 0.5f + kick.z);
             e.rb.angularVelocity = new Vector3((Random.value - 0.5f) * 8, (Random.value - 0.5f) * 6, (Random.value - 0.5f) * 8);
             var d = new Dropped { ent = e, order = c.order, dish = c.dish, integ = Mathf.Max(0, c.integ - T.dropDmg), owner = P };
@@ -296,8 +296,8 @@ namespace Nekorobo
         {
             var e = MakeBody("dish", at, new Vector3(0.19f, 0.06f, 0.19f), Quaternion.identity, false, 1.4f, 0.6f, 0.2f, 1.4f);
             byNid.Remove(e.nid); NidAdd(e, nid);
-            Part.Add(e.transform, MeshGen.Cylinder(0.17f, 0.15f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
-            DishLook.Build(e.transform, dish, 0.1f);
+            var pl = Part.Add(e.transform, MeshGen.Cylinder(0.17f, 0.15f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
+            DishLook.Build(e.transform, dish, 0.1f, pl);
             GuestFreeze(e);
             dropped.Add(new Dropped { ent = e, order = order, dish = dish, integ = integ });
         }

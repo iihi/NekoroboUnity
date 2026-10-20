@@ -176,9 +176,19 @@ namespace Nekorobo
             // いかだの「下」には、すぐ隣の地形を敷く（under）
             BuildUnder();
             var groups = new Dictionary<char, HashSet<Vector2Int>>();
+            // マスごとに塗った床の絵は、デザインごとに別にまとめる（見た目だけ。ふつうの床と同じ板）
+            var paint = FloorPaint(C);
+            var painted = new Dictionary<string, HashSet<Vector2Int>>();
+            foreach (var kv in paint)
+            {
+                HashSet<Vector2Int> ps;
+                if (!painted.TryGetValue(kv.Value, out ps)) painted[kv.Value] = ps = new HashSet<Vector2Int>();
+                ps.Add(kv.Key);
+            }
             foreach (var kv in under)
             {
                 char ch = kv.Value;
+                if (paint.ContainsKey(kv.Key)) continue;
                 HashSet<Vector2Int> set;
                 if (!groups.TryGetValue(ch, out set)) groups[ch] = set = new HashSet<Vector2Int>();
                 set.Add(kv.Key);
@@ -198,8 +208,9 @@ namespace Nekorobo
                     Tiles.RectWorld(r, out c, out w, out d);
                     if (ch == '.')
                     {
-                        Slab(c, w, d, 0f, fDes != null ? Designs.Surf(fDes, floorBase, "floor", w, d) : floorBase,
-                             "floor", 0.9f * fr, 0.05f);
+                        // 実寸で貼って、長方形の境目でも模様がずれないようにする（JS版 boxMeterUV）
+                        Slab(c, w, d, 0f, fDes != null ? Designs.SurfMeter(fDes, floorBase, "floor") : floorBase,
+                             "floor", 0.9f * fr, 0.05f, fDes != null);
                         floorRects.Add(r);
                     }
                     else if (ch == '=') Slab(c, w, d, 0f, Mats.Get(0xd98b45, 0.75f), "floor", 0.9f * fr, 0.05f);
@@ -207,6 +218,8 @@ namespace Nekorobo
                     {
                         // 凍りの床。当たり判定の摩擦も落とす（ぶつかった家具も一緒に滑る）
                         Slab(c, w, d, 0f, Mats.Get(0xbfe6f2, 0.15f), "floor", 0.05f, 0.05f);
+                        // 岸つきの絵（assets/floor/ice_atlas.png）があれば、あとで BuildIceSkin が1マスずつ貼る
+                        if (FloorSet.Ice != null) continue;
                         var gl = Part.Add(stageRoot, MeshGen.FlatUp(w, d),
                                           Mats.LitTransparent(new Color(0.87f, 0.96f, 1f, 0.35f), 0.05f),
                                           c + new Vector3(0, 0.012f, 0), shadow: false);
@@ -232,8 +245,11 @@ namespace Nekorobo
                         // 見た目は半分の薄さ。床のある側の面へ寄せる
                         Vector3 vc; float vw, vd;
                         ThinWall(r, c, w, d, out vc, out vw, out vd);
-                        var wm = wDes != null ? Designs.Surf(wDes, wallBase, "wall", Mathf.Max(w, d), wh) : wallBase;
-                        Part.Add(stageRoot, MeshGen.Box(vw, wh, vd), wm, vc + new Vector3(0, wh / 2f, 0), name: "WallVis");
+                        // 面ごとに UV を実寸で付け直す（JS版 boxMeterUV）。箱の UV のまま「長さ×高さ」の繰り返しを
+                        // どの面にも当てていたので、縦向きの壁と壁の上の面の模様が潰れていた
+                        var wm = wDes != null ? Designs.SurfMeter(wDes, wallBase, "wall") : wallBase;
+                        var wpos = vc + new Vector3(0, wh / 2f, 0);
+                        Part.Add(stageRoot, wDes != null ? MeterUV(MeshGen.Box(vw, wh, vd), wpos) : MeshGen.Box(vw, wh, vd), wm, wpos, name: "WallVis");
                         if (t.high)
                             Part.Add(stageRoot, MeshGen.Box(vw + 0.12f, 0.09f, vd + 0.12f), Mats.Get(0x9aa4b2),
                                      vc + new Vector3(0, wh + 0.03f, 0), name: "WallCap");
@@ -242,17 +258,32 @@ namespace Nekorobo
                     {
                         float dep = Tiles.DepthOf(ch);
                         Slab(c, w, d, -dep, Mats.Get(ch == '^' ? 0x3a1408 : ch == '@' ? 0x08243a : 0x0e2a3d), "pit", 0.5f, 0.02f);
+                        // 水面。岸つきの絵が読めていれば、あとで BuildLiquidSkin が1マスずつ貼る
+                        if (HasLiqSkin(ch)) continue;
                         Water(c, w, d, ch == '^' ? "lava" : ch == '@' ? "sea" : "water", 0.82f, Tiles.WaterTop);
                     }
                     // 'o'（穴）は当たり判定を置かない。落ちた物は下の受け皿へ
                 }
             }
+            // 塗った床（デザインごと）
+            foreach (var kv in painted)
+                foreach (var r in Tiles.MergeCells(kv.Value))
+                {
+                    Vector3 c; float w, d;
+                    Tiles.RectWorld(r, out c, out w, out d);
+                    Slab(c, w, d, 0f, Designs.SurfMeter(kv.Key, floorBase, "floor"), "floor", 0.9f * fr, 0.05f, true);
+                    floorRects.Add(r);
+                }
             BuildPitLook();
             BuildFloorGrid(floorRects);
+            BuildIceSkin();
+            BuildLiquidSkin();
 
             // ---- つながる地形の飾り（白線・レール・橋の欄干）。**欄干の当たり判定は、ここで作る**
             //      （JS版と同じ順番。物の通し番号 nid がこの順で付くので、オンラインで HTML版と番号をそろえるため）
-            BuildMarks();
+            // 道路・線路・橋・桟橋は絵を貼る（絵が読めていれば。読めなければ線で描く）。カーブの外側などの透明な所には店の床を敷く
+            var lineDone = BuildLineSkins(fDes != null ? Designs.Surf(fDes, floorBase, "floor", 1, 1) : floorBase);
+            BuildMarks(lineDone);
 
             // ---- 盤面のまわりを、見えない壁でぐるりと囲う（マスは使わない）
             {
@@ -363,7 +394,7 @@ namespace Nekorobo
             int oPer = C.ordersPer ?? Mathf.RoundToInt(T.orderAddPer);
             int want = oBase + oPer * (players.Count - 1);
             int n = Mathf.Clamp(want, 1, Mathf.Max(1, guests.Count * 2));
-            var menu = Dishes.MenuOf(C);
+            var menu = Dishes.MenuOf(C, shop);
             orders.Clear();
             if (pool.Count > 0)
                 for (int i = 0; i < n; i++)
@@ -418,11 +449,14 @@ namespace Nekorobo
         }
 
         /// <summary>上面が topY に来る厚い板。側面がそのまま池や穴の壁になる。</summary>
-        void Slab(Vector3 c, float w, float d, float topY, Material m, string kind, float fric, float rest)
+        void Slab(Vector3 c, float w, float d, float topY, Material m, string kind, float fric, float rest, bool meterUV = false)
         {
             var e = MakeBody(kind, new Vector3(c.x, topY - Tiles.FloorH, c.z), new Vector3(w / 2f, Tiles.FloorH, d / 2f),
                              Quaternion.identity, true, 0, fric, rest);
-            var mr = Part.Add(e.transform, MeshGen.Box(w, Tiles.FloorH * 2, d), m, Vector3.zero, shadow: false);
+            // meterUV … UV を実寸（盤面の座標）で付ける。床の絵は長方形をまたいでも模様の位置がそろう
+            var box = MeshGen.Box(w, Tiles.FloorH * 2, d);
+            if (meterUV) box = MeterUV(box, new Vector3(c.x, topY - Tiles.FloorH, c.z));
+            var mr = Part.Add(e.transform, box, m, Vector3.zero, shadow: false);
             mr.name = "SlabVis";
         }
 
@@ -456,6 +490,8 @@ namespace Nekorobo
         void BuildDeco(StageObj o, Vector3 b)
         {
             var D = SurfaceArt.Deco(o.v);
+            // 黒板とメニュー表は**その面のメニュー**（お店ごと）を、お店の値段で書く
+            SurfaceArt.Menu = Dishes.MenuOf(stage, shop); SurfaceArt.MenuPrice = shop != null ? shop.price : 1;
             var g = SurfaceArt.DecoMesh(stageRoot, D);
             float r = o.rot * Mathf.Deg2Rad;
             float d3x = Mathf.Cos(r), d3z = -Mathf.Sin(r);                 // three.js の向き（dirOf）
@@ -503,9 +539,8 @@ namespace Nekorobo
 
         char Get(int i, int j) { char ch; return map.TryGetValue(new Vector2Int(i, j), out ch) ? ch : ' '; }
 
-        /// <summary>穴の中を暗くする（底と、穴でない側の縁の壁）。見た目だけ。</summary>
         /// <summary>
-        /// 穴の中を暗くする（見た目だけ。JS版 buildPitLook）。**上は開けておく**（底と、穴でないマスに面した縁の内壁だけ）。
+        /// 穴の中を暗くする（見た目だけ。JS版 buildPitLook）。壁は上が土の茶色で下へ行くほど黒く、縁の外の床に注意の帯。**上は開けておく**（底と、穴でないマスに面した縁の内壁だけ）。
         /// 前は1マスごとに上面のある箱を床すれすれに置いていたので、上から見ると平らな灰色の板に見えて、
         /// 落ちる穴だと分かりにくかった。底は0.86m下。落ちた物は底をすり抜けて下へ消える（当たり判定は無い）。
         /// </summary>
@@ -514,44 +549,74 @@ namespace Nekorobo
             var holes = new HashSet<Vector2Int>();
             foreach (var kv in map) if (kv.Value == 'o') holes.Add(kv.Key);
             if (holes.Count == 0) return;
-            const float depth = 0.86f, top = -0.02f, bot = -0.02f - depth, e = 0.01f, h = 0.5f - e;
-            var verts = new List<Vector3>(); var tris = new List<int>();
-            // 四角を両面で（どちらから見ても描く）
-            System.Action<Vector3, Vector3, Vector3, Vector3> quad = (q0, q1, q2, q3) =>
+            PitMats();
+            const float depth = 0.86f, top = -0.02f, bot = -0.02f - depth, e = 0.01f, h = 0.5f - e, H = 0.5f;
+            // 底・壁・縁の帯の3つに分ける（素材が別）
+            var BV = new List<Vector3>(); var BT = new List<int>(); var BU = new List<Vector2>();
+            var WV = new List<Vector3>(); var WT = new List<int>(); var WUv = new List<Vector2>();
+            var RV = new List<Vector3>(); var RT = new List<int>(); var RU = new List<Vector2>();
+            // 四角を両面で（どちらから見ても描く）。点は three.js の向き（z を反転して置く）
+            System.Action<List<Vector3>, List<int>, List<Vector2>, Vector3[], Vector2[]> quad = (V, T3, U, q, uv) =>
             {
-                int o = verts.Count;
-                verts.Add(q0); verts.Add(q1); verts.Add(q2); verts.Add(q3);
-                tris.AddRange(new[] { o, o + 1, o + 2, o, o + 2, o + 3 });
-                int o2 = verts.Count;
-                verts.Add(q0); verts.Add(q1); verts.Add(q2); verts.Add(q3);
-                tris.AddRange(new[] { o2, o2 + 2, o2 + 1, o2, o2 + 3, o2 + 2 });
+                for (int side = 0; side < 2; side++)
+                {
+                    int o = V.Count;
+                    for (int k = 0; k < 4; k++) { V.Add(new Vector3(q[k].x, q[k].y, -q[k].z)); U.Add(uv != null ? uv[k] : new Vector2(0, 1)); }
+                    if (side == 0) T3.AddRange(new[] { o, o + 1, o + 2, o, o + 2, o + 3 });
+                    else T3.AddRange(new[] { o, o + 2, o + 1, o, o + 3, o + 2 });
+                }
             };
+            var WU = new[] { new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0) };   // 壁：上が v=0、底が v=1
+            var RUV = new[] { new Vector2(0, 0), new Vector2(4, 0), new Vector2(4, 1), new Vector2(0, 1) };  // 帯：u は縁に沿って長さ[m]×4
             // 底。穴のマスを矩形にまとめて1枚ずつ
             foreach (var r in Tiles.MergeCells(holes))
             {
                 Vector3 c; float w, d;
                 Tiles.RectWorld(r, out c, out w, out d);
-                quad(new Vector3(c.x - w / 2, bot, c.z - d / 2), new Vector3(c.x - w / 2, bot, c.z + d / 2),
-                     new Vector3(c.x + w / 2, bot, c.z + d / 2), new Vector3(c.x + w / 2, bot, c.z - d / 2));
+                float x0 = c.x - w / 2, x1 = c.x + w / 2, z0 = -c.z - d / 2, z1 = -c.z + d / 2;
+                quad(BV, BT, BU, new[] { new Vector3(x0, bot, z1), new Vector3(x1, bot, z1), new Vector3(x1, bot, z0), new Vector3(x0, bot, z0) }, null);
             }
-            // 壁。穴でない側の縁だけ（床の板の側面と重なるので 1cm 内へ寄せる）
+            // 壁。穴でない側の縁だけ（床の板の側面と重なるので 1cm 内へ寄せる）。
+            // 縁の外側の床には、注意の帯（幅 RW）を敷く。帯は床の上だけ（隣が床のときだけ）
+            const float RW = 0.12f, ry = 0.004f;
+            System.Func<int, int, bool> isHole = (a, b) => holes.Contains(new Vector2Int(a, b));
+            System.Func<int, int, bool> fl = (a, b) => { char ch; return map.TryGetValue(new Vector2Int(a, b), out ch) && Tiles.IsFloor(ch); };
             foreach (var k in holes)
             {
-                var c = Coord.Cell(k.x, k.y);
-                // j-1（奥）は Unity の +z、j+1（手前）は −z
-                if (!holes.Contains(new Vector2Int(k.x, k.y - 1)))
-                    quad(new Vector3(c.x - h, top, c.z + h), new Vector3(c.x - h, bot, c.z + h), new Vector3(c.x + h, bot, c.z + h), new Vector3(c.x + h, top, c.z + h));
-                if (!holes.Contains(new Vector2Int(k.x, k.y + 1)))
-                    quad(new Vector3(c.x - h, top, c.z - h), new Vector3(c.x - h, bot, c.z - h), new Vector3(c.x + h, bot, c.z - h), new Vector3(c.x + h, top, c.z - h));
-                if (!holes.Contains(new Vector2Int(k.x - 1, k.y)))
-                    quad(new Vector3(c.x - h, top, c.z - h), new Vector3(c.x - h, bot, c.z - h), new Vector3(c.x - h, bot, c.z + h), new Vector3(c.x - h, top, c.z + h));
-                if (!holes.Contains(new Vector2Int(k.x + 1, k.y)))
-                    quad(new Vector3(c.x + h, top, c.z - h), new Vector3(c.x + h, bot, c.z - h), new Vector3(c.x + h, bot, c.z + h), new Vector3(c.x + h, top, c.z + h));
+                int i = k.x, j = k.y;
+                var cu = Coord.Cell(i, j);
+                float cx = cu.x, cz = -cu.z;                          // three.js の向きのマスの中心
+                if (!isHole(i, j - 1))
+                {
+                    quad(WV, WT, WUv, new[] { new Vector3(cx - h, top, cz - h), new Vector3(cx - h, bot, cz - h), new Vector3(cx + h, bot, cz - h), new Vector3(cx + h, top, cz - h) }, WU);
+                    if (fl(i, j - 1)) quad(RV, RT, RU, new[] { new Vector3(cx - H, ry, cz - H), new Vector3(cx + H, ry, cz - H), new Vector3(cx + H, ry, cz - H - RW), new Vector3(cx - H, ry, cz - H - RW) }, RUV);
+                }
+                if (!isHole(i, j + 1))
+                {
+                    quad(WV, WT, WUv, new[] { new Vector3(cx + h, top, cz + h), new Vector3(cx + h, bot, cz + h), new Vector3(cx - h, bot, cz + h), new Vector3(cx - h, top, cz + h) }, WU);
+                    if (fl(i, j + 1)) quad(RV, RT, RU, new[] { new Vector3(cx + H, ry, cz + H), new Vector3(cx - H, ry, cz + H), new Vector3(cx - H, ry, cz + H + RW), new Vector3(cx + H, ry, cz + H + RW) }, RUV);
+                }
+                if (!isHole(i - 1, j))
+                {
+                    quad(WV, WT, WUv, new[] { new Vector3(cx - h, top, cz + h), new Vector3(cx - h, bot, cz + h), new Vector3(cx - h, bot, cz - h), new Vector3(cx - h, top, cz - h) }, WU);
+                    if (fl(i - 1, j)) quad(RV, RT, RU, new[] { new Vector3(cx - H, ry, cz + H), new Vector3(cx - H, ry, cz - H), new Vector3(cx - H - RW, ry, cz - H), new Vector3(cx - H - RW, ry, cz + H) }, RUV);
+                }
+                if (!isHole(i + 1, j))
+                {
+                    quad(WV, WT, WUv, new[] { new Vector3(cx + h, top, cz - h), new Vector3(cx + h, bot, cz - h), new Vector3(cx + h, bot, cz + h), new Vector3(cx + h, top, cz + h) }, WU);
+                    if (fl(i + 1, j)) quad(RV, RT, RU, new[] { new Vector3(cx + H, ry, cz - H), new Vector3(cx + H, ry, cz + H), new Vector3(cx + H + RW, ry, cz + H), new Vector3(cx + H + RW, ry, cz - H) }, RUV);
+                }
             }
-            var mesh = new Mesh { name = "PitLook", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-            mesh.SetVertices(verts); mesh.SetTriangles(tris, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
-            var go = Part.Add(stageRoot, mesh, Mats.Get(0x2e3138, 1f), Vector3.zero, shadow: false, name: "PitLook");
-            var mr = go.GetComponent<MeshRenderer>(); if (mr != null) mr.receiveShadows = true;
+            System.Action<List<Vector3>, List<int>, List<Vector2>, Material, string> put = (V, T3, U, m, nm) =>
+            {
+                if (T3.Count == 0) return;
+                var mesh = new Mesh { name = nm, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                mesh.SetVertices(V); mesh.SetUVs(0, U); mesh.SetTriangles(T3, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+                Part.Add(stageRoot, mesh, m, Vector3.zero, shadow: false, name: nm);
+            };
+            put(BV, BT, BU, Mats.Get(0x050505, 1f), "PitBottom");          // 穴の底（まっ暗）
+            put(WV, WT, WUv, pitWallMat, "PitWall");
+            put(RV, RT, RU, pitRimMat, "PitRim");
         }
 
         /// <summary>床のマス目の線。床の上にだけ、マスの境目に1本ずつ。</summary>
@@ -645,7 +710,7 @@ namespace Nekorobo
                 {
                     counterPlateDish[i] = o.dish;
                     for (int c = pg.childCount - 1; c >= 1; c--) Destroy(pg.GetChild(c).gameObject);
-                    DishLook.Build(pg, o.dish, 0.1f);
+                    DishLook.Build(pg, o.dish, 0.1f, pg.GetChild(0).gameObject);
                 }
             }
         }

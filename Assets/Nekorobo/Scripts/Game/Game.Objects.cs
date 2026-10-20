@@ -137,12 +137,30 @@ namespace Nekorobo
             }
         }
 
-        /// <summary>いかだの見た目。丸太を並べ、縁に丸太を回して、縄で締めた形（JS版 raftMesh）。</summary>
+        /// <summary>
+        /// いかだの見た目。丸太を並べ、縁に丸太を回して、縄で締めた形（JS版 raftMesh）。
+        /// 丸太は皮（長さに沿ったすじと節）の絵、両端は年輪の切り口、縄はねじった太い縄を2本ずつ（JS版 raftTex）。
+        /// </summary>
         Transform RaftMesh(List<Tiles.Rect> rects, float cx, float cz)
         {
             var g = new GameObject("RaftLook").transform;
-            var m0 = Mats.Get(0xc98b45); var m1 = Mats.Get(0xb0763a);
-            var rail = Mats.Get(0x8a5a2a); var lash = Mats.Get(0x6a4a2c);
+            var RT = RaftTex();
+            int li = 0;
+            // 丸太1本：側面（皮）と両端（年輪）。円柱は立てて作ってから寝かせる。axisRot は軸のまわりの回し
+            System.Action<float, float, Material, Vector3, bool, float, int> log = (r, len, side, pos, alongX, axisRot, seg) =>
+            {
+                var lg = new GameObject("Log").transform;
+                lg.SetParent(g, false);
+                lg.localPosition = pos;
+                var lay = alongX ? Quaternion.Euler(0, 0, 90) : Quaternion.Euler(90, 0, 0);
+                lg.localRotation = Quaternion.AngleAxis(axisRot * Mathf.Rad2Deg, alongX ? Vector3.right : Vector3.forward) * lay;
+                Part.Add(lg, MeshGen.Cylinder(r, r, len, seg, true), side, Vector3.zero);
+                foreach (float s in new[] { -1f, 1f })
+                {
+                    var cap = Part.Add(lg, MeshGen.Circle(r, seg), RT.end, new Vector3(0, s * len / 2, 0));
+                    cap.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                }
+            };
             foreach (var r in rects)
             {
                 Vector3 c; float w, d; Tiles.RectWorld(r, out c, out w, out d);
@@ -153,27 +171,110 @@ namespace Nekorobo
                 for (int i = 0; i < n; i++)
                 {
                     float off = -span / 2 + step * (i + 0.5f);
-                    var lg = Part.Add(g, MeshGen.Cylinder(RaftLogR, RaftLogR, len, 10), i % 2 == 0 ? m0 : m1,
-                                      new Vector3(c.x - cx + (alongX ? 0 : off), -RaftLogR, c.z - cz + (alongX ? off : 0)));
-                    // 立った円柱を寝かせる（長いほうへ流す）
-                    lg.transform.localRotation = alongX ? Quaternion.Euler(0, 0, 90) : Quaternion.Euler(90, 0, 0);
+                    // 丸太ごとに軸のまわりで回す（同じ絵なので、回さないと節が列にそろって見える）。1本おきに少し濃く
+                    log(RaftLogR, len, RT.logs[i % 2], new Vector3(c.x - cx + (alongX ? 0 : off), -RaftLogR, c.z - cz + (alongX ? off : 0)),
+                        alongX, (li++ * 2.399f) % (Mathf.PI * 2), 12);
                 }
                 foreach (var a in new[] { new Vector2(0, -1), new Vector2(0, 1), new Vector2(-1, 0), new Vector2(1, 0) })
                 {
                     float rl = a.x != 0 ? d : w;
-                    // a は three.js の向き（z が手前）。Unity では z を反転
-                    var rg = Part.Add(g, MeshGen.Cylinder(0.11f, 0.11f, rl, 8), rail,
-                                      new Vector3(c.x - cx + a.x * (w / 2 - 0.09f), -0.02f, c.z - cz - a.y * (d / 2 - 0.09f)));
-                    rg.transform.localRotation = a.x != 0 ? Quaternion.Euler(90, 0, 0) : Quaternion.Euler(0, 0, 90);
+                    // a は three.js の向き（z が手前）。Unity では z を反転。縁の丸太は辺に沿って寝かせる
+                    log(0.11f, rl, RT.rail, new Vector3(c.x - cx + a.x * (w / 2 - 0.09f), -0.02f, c.z - cz - a.y * (d / 2 - 0.09f)),
+                        a.x == 0, 0, 10);
                 }
+                // 締めている縄（ねじった太い縄を2本ずつ）。甲板とほぼ同じ高さなので、乗った物に刺さらない
                 foreach (float t in new[] { 0.22f, 0.78f })
-                {
-                    float o2 = (t - 0.5f) * len;
-                    Part.Add(g, MeshGen.Box(alongX ? 0.13f : span - 0.1f, 0.05f, alongX ? span - 0.1f : 0.13f), lash,
-                             new Vector3(c.x - cx + (alongX ? o2 : 0), 0.012f, c.z - cz + (alongX ? 0 : -o2)), shadow: false);
-                }
+                    foreach (float dd in new[] { -0.045f, 0.045f })
+                    {
+                        float o2 = (t - 0.5f) * len + dd;
+                        var rp = Part.Add(g, MeshGen.Cylinder(0.028f, 0.028f, span - 0.12f, 8), RT.rope,
+                                          new Vector3(c.x - cx + (alongX ? o2 : 0), 0.004f, c.z - cz + (alongX ? 0 : -o2)));
+                        rp.transform.localRotation = alongX ? Quaternion.Euler(90, 0, 0) : Quaternion.Euler(0, 0, 90);
+                    }
             }
             return g;
+        }
+
+        class RaftMats { public Material[] logs; public Material rail, end, rope; }
+        static RaftMats raftMats;
+        /// <summary>オーバークック風の丸太の絵（JS版 raftTex）。円柱の UV は u＝周り、v＝長さなので、すじは縦に描く。</summary>
+        static RaftMats RaftTex()
+        {
+            if (raftMats != null) return raftMats;
+            // canvas と同じく左上が原点で描き、最後に上下を返して貼る（three.js の絵の向きにそろえる）
+            System.Func<int, int, Color, Color[]> canvas = (W, H, bg) => { var a = new Color[W * H]; for (int i = 0; i < a.Length; i++) a[i] = bg; return a; };
+            System.Func<Color[], int, int, Texture2D> toTex = (px, W, H) =>
+            {
+                var t = new Texture2D(W, H, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear };
+                var flip = new Color[W * H];
+                for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) flip[(H - 1 - y) * W + x] = px[y * W + x];
+                t.SetPixels(flip); t.Apply(true);
+                return t;
+            };
+            System.Action<Color[], int, int, float, float, Color> dot = (px, W, H, xf, yf, c) =>
+            {
+                int x = (int)xf, y = (int)yf;
+                if (x < 0 || y < 0 || x >= W || y >= H) return;
+                var d = px[y * W + x];
+                px[y * W + x] = new Color(d.r + (c.r - d.r) * c.a, d.g + (c.g - d.g) * c.a, d.b + (c.b - d.b) * c.a, 1);
+            };
+            System.Func<float, float, float, float, Color> rgba = (r, gg, b, a) => new Color(r / 255f, gg / 255f, b / 255f, a);
+            // ---- 皮
+            const int BW = 128, BH = 256;
+            var bark = canvas(BW, BH, Mats.Hex(0xd8a066));
+            long rs = 7;
+            System.Func<float> rr = () => { rs = (rs * 16807) % 2147483647; return rs / 2147483647f; };
+            for (int k = 0; k < 26; k++)
+            {
+                float x = rr() * 128, w = 2 + rr() * 4;
+                var c = rr() < 0.5f ? rgba(120, 70, 30, 0.45f) : rgba(255, 220, 170, 0.35f);
+                for (int xx = Mathf.FloorToInt(x); xx < Mathf.CeilToInt(x + w); xx++) for (int y = 0; y < BH; y++) dot(bark, BW, BH, xx, y, c);
+            }
+            for (int k = 0; k < 4; k++)
+            {
+                float x = rr() * 128, y = rr() * 256;
+                foreach (var e in new[] { new Vector4(6, 10, 0, 0), new Vector4(3, 5, 1, 0) })
+                {
+                    var c = e.z == 0 ? rgba(90, 50, 20, 0.7f) : rgba(220, 170, 110, 0.8f);
+                    for (int yy = (int)(y - e.y - 1); yy <= (int)(y + e.y + 1); yy++)
+                        for (int xx = (int)(x - e.x - 1); xx <= (int)(x + e.x + 1); xx++)
+                        {
+                            float dx = (xx + 0.5f - x) / e.x, dy = (yy + 0.5f - y) / e.y;
+                            if (dx * dx + dy * dy <= 1) dot(bark, BW, BH, xx, yy, c);
+                        }
+                }
+            }
+            // ---- 切り口（年輪）
+            const int EW = 128;
+            var end = canvas(EW, EW, Mats.Hex(0x7a4a24));
+            for (int y = 0; y < EW; y++)
+                for (int x = 0; x < EW; x++)
+                {
+                    float r = Mathf.Sqrt((x + 0.5f - 64) * (x + 0.5f - 64) + (y + 0.5f - 64) * (y + 0.5f - 64));
+                    if (r <= 54) end[y * EW + x] = Mats.Hex(0xf2c88a);
+                    foreach (float rg in new[] { 12f, 24f, 36f, 46f }) if (Mathf.Abs(r - rg) <= 1.5f) dot(end, EW, EW, x, y, rgba(170, 110, 60, 0.8f));
+                }
+            // ---- 縄（ねじった縄）
+            const int RW = 64;
+            var rope = canvas(RW, RW, Mats.Hex(0xd8bc86));
+            for (int y = 0; y < RW; y++)
+                for (int x = 0; x < RW; x++)
+                {
+                    // (x0, 64) → (x0 + 64, 0) の線から 3px 以内。線は 16px おき
+                    float s = ((x + 0.5f) + (y + 0.5f)) % 16f;
+                    float dist = Mathf.Min(s, 16 - s) / Mathf.Sqrt(2);
+                    if (dist <= 3) rope[y * RW + x] = Mats.Hex(0x9a7a48);
+                }
+            var barkT = toTex(bark, BW, BH); var endT = toTex(end, EW, EW); var ropeT = toTex(rope, RW, RW);
+            raftMats = new RaftMats
+            {
+                logs = new[] { Mats.Textured(barkT, Color.white, 0.8f, Vector2.one), Mats.Textured(barkT, Mats.Hex(0xe0c2a0), 0.8f, Vector2.one) },
+                rail = Mats.Textured(barkT, Mats.Hex(0xb08060), 0.8f, Vector2.one),
+                end = Mats.Textured(endT, Color.white, 0.75f, Vector2.one),
+                rope = Mats.Textured(ropeT, Color.white, 0.9f, new Vector2(1, 6)),
+            };
+            raftMats.end.SetFloat("_Cull", 0f);              // 切り口はどちら向きでも描く
+            return raftMats;
         }
 
         Raft RaftAt(Vector3 p)
@@ -696,13 +797,14 @@ namespace Nekorobo
         static int ConnCount(int m) { return ((m & 1) != 0 ? 1 : 0) + ((m & 2) != 0 ? 1 : 0) + ((m & 4) != 0 ? 1 : 0) + ((m & 8) != 0 ? 1 : 0); }
 
         /// <summary>つながる地形の飾り（白線・枕木とレール・橋の欄干）。つながっている向きにだけ描く。</summary>
-        void BuildMarks()
+        void BuildMarks(HashSet<Vector2Int> skinned)
         {
             var markRoot = new GameObject("Marks").transform; markRoot.SetParent(stageRoot, false);
             foreach (var kv in map)
             {
                 var td = Tiles.Def(kv.Value);
                 if (td == null || td.conn == null) continue;
+                if (skinned != null && skinned.Contains(kv.Key)) continue;      // 絵を貼った道路・線路
                 int ci = kv.Key.x, cj = kv.Key.y;
                 var c = Coord.Cell(ci, cj);
                 int m = ConnMask(ci, cj, td.conn), n = ConnCount(m);
@@ -797,6 +899,10 @@ namespace Nekorobo
                     if (map.ContainsKey(kv.Key + d)) continue;
                     char back; var bd = map.TryGetValue(kv.Key - d, out back) ? Tiles.Def(back) : null;
                     if (bd == null || bd.conn != td.conn) continue;
+                    // 並んだ直線の向きとも合わせる。縦に2本並べた道路の右の1本は「右隣が外・左隣が道路」なので、
+                    // 上の判定だけだと横へ道が伸びていた
+                    var ld = LineDir(kv.Key.x, kv.Key.y, td.conn);
+                    if (ld != null && (ld == "h") != (d.x != 0)) continue;
                     tails.Add(new Tail { ci = kv.Key.x, cj = kv.Key.y, di = d.x, dj = d.y, conn = td.conn });
                     break;
                 }
@@ -823,16 +929,20 @@ namespace Nekorobo
             if (tailRoot != null) Destroy(tailRoot.gameObject);
             tailRoot = new GameObject("RoadTails").transform; tailRoot.SetParent(stageRoot, false);
             var road = Mats.Get(0x4a4f55); var rail = Mats.Get(0x3a3228);
+            var lines = new Dictionary<string, List<Vector3Int>> { { "road", new List<Vector3Int>() }, { "rail", new List<Vector3Int>() } };
             foreach (var t in tails)
             {
-                int mask = t.di != 0 ? 10 : 5;
+                int mask = t.di != 0 ? 10 : 5;                       // まっすぐ（東西／南北）
                 for (int k = 1; k <= t.n; k++)
                 {
-                    var c = Coord.Cell(t.ci + t.di * k, t.cj + t.dj * k);
+                    int i = t.ci + t.di * k, j = t.cj + t.dj * k;
+                    var c = Coord.Cell(i, j);
                     Part.Add(tailRoot, MeshGen.Box(1, Tiles.FloorH * 2, 1), t.conn == "road" ? road : rail, new Vector3(c.x, -Tiles.FloorH, c.z), false);
-                    if (t.conn == "road") RoadMark(tailRoot, c, mask, 2); else RailMark(tailRoot, c, mask, 2);
+                    if (FloorSet.Lines.ContainsKey(t.conn)) lines[t.conn].Add(new Vector3Int(i, j, mask));
+                    else if (t.conn == "road") RoadMark(tailRoot, c, mask, 2); else RailMark(tailRoot, c, mask, 2);
                 }
             }
+            foreach (var kv in lines) LineMesh(tailRoot, kv.Key, kv.Value, null);   // まっすぐなので床は敷かない
         }
     }
 }

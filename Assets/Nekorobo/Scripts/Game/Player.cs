@@ -102,6 +102,7 @@ namespace Nekorobo
         public float? steerHold;
         public float lastJump = -9f, prevVy;
         public bool airborne;
+        public float jumpCap;                 // 跳んでいる間の横の速さの上限（0 は抑えない。ジャンプ台から跳んだとき）
         public float invT, slipT, slipSpin;
         public Vector3 spawn;
         public float spawnRot;           // 出現位置の rot（度）
@@ -224,7 +225,8 @@ namespace Nekorobo
             dishVis = null;
             plate.gameObject.SetActive(d != null);
             if (d == null) return;
-            dishVis = DishLook.Build(plate, d, 0.09f);
+            // 頭の下（約0.23m）にぶつからない高さまで（JS版 dslot.userData.maxH）
+            dishVis = DishLook.Build(plate, d, 0.09f, plate.GetChild(0).gameObject, 0.21f);
         }
 
         /// <summary>
@@ -325,8 +327,39 @@ namespace Nekorobo
     /// <summary>料理の見た目（皿の上）。モデルが来るまでは図形で組む。</summary>
     public static class DishLook
     {
-        public static GameObject Build(Transform parent, Dish d, float r)
+        const float DISH_FIT = 0.30f;            // モデルの差し渡しをこの大きさに合わせる[m]（JS版 DISH_FIT）
+
+        /// <summary>
+        /// 皿の上の料理（JS版 setDishMesh）。料理のモデル（assets/models.json の dishes）があればそれを置いて、
+        /// 皿（plateMesh）は隠す（モデルが器ごと持つため）。無ければ今までどおり図形で組む。
+        /// maxH … 高さの上限[m]（ロボのお盆のように頭とぶつかる所。0 は上限なし）
+        /// </summary>
+        public static GameObject Build(Transform parent, Dish d, float r, GameObject plateMesh, float maxH = 0)
         {
+            ModelEntry M;
+            if (ModelStore.DishModels.TryGetValue(d.k, out M) && M.roots.Count > 0)
+            {
+                if (plateMesh != null) plateMesh.SetActive(false);
+                var outer = new GameObject("Dish_" + d.k).transform;
+                outer.SetParent(parent, false);
+                outer.localRotation = Part.Euler3(M.rotDeg.x * Mathf.Deg2Rad, M.rotDeg.y * Mathf.Deg2Rad, M.rotDeg.z * Mathf.Deg2Rad);
+                var inst = Object.Instantiate(M.roots[0], outer, false);
+                inst.transform.localPosition = Vector3.zero;
+                inst.transform.localRotation = Quaternion.Euler(0, 180, 0);      // glTFast の向きをそろえる（ModelStore と同じ）
+                inst.transform.localScale = Vector3.one;
+                inst.SetActive(true);
+                var b = ModelStore.LocalBounds(parent, outer);
+                float sc = M.scaleNum > 0 ? M.scaleNum : (Mathf.Max(b.size.x, b.size.z) > 1e-4f ? DISH_FIT / Mathf.Max(b.size.x, b.size.z) : 1);
+                if (maxH > 0 && b.size.y * sc > maxH) sc *= maxH / (b.size.y * sc);
+                outer.localScale = Vector3.one * sc;
+                // 底を皿の高さに合わせる。offset は three.js の向き（z を反転）
+                outer.localPosition = new Vector3(M.offset.x, -b.min.y * sc + M.offset.y, -M.offset.z);
+                foreach (var rd in inst.GetComponentsInChildren<Renderer>(true))
+                { rd.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; rd.receiveShadows = true; }
+                return outer.gameObject;
+            }
+            // 図形のクレープ・カップは皿に載せない
+            if (plateMesh != null) plateMesh.SetActive(d.shape == null);
             var g = new GameObject("Dish_" + d.k);
             g.transform.SetParent(parent, false);
             if (d.shape == "cup")

@@ -123,6 +123,7 @@ namespace Nekorobo
             NewWallets();
             var mj = DataRoot.ReadJson("assets/models.json");
             if (mj != null) Designs.Register(mj["designs"] as Newtonsoft.Json.Linq.JObject);
+            FloorSet.Load();                               // 床チップ・壁の絵・道路／水／氷のまとめ画像（assets/floor/floors.json）
             Debug.Log("[Nekorobo] データ: " + DataRoot.Path + "（" + TF.log + "）");
             SetupView();
             Net.Reset();                                   // 前の再生の続き（つなぎっぱなし・受け口）を残さない。タイトルが受け口を付ける前に
@@ -358,7 +359,9 @@ namespace Nekorobo
             // 足元のリング（向きの矢印つき）
             var ringG = new GameObject("Ring_" + P.name);
             ringG.transform.SetParent(stageRoot, false);
-            var rm = Mats.Basic(new Color(Mats.Hex(P.col).r, Mats.Hex(P.col).g, Mats.Hex(P.col).b, 0.8f), true, true, false);
+            var rm = Mats.NewBasic(new Color(Mats.Hex(P.col).r, Mats.Hex(P.col).g, Mats.Hex(P.col).b, 0.8f), true, true, false);
+            // 床のマス目の線（半透明の順番 3000）より後に描く。順番を付けないとマス目の線が丸枠の上に乗っていた
+            rm.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent + 1;
             var ring = Part.Add(ringG.transform, MeshGen.Ring(0.44f, 0.55f, 28), rm, Vector3.zero, shadow: false);
             ring.transform.localRotation = Part.Euler3(-Mathf.PI / 2, 0, 0);
             var arrow = Part.Add(ringG.transform, MeshGen.Circle(0.17f, 3), rm, Coord.W(0, 0, -0.62f), shadow: false);
@@ -582,6 +585,7 @@ namespace Nekorobo
         {
             if (stage == null) return;
             UpdateFlow(Time.deltaTime);
+            TickLiquid(Time.deltaTime);
             TickFx(Time.deltaTime);
             SyncLooks();
             ApplyCamera();
@@ -689,6 +693,7 @@ namespace Nekorobo
         float EffBotDmg(Player P) { return T.botDmg * (1 - 0.10f * Up(P, "armor")) / Mathf.Max(0.05f, T.botTough); }
         float EffJumpSpd(Player P) { return T.jumpSpeed * (1 + 0.10f * Up(P, "jump")); }
         float EffJumpCd(Player P) { return Mathf.Max(0.18f, T.jumpCooldown - 0.05f * Up(P, "jump")); }
+        float EffJumpDist(Player P) { return T.jumpDist * (1 + 0.15f * Up(P, "jump")); }
         float EffLight(Player P) { return Mathf.Max(0.3f, 1 - 0.10f * Up(P, "light")); }
         float GuestHurt(float v) { return v / Mathf.Max(0.05f, T.guestTough); }
         float Toughed(float v) { return v / Mathf.Max(0.05f, T.botTough); }
@@ -739,6 +744,10 @@ namespace Nekorobo
                 var jv = rb.linearVelocity;
                 rb.linearVelocity = new Vector3(jv.x, EffJumpSpd(P), jv.z);
                 P.lastJump = t; P.airborne = true; SetFace(P, "fast", 0.4f);
+                // 空中の横の速さの上限＝飛距離 ÷ 滞空時間。ジャンプ台の上で跳んだときは抑えない（台の勢いで遠くへ飛ぶ物なので）
+                var jp = rb.position;
+                bool onRamp = ents.Exists(e => e.kind == "ramp" && new Vector2(e.Pos.x - jp.x, e.Pos.z - jp.z).magnitude < 1.3f);
+                P.jumpCap = onRamp ? 0 : Mathf.Max(1.2f, EffJumpDist(P) / (2 * EffJumpSpd(P) / 9.81f));
             }
             if (P.airborne && grounded && t - P.lastJump > 0.12f)
             {
@@ -784,7 +793,14 @@ namespace Nekorobo
                 if (!slipping) vl *= Mathf.Exp(-T.lateralGrip * FricAt(tp, shop.fric) * (onIce ? T.iceGrip : 1) * dt);
                 vf *= Mathf.Exp(-T.linDamp * (onIce ? T.iceDrag : 1) * DragAt(tp) * dt);
             }
-            rb.linearVelocity = new Vector3(fwd.x * vf + right.x * vl, v.y, fwd.z * vf + right.z * vl);
+            float ovx = fwd.x * vf + right.x * vl, ovz = fwd.z * vf + right.z * vl;
+            // 自分で跳んでいる間は、横の速さを飛距離の上限までに抑える（EffJumpDist）
+            if (P.airborne && !grounded && P.jumpCap > 0)
+            {
+                float hv = Mathf.Sqrt(ovx * ovx + ovz * ovz);
+                if (hv > P.jumpCap) { ovx *= P.jumpCap / hv; ovz *= P.jumpCap / hv; }
+            }
+            rb.linearVelocity = new Vector3(ovx, v.y, ovz);
             P.prevVy = v.y;
             ItemInput(P);
         }

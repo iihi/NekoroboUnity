@@ -279,7 +279,7 @@ namespace Nekorobo
         }
 
         /// <summary>物の見た目の大きさを、holder から見た向きで測る（縮尺1・原点に置いた状態で）。</summary>
-        static Bounds LocalBounds(Transform holder, Transform outer)
+        public static Bounds LocalBounds(Transform holder, Transform outer)
         {
             var oldPos = outer.localPosition; var oldScale = outer.localScale;
             outer.localPosition = Vector3.zero; outer.localScale = Vector3.one;

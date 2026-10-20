@@ -45,6 +45,7 @@ namespace Nekorobo
         static void OnBegin(ScriptableRenderContext ctx, Camera cam)
         {
             if (!post || cam.cameraType != CameraType.Game) return;      // シーンビューには掛けない
+            if (cam.targetTexture != null) return;                        // 絵に撮るだけのカメラ（料理の札の写真）にも掛けない
             if (pass == null)
             {
                 var sh = Resources.Load<Shader>("Shaders/Finish");

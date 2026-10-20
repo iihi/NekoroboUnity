@@ -281,6 +281,25 @@ namespace Nekorobo
             return m;
         }
 
+        static readonly Dictionary<string, Material> meterCache = new Dictionary<string, Material>();
+        /// <summary>
+        /// 床・壁の面で、UV が実寸[m]の形（Game.MeterUV）と組で使う素材（JS版 desSurf の w を省いた形）。絵1枚＝tile[m]。
+        /// 床は隣り合うマスを長方形にまとめて敷くので、長方形ごとに絵を貼ると境目で模様がずれ、細い長方形では模様が縮んでいた。
+        /// </summary>
+        public static Material SurfMeter(string des, Material baseMat, string kind)
+        {
+            var D = Get(des);
+            if (D == null) return baseMat;
+            string key = des + "|" + kind;
+            Material m;
+            if (meterCache.TryGetValue(key, out m) && m != null) return m;
+            var t = Tex(des, kind, kind);
+            float tl = D.tile > 0 ? D.tile : 2f;
+            m = t != null ? Mats.Textured(t, Color.white, 0.9f, new Vector2(1f / tl, 1f / tl)) : Mats.NewLit(Mats.Hex(D.col), 0.9f);
+            meterCache[key] = m;
+            return m;
+        }
+
         /// <summary>床・壁のような大きな面（JS版 desSurf）。tile[m] ごとに敷き詰める。</summary>
         public static Material Surf(string des, Material baseMat, string kind, float w, float d)
         {
@@ -329,21 +348,35 @@ namespace Nekorobo
     }
 
     // ------------------------------------------------------------------ お店
-    public class ShopDef { public string n, fricLabel; public float price, repair, fric; }
+    public class ShopDef
+    {
+        public string n, fricLabel;
+        public float price, repair, fric;
+        public string[] menu;        // そのお店で出す料理（Dishes の k）。ステージで menu / dishes を書いた面はそちらが先
+        public string counter;       // 受取カウンターの既定の形（hotel / ryotei / classic。空はいつもの形）
+    }
 
     /// <summary>お店の種類。JS版 shops.js と同じ。</summary>
     public static class Shops
     {
         public static readonly List<ShopDef> All = new List<ShopDef>
         {
-            new ShopDef { n = "カフェ",               price = 0.6f, repair = 0.6f, fric = 1.00f, fricLabel = "普通" },
-            new ShopDef { n = "定食屋",               price = 0.6f, repair = 0.6f, fric = 0.72f, fricLabel = "やや滑る" },
-            new ShopDef { n = "町中華",               price = 1.0f, repair = 0.6f, fric = 0.32f, fricLabel = "超滑る" },
-            new ShopDef { n = "ファミレス",           price = 1.0f, repair = 1.0f, fric = 1.00f, fricLabel = "普通" },
-            new ShopDef { n = "カジュアルレストラン", price = 1.6f, repair = 1.0f, fric = 1.00f, fricLabel = "普通" },
-            new ShopDef { n = "高級和食",             price = 1.6f, repair = 1.8f, fric = 1.00f, fricLabel = "普通" },
-            new ShopDef { n = "高級フレンチ",         price = 2.6f, repair = 1.8f, fric = 1.35f, fricLabel = "高" },
-            new ShopDef { n = "最高級ホテル",         price = 2.6f, repair = 3.0f, fric = 1.35f, fricLabel = "高" },
+            new ShopDef { n = "カフェ",               price = 0.6f, repair = 0.6f, fric = 1.00f, fricLabel = "普通",
+                          menu = new[] { "parfait", "pancake", "sandwich", "shortcake", "latte", "salad" } },
+            new ShopDef { n = "定食屋",               price = 0.6f, repair = 0.6f, fric = 0.72f, fricLabel = "やや滑る",
+                          menu = new[] { "karaage_set", "fish_set", "ginger_set", "katsudon", "curry", "hamburg" } },
+            new ShopDef { n = "町中華",               price = 1.0f, repair = 0.6f, fric = 0.32f, fricLabel = "超滑る",
+                          menu = new[] { "ramen", "fried_rice", "gyoza", "mapo", "tenshin", "ebichili" } },
+            new ShopDef { n = "ファミレス",           price = 1.0f, repair = 1.0f, fric = 1.00f, fricLabel = "普通",
+                          menu = new[] { "hamburg", "steak", "pilaf", "soup", "parfait", "omurice" } },
+            new ShopDef { n = "カジュアルレストラン", price = 1.6f, repair = 1.0f, fric = 1.00f, fricLabel = "普通",
+                          menu = new[] { "pasta", "pizza", "burger", "steak", "paella", "salad" } },
+            new ShopDef { n = "高級和食",             price = 1.6f, repair = 1.8f, fric = 1.00f, fricLabel = "普通", counter = "ryotei",
+                          menu = new[] { "sushi", "tempura", "sashimi", "sukiyaki", "chawanmushi", "bento" } },
+            new ShopDef { n = "高級フレンチ",         price = 2.6f, repair = 1.8f, fric = 1.35f, fricLabel = "高", counter = "classic",
+                          menu = new[] { "potage", "poisson", "filet", "terrine", "dessert_plate", "souffle" } },
+            new ShopDef { n = "最高級ホテル",         price = 2.6f, repair = 3.0f, fric = 1.35f, fricLabel = "高", counter = "hotel",
+                          menu = new[] { "roastbeef", "lobster", "afternoon_tea", "fruit_tart", "vichyssoise", "special_cake" } },
         };
 
         public static ShopDef Find(string n)
@@ -380,10 +413,57 @@ namespace Nekorobo
             new Dish { k = "crepe_matcha",  n = "抹茶あずき",   price = 750, frag = 1.4f, col = 0x7aa84a, set = "crepe", shape = "crepe" },
             new Dish { k = "crepe_tuna",    n = "ツナサラダ",   price = 800, frag = 1.0f, col = 0x9fd06a, set = "crepe", shape = "crepe" },
             new Dish { k = "crepe_juice",   n = "ジュース",     price = 450, frag = 2.2f, col = 0xf2b134, set = "crepe", shape = "cup" },
+            // ---- お店ごとのメニュー（Shops の menu）で出す料理。set "shop" は「ふつうの料理」には混ぜない印。
+            // これも**後ろに足すだけ**（オンラインは番号で送る）。値段はお店の倍率がかかる前の元の値段
+            new Dish { k = "pancake", n = "パンケーキ", price = 800, frag = 1.3f, col = 0xd9a052, set = "shop" },
+            new Dish { k = "sandwich", n = "サンドイッチ", price = 700, frag = 0.8f, col = 0xe8d9a0, set = "shop" },
+            new Dish { k = "shortcake", n = "ショートケーキ", price = 850, frag = 1.8f, col = 0xf4d2d8, set = "shop" },
+            new Dish { k = "latte", n = "カフェラテ", price = 500, frag = 2.0f, col = 0xc8a27a, set = "shop" },
+            new Dish { k = "karaage_set", n = "唐揚げ定食", price = 900, frag = 0.8f, col = 0xc8782a, set = "shop" },
+            new Dish { k = "fish_set", n = "焼き魚定食", price = 950, frag = 0.9f, col = 0xf08a5c, set = "shop" },
+            new Dish { k = "ginger_set", n = "生姜焼き定食", price = 900, frag = 0.9f, col = 0xa86a36, set = "shop" },
+            new Dish { k = "katsudon", n = "カツ丼", price = 850, frag = 1.1f, col = 0xe0a040, set = "shop" },
+            new Dish { k = "curry", n = "カレーライス", price = 800, frag = 1.3f, col = 0x9a5a20, set = "shop" },
+            new Dish { k = "fried_rice", n = "チャーハン", price = 750, frag = 0.6f, col = 0xe8c25a, set = "shop" },
+            new Dish { k = "gyoza", n = "餃子", price = 600, frag = 0.7f, col = 0xe8cfa0, set = "shop" },
+            new Dish { k = "mapo", n = "麻婆豆腐", price = 850, frag = 1.6f, col = 0xc8401e, set = "shop" },
+            new Dish { k = "tenshin", n = "天津飯", price = 800, frag = 1.4f, col = 0xe8b84a, set = "shop" },
+            new Dish { k = "ebichili", n = "エビチリ", price = 1200, frag = 1.3f, col = 0xe0502a, set = "shop" },
+            new Dish { k = "omurice", n = "オムライス", price = 1000, frag = 1.0f, col = 0xf2c63c, set = "shop" },
+            new Dish { k = "pasta", n = "パスタ", price = 1100, frag = 1.1f, col = 0xd8502e, set = "shop" },
+            new Dish { k = "pizza", n = "ピザ", price = 1400, frag = 0.7f, col = 0xe0a040, set = "shop" },
+            new Dish { k = "burger", n = "ハンバーガー", price = 1200, frag = 1.2f, col = 0xa86a30, set = "shop" },
+            new Dish { k = "sushi", n = "にぎり寿司", price = 2000, frag = 1.2f, col = 0xe05050, set = "shop" },
+            new Dish { k = "tempura", n = "天ぷら", price = 1600, frag = 1.0f, col = 0xe8c070, set = "shop" },
+            new Dish { k = "sashimi", n = "刺身の舟盛り", price = 2200, frag = 1.4f, col = 0xd84a50, set = "shop" },
+            new Dish { k = "sukiyaki", n = "すき焼き", price = 2200, frag = 1.7f, col = 0x8a4a2a, set = "shop" },
+            new Dish { k = "chawanmushi", n = "茶碗蒸し", price = 900, frag = 2.0f, col = 0xf0dc90, set = "shop" },
+            new Dish { k = "bento", n = "松花堂弁当", price = 1800, frag = 1.2f, col = 0x2a2224, set = "shop" },
+            new Dish { k = "potage", n = "ポタージュ", price = 1000, frag = 2.2f, col = 0xf0d070, set = "shop" },
+            new Dish { k = "poisson", n = "魚のポワレ", price = 1800, frag = 1.2f, col = 0xf4ead0, set = "shop" },
+            new Dish { k = "filet", n = "牛フィレのステーキ", price = 2200, frag = 0.8f, col = 0x6a3020, set = "shop" },
+            new Dish { k = "terrine", n = "テリーヌ", price = 1400, frag = 1.0f, col = 0xa8c060, set = "shop" },
+            new Dish { k = "dessert_plate", n = "デザートの盛り合わせ", price = 1200, frag = 1.6f, col = 0x8a5030, set = "shop" },
+            new Dish { k = "souffle", n = "スフレ", price = 1300, frag = 2.4f, col = 0xe8b860, set = "shop" },
+            new Dish { k = "roastbeef", n = "ローストビーフ", price = 2200, frag = 0.9f, col = 0xc05a5a, set = "shop" },
+            new Dish { k = "lobster", n = "伊勢海老", price = 2200, frag = 1.5f, col = 0xe0402a, set = "shop" },
+            new Dish { k = "afternoon_tea", n = "アフタヌーンティー", price = 2000, frag = 2.0f, col = 0xf2d8e0, set = "shop" },
+            new Dish { k = "fruit_tart", n = "フルーツタルト", price = 1500, frag = 1.6f, col = 0xe8a040, set = "shop" },
+            new Dish { k = "vichyssoise", n = "ビシソワーズ", price = 1100, frag = 2.2f, col = 0xf2eedc, set = "shop" },
+            new Dish { k = "special_cake", n = "特製ケーキ", price = 2200, frag = 2.2f, col = 0xfaf4ec, set = "shop" },
+            new Dish { k = "paella", n = "パエリア", price = 1600, frag = 1.0f, col = 0xf0b030, set = "shop" },
         };
 
-        /// <summary>その面で出す料理（JS版 menuOf）。dishes の指定 → menu の組 → ふつうの料理。</summary>
-        public static List<Dish> MenuOf(StageCfg C)
+        public static Dish Find(string k) { foreach (var d in All) if (d.k == k) return d; return null; }
+
+        /// <summary>
+        /// その面で出す料理（JS版 menuOf）。決め方は上から順に：
+        ///   1. ステージの dishes（料理の k の並び）… その料理だけ（1面は案内が「クレープ」なのでクレープだけ）
+        ///   2. ステージの menu（"crepe" など）… その組
+        ///   3. お店のメニュー（Shops の menu）… 高級和食なら寿司や天ぷら、のように店に合った料理
+        ///   4. どれも無ければ、ふつうの料理（set の無い8品）
+        /// </summary>
+        public static List<Dish> MenuOf(StageCfg C, ShopDef shop = null)
         {
             var outL = new List<Dish>();
             if (C != null && C.dishes != null && C.dishes.Count > 0)
@@ -391,9 +471,16 @@ namespace Nekorobo
                 foreach (var d in All) if (C.dishes.Contains(d.k)) outL.Add(d);
                 if (outL.Count > 0) return outL;
             }
-            string set = C != null ? (C.menu ?? "") : "";
-            foreach (var d in All) if ((d.set ?? "") == set) outL.Add(d);
-            if (outL.Count > 0) return outL;
+            if (C != null && !string.IsNullOrEmpty(C.menu))
+            {
+                foreach (var d in All) if (d.set == C.menu) outL.Add(d);
+                if (outL.Count > 0) return outL;
+            }
+            if (shop != null && shop.menu != null)
+            {
+                foreach (var k in shop.menu) { var d = Find(k); if (d != null) outL.Add(d); }
+                if (outL.Count > 0) return outL;
+            }
             foreach (var d in All) if (d.set == null) outL.Add(d);
             return outL;
         }

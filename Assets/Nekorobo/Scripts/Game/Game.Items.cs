@@ -80,7 +80,7 @@ namespace Nekorobo
         {
             new UpgradeDef { k = "accel", n = "加速アップ", ds = "加速力・バック出力 +15% / Lv（Lv10で2.5倍・最高速10.5m/s）", bas = 700, rate = 1.34f, max = 10 },
             new UpgradeDef { k = "armor", n = "耐久度アップ", ds = "受けるダメージ −10% / Lv", bas = 1400, rate = 1.50f, max = 5 },
-            new UpgradeDef { k = "jump", n = "ジャンプ性能アップ", ds = "高さ +10% / 連射間隔 −0.05秒 / Lv", bas = 1100, rate = 1.50f, max = 5 },
+            new UpgradeDef { k = "jump", n = "ジャンプ性能アップ", ds = "高さ +10% / 飛距離 +15% / 連射間隔 −0.05秒 / Lv", bas = 1100, rate = 1.50f, max = 5 },
             new UpgradeDef { k = "light", n = "重量軽量化", ds = "ぶつけた客の吹っ飛び・客のダメージ・店の損壊 −10% / Lv", bas = 1200, rate = 1.50f, max = 5 },
         };
 

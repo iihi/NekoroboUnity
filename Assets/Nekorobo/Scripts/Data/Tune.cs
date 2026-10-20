@@ -20,6 +20,10 @@ namespace Nekorobo
         public float knockback = 2.0f, knockUp = 1.6f;
         [Header("ジャンプ")]
         public float jumpSpeed = 3.4f, jumpCooldown = 0.5f, airControl = 0.35f;
+        // 飛距離[m]：平らな所を全速で走って跳んだときの、横に進む距離の上限（JS版 jumpDist）。
+        // 抑えないと 4m 以上跳んで川を橋もジャンプ台も使わずに渡れていた。横の速さだけを抑えるので、高さは変わらない。
+        // ショップの「ジャンプ性能アップ」で1段ごとに +15%
+        public float jumpDist = 1.4f;
         [Header("ダメージ")]
         public float hitThreshold = 18, hitCooldown = 0.30f, botTough = 1.0f, botDmg = 0.033f,
                      shopDmg = 0.039f, chairWeight = 0.30f, chainWeight = 0.50f, dishDmg = 0.32f,
@@ -86,7 +90,7 @@ namespace Nekorobo
         {
             var t = new Tune();
             t.thrust = 34; t.linDamp = 3.4f; t.reverseRatio = 0.75f; t.steerAccel = 20; t.steerMax = 4.5f;
-            t.jumpSpeed = 4.6f; t.airControl = 0.50f;
+            t.jumpSpeed = 4.6f; t.airControl = 0.50f; t.jumpDist = 2.8f;
             t.botTough = 8.0f; t.botDmg = 0.024f; t.breakSteer = 65; t.breakDrive = 90;
             t.knockback = 7.0f; t.knockUp = 3.2f; t.guestDmg = 0.05f;
             t.guestTough = 10.0f;

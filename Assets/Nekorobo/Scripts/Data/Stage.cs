@@ -41,6 +41,7 @@ namespace Nekorobo
         public List<string> dishes;
         public JArray zones, hints;
         public JObject tune, raw;
+        public Dictionary<string, List<string>> floorPaint;   // マスごとに塗った床の絵 { デザイン: ["i,j", …] }
 
         public static StageCfg Parse(JObject o, string file)
         {
@@ -74,6 +75,12 @@ namespace Nekorobo
             c.zones = o["zones"] as JArray;
             c.hints = o["hints"] as JArray;
             c.tune = o["tune"] as JObject;
+            if (o["floorPaint"] is JObject fp)
+            {
+                c.floorPaint = new Dictionary<string, List<string>>();
+                foreach (var p in fp.Properties())
+                    if (p.Value is JArray cells) { var l = new List<string>(); foreach (var x in cells) l.Add((string)x); c.floorPaint[p.Name] = l; }
+            }
             return c;
         }
 

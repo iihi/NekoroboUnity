@@ -40,7 +40,7 @@ namespace Nekorobo
             S("thrust","加速力",3,40,0.5f,1), S("linDamp","前後の減衰",0.5f,8,0.1f,1), S("reverseRatio","バック出力比",0.2f,1,0.05f,2),
             S("steerAccel","旋回の立ち上がり",2,34,0.5f,1), S("steerMax","最大旋回速度",1,8,0.1f,1), S("lateralGrip","横グリップ(小=滑る)",0,9,0.1f,1),
             Sec("ジャンプ"),
-            S("jumpSpeed","踏み切り速度",0,8,0.1f,1), S("jumpCooldown","連射間隔(秒)",0.1f,1.5f,0.05f,2), S("airControl","空中での効き",0,1,0.05f,2),
+            S("jumpSpeed","踏み切り速度",0,8,0.1f,1), S("jumpCooldown","連射間隔(秒)",0.1f,1.5f,0.05f,2), S("airControl","空中での効き",0,1,0.05f,2), S("jumpDist","飛距離(m)",0.5f,6,0.1f,1),
             Sec("吹っ飛び（雑な物理演算）"),
             S("knockback","客を飛ばす強さ",0,10,0.1f,1), S("knockUp","客を浮かせる強さ",0,10,0.1f,1),
             Sec("ダメージ係数（衝撃 kg・m/s あたり）"),
