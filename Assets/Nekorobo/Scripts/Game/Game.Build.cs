@@ -21,6 +21,8 @@ namespace Nekorobo
         public Quaternion counterRot = Quaternion.identity;
         public Ent counterEnt;
         Transform kitchen;
+        string counterV = "";              // カウンターの形（hotel / ryotei / classic。空は標準）
+        GameObject kitchenModel;             // 受取口まわりのモデル（無ければ箱で組む）
         readonly List<Transform> counterPlates = new List<Transform>();
         readonly List<Dish> counterPlateDish = new List<Dish>();
 
@@ -54,10 +56,28 @@ namespace Nekorobo
         /// capsule のときは half.x が半径、half.y が筒の半分の長さ。
         /// </summary>
         /// <summary>models.json にその種類のモデルがあれば、手続きの見た目と差し替える（JS版 applyModel）。</summary>
-        void ApplyModel(Ent e, GameObject look, string kind, string want = null)
+        Transform ApplyModel(Ent e, GameObject look, string kind, string want = null, ModelOpts opts = null)
         {
             float h;
-            if (ModelStore.Apply(e.transform, look, kind, shop.n, e.size, out h, want) != null) e.modelH = h;
+            var t = ModelStore.Apply(e.transform, look, kind, shop.n, e.size, out h, want, opts: opts);
+            if (t != null) e.modelH = h;
+            return t;
+        }
+
+        /// <summary>
+        /// モデルを、作ったときの座標のまま置く（受取口・屋台・ジャンプ台のように、大きさを合わせない物）。
+        /// glTFast の向きを 180度回してそろえる（ModelStore と同じ）。
+        /// </summary>
+        static GameObject PlaceModel(Transform parent, ModelEntry M)
+        {
+            var inst = Object.Instantiate(M.roots[0], parent, false);
+            inst.transform.localPosition = Vector3.zero;
+            inst.transform.localRotation = Quaternion.Euler(0, 180, 0);
+            inst.transform.localScale = Vector3.one;
+            inst.SetActive(true);
+            foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+            { r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true; }
+            return inst;
         }
 
         Ent MakeBody(string kind, Vector3 pos, Vector3 half, Quaternion rot, bool fix,
@@ -326,7 +346,9 @@ namespace Nekorobo
                                               false, lng ? 45 : 30, 0.6f * fr, 0.2f, 0.6f);
                             var look = Looks.Table(tb.transform, lng, o.des);
                             // 長テーブルのモデルが無ければテーブルのモデル（JS版と同じ）
-                            ApplyModel(tb, look, ModelStore.For(o.t, shop.n) != null ? o.t : "table");
+                            string tk = ModelStore.For(o.t, shop.n) != null ? o.t : "table";
+                            // モデルの des_ の部位はこのデザインで塗り、ランナー（cloth）は選んだ柄にする
+                            ApplyModel(tb, look, tk, null, new ModelOpts { des = o.des, desKind = tk, cloth = o.cloth });
                             furni.Add(tb); objEnt[o] = tb;
                             break;
                         }
@@ -334,7 +356,7 @@ namespace Nekorobo
                         {
                             var chr = MakeBody("chair", b + new Vector3(0, 0.45f, 0), new Vector3(0.22f, 0.45f, 0.22f),
                                                Coord.RotFace(o.rot), false, 8, 0.5f * fr, 0.25f, 0.5f);
-                            ApplyModel(chr, Looks.Chair(chr.transform, o.des), "chair");
+                            ApplyModel(chr, Looks.Chair(chr.transform, o.des), "chair", null, new ModelOpts { des = o.des, desKind = "chair" });
                             furni.Add(chr); objEnt[o] = chr;
                             break;
                         }
@@ -346,7 +368,16 @@ namespace Nekorobo
                             var half = along ? new Vector3(W * 0.43f, h * 0.32f, D * 0.3f) : new Vector3(W * 0.3f, h * 0.32f, D * 0.43f);
                             var bn = MakeBody("chair", b + new Vector3(0, half.y, 0), half, Quaternion.identity,
                                               false, 22, 0.5f * fr, 0.25f, 0.5f);
-                            BenchLook(bn.transform, half, along);
+                            // オーバークック風のベンチ（models.json の bench）。実寸（長さ X・背もたれ -Z・原点は足元）なので、そのまま置いて回すだけ
+                            var BM = ModelStore.For("bench", shop.n);
+                            if (BM != null)
+                            {
+                                var holder = Vis(bn.transform, "BenchModel").transform;
+                                holder.localPosition = new Vector3(0, -half.y, 0);
+                                holder.localRotation = Part.Euler3(0, o.rot * Mathf.Deg2Rad, 0);
+                                PlaceModel(holder, BM);
+                            }
+                            else BenchLook(bn.transform, half, along);
                             bn.bench = true;
                             furni.Add(bn); objEnt[o] = bn;
                             break;
@@ -361,6 +392,12 @@ namespace Nekorobo
                             {
                                 float hR = 1.04f / (2 * Mathf.Max(2.2f, TF.heads + K.heads));
                                 gu.vomit = Vomit(gu.transform, hR, 1.04f / 2 - hR);   // モデルに差し替えても残す
+                                // 背の低い客は、見た目の縮みに合わせて虹の高さも下げる（JS版：足元を床に合わせたまま K.h 倍）
+                                if (K.h != 1)
+                                {
+                                    var vp = gu.vomit.transform.localPosition;
+                                    gu.vomit.transform.localPosition = new Vector3(vp.x, -1.04f / 2 * (1 - K.h) + vp.y * K.h, vp.z);
+                                }
                             }
                             ApplyModel(gu, look, "guest", o.gm);    // gm … エディタで選んだ客のモデル
                             guests.Add(gu); objEnt[o] = gu;
@@ -495,7 +532,9 @@ namespace Nekorobo
             var g = SurfaceArt.DecoMesh(stageRoot, D);
             float r = o.rot * Mathf.Deg2Rad;
             float d3x = Mathf.Cos(r), d3z = -Mathf.Sin(r);                 // three.js の向き（dirOf）
-            g.transform.position = new Vector3(b.x + d3x * 0.53f, D.y, b.z - d3z * 0.53f);
+            // 横2マスの絵画は、絵に向かって右のマスとのあいだ（半マス右）に寄せる
+            float sh = D.span == 2 ? 0.5f : 0;
+            g.transform.position = new Vector3(b.x + d3x * 0.53f + d3z * sh, D.y, b.z - (d3z * 0.53f - d3x * sh));
             g.transform.rotation = Part.Euler3(0, Mathf.Atan2(d3x, d3z), 0);
         }
 
@@ -653,19 +692,34 @@ namespace Nekorobo
             string des = null;
             var co = C.objects.Find(o => o.t == "counter");
             if (co != null) des = co.des;
+            // カウンターの形（ホテル・料亭・高級レストラン）。置いた物の指定、無ければお店の既定
+            counterV = (co != null && !string.IsNullOrEmpty(co.v)) ? co.v : (shop.counter ?? "");
             var cg = Vis(counterEnt.transform, "Look").transform;
             Part.Add(cg, MeshGen.Box(CounterW, CounterH - 0.1f, CounterD), Designs.Mat(des, Mats.Get(0x6b4230), "counter", "leg"),
                      new Vector3(0, -0.05f, 0));
             Part.Add(cg, MeshGen.Box(CounterW + 0.22f, 0.1f, CounterD + 0.18f), Designs.Mat(des, Mats.Get(0xe9e4d8, 0.55f), "counter", "top", 3),
                      new Vector3(0, CounterH / 2f - 0.05f, 0));
             Part.Add(cg, MeshGen.Box(0.04f, 0.12f, CounterD * 0.94f), Mats.Get(0xb9c0c8, 0.35f), new Vector3(CounterW / 2f + 0.01f, 0.12f, 0));
-            ApplyModel(counterEnt, cg.gameObject, "counter");
+            // 形違いのモデル（無ければ標準の counter）
+            string ck = counterV != "" && ModelStore.For("counter_" + counterV, shop.n) != null ? "counter_" + counterV : "counter";
+            ApplyModel(counterEnt, cg.gameObject, ck);
 
             // 厨房まわり（カウンターと一緒に回す。ローカル +X が受取面の向き）
             kitchen = new GameObject("Kitchen").transform;
             kitchen.SetParent(stageRoot, false);
             kitchen.SetPositionAndRotation(new Vector3(counterPos.x, 0, counterPos.z), counterRot);
-            if (!C.stall)
+            // オーバークック風の受取口まわり（models.json の kitchen。カウンターの形に合わせた kitchen_形 があればそちら）。
+            // カウンターの座標で作ってあるので、大きさは合わせずにそのまま置く。塗り壁の所（素材 des_wall）は部屋の壁と同じ色・デザイン
+            var KM = (counterV != "" ? ModelStore.For("kitchen_" + counterV, shop.n) : null) ?? ModelStore.For("kitchen", shop.n);
+            kitchenModel = null;
+            if (!C.stall && KM != null)
+            {
+                var D = Designs.Get(C.wallDes);
+                var wallM = D != null ? Designs.Mat(C.wallDes, Mats.Get(0xcfd6de), "wall", "wall", 1f / (D.tile > 0 ? D.tile : 2f)) : Mats.Get(0xcfd6de);
+                kitchenModel = PlaceModel(kitchen, KM);
+                ModelStore.Repaint(kitchenModel, new ModelOpts { desWall = wallM });
+            }
+            else if (!C.stall)
             {
                 var wm = C.wallDes != null ? Designs.Surf(C.wallDes, Mats.Get(0xcfd6de), "wall", 5.0f, 2.6f) : Mats.Get(0xcfd6de);
                 Part.Add(kitchen, MeshGen.Box(0.24f, 2.6f, 5.0f), wm, Coord.W(-0.71f, 1.3f, 0), name: "KitchenWall");
@@ -719,6 +773,28 @@ namespace Nekorobo
         void BuildStall(StageCfg C)
         {
             var g = Vis(kitchen, "Stall").transform;
+            // オーバークック風の屋台（models.json の stall）。カウンターの座標で作ってある。
+            // 看板の文字の面（素材 stall_sign）の所には、店の名前の看板を立てる
+            var SM = ModelStore.For("stall", shop.n);
+            if (SM != null)
+            {
+                var sm = PlaceModel(g, SM);
+                foreach (var r in sm.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (r.sharedMaterial == null || !r.sharedMaterial.name.StartsWith("stall_sign")) continue;
+                    var mf = r.GetComponent<MeshFilter>();
+                    var mb = mf.sharedMesh.bounds;
+                    var m = g.worldToLocalMatrix * r.transform.localToWorldMatrix;
+                    var bb = new Bounds(m.MultiplyPoint3x4(mb.center), Vector3.zero);
+                    for (int k = 0; k < 8; k++)
+                        bb.Encapsulate(m.MultiplyPoint3x4(mb.center + Vector3.Scale(mb.extents, new Vector3((k & 1) != 0 ? 1 : -1, (k & 2) != 0 ? 1 : -1, (k & 4) != 0 ? 1 : -1))));
+                    r.enabled = false;
+                    var sg = Looks.Sign(g, C.stallName ?? "クレープ", bb.size.x, bb.size.y, Mats.Hex(0xfff6ea), Mats.Hex(0xc2410c), Mats.Hex(0xe8682c));
+                    sg.transform.localPosition = new Vector3(bb.center.x, bb.center.y, bb.min.z - 0.004f);
+                }
+                StallOwner(C);
+                return;
+            }
             var pm = Mats.Get(0xd9d4ca);
             foreach (float x in new[] { -1.4f, 0.0f })
                 foreach (float z in new[] { -1.55f, 1.55f })
@@ -737,6 +813,12 @@ namespace Nekorobo
             // 看板（手前の端に、カメラへ向けて）
             var sign = Looks.Sign(g, C.stallName ?? "クレープ", 1.5f, 0.38f, Mats.Hex(0xfff6ea), Mats.Hex(0xc2410c), Mats.Hex(0xe8682c));
             sign.transform.localPosition = Coord.W(-0.7f, 1.95f, 1.58f);
+            StallOwner(C);
+        }
+
+        /// <summary>屋台の店主（当たり判定つき）。</summary>
+        void StallOwner(StageCfg C)
+        {
             // 店主。コックの見た目にひげを足して少し大きく
             var K0 = GuestKinds.Find("chefguest");
             var K = new GuestKind { k = "owner", n = "店主", h = K0.h, w = 1.2f, heads = 0.3f, hair = K0.hair, wear = K0.wear, hat = K0.hat, beard = true, pal = K0.pal };
@@ -780,6 +862,18 @@ namespace Nekorobo
             var c = new Vector3(b.x - nrm.x * th / 2, rise / 2 - nrm.y * th / 2, b.z - nrm.z * th / 2);
             float slope = Mathf.Sqrt(L * L + rise * rise);
             var e = MakeBody("ramp", c, new Vector3(slope / 2, th / 2, Wd / 2), q, true, 0, 0.9f * fr, 0f);
+            // オーバークック風のくさび形（models.json の ramp。長さ2・幅1・高さ0.85、+X が上り）。
+            // 当たり判定は傾けた板のまま。見た目だけ床に置いて、マスの長さ・幅・高さに合わせて伸ばす
+            var RM = ModelStore.For("ramp", shop.n);
+            if (RM != null)
+            {
+                var holder = new GameObject("RampModel").transform;
+                holder.SetParent(stageRoot, false);
+                holder.SetPositionAndRotation(new Vector3(b.x, 0, b.z), Coord.RotX(o.rot));
+                var rm = PlaceModel(holder, RM);
+                rm.transform.localScale = new Vector3(L / 2, rise / 0.85f, Wd / 1);
+                return;
+            }
             Part.Add(e.transform, MeshGen.Box(slope, th, Wd), Mats.Get(0x9aa7b8), Vector3.zero);
             var bar = Mats.Get(0xf0c020, 0.7f);
             for (float t2 = -slope / 2 + 0.28f; t2 < slope / 2 - 0.1f; t2 += 0.42f)

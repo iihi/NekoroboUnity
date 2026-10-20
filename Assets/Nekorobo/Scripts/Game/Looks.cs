@@ -278,14 +278,51 @@ namespace Nekorobo
         }
 
         // ---------------------------------------------------------------- 壁の飾り
-        public class DecoKind { public string k; public float w, h, y; }
+        /// <summary>
+        /// 壁の飾りの種類（JS版 tiles.js の DECO_KINDS）。
+        ///   model … 枠のモデル（models.json の deco_model）。書かなければ deco_k
+        ///   span  … 横に何マス使うか。2 なら置いたマスと「絵に向かって右」のマスにまたがる
+        /// 絵画と中華の飾りの絵は、models.json の textures の deco_k（tools/models/deco_extra.py が描いた画像）。
+        /// </summary>
+        public class DecoKind { public string k, model; public float w, h, y; public int span = 1; }
         public static readonly DecoKind[] DECO_KINDS =
         {
             new DecoKind { k = "poster", w = 0.86f, h = 0.60f, y = 1.45f },
             new DecoKind { k = "board",  w = 0.90f, h = 0.68f, y = 1.40f },
             new DecoKind { k = "menu",   w = 0.72f, h = 0.86f, y = 1.45f },
             new DecoKind { k = "frame",  w = 0.62f, h = 0.50f, y = 1.55f },
+            new DecoKind { k = "paint1", w = 1.70f, h = 1.05f, y = 1.65f, span = 2, model = "painting" },
+            new DecoKind { k = "paint2", w = 1.70f, h = 1.05f, y = 1.65f, span = 2, model = "painting" },
+            new DecoKind { k = "paint3", w = 1.70f, h = 1.05f, y = 1.65f, span = 2, model = "painting" },
+            new DecoKind { k = "fuku",    w = 0.86f, h = 0.86f, y = 1.65f, model = "doufang" },
+            new DecoKind { k = "chun",    w = 0.86f, h = 0.86f, y = 1.65f, model = "doufang" },
+            new DecoKind { k = "zhaocai", w = 0.86f, h = 0.86f, y = 1.65f, model = "doufang" },
+            new DecoKind { k = "xi",      w = 0.80f, h = 0.80f, y = 1.65f, model = "round" },
+            new DecoKind { k = "knot",    w = 0.54f, h = 1.35f, y = 1.75f, model = "knot" },
         };
+
+        /// <summary>models.json の textures（JS版 TEXOVR）。Game が起動時に入れる。</summary>
+        public static Newtonsoft.Json.Linq.JObject Textures;
+        /// <summary>差し替えの画像（textures に書いた物）。空や無ければ null。</summary>
+        public static Texture2D TexOverride(string key)
+        {
+            var s = Textures != null ? (string)Textures[key] : null;
+            return string.IsNullOrEmpty(s) ? null : DataRoot.Texture(s);
+        }
+
+        static readonly Dictionary<Texture2D, Material> decoTexMats = new Dictionary<Texture2D, Material>();
+        /// <summary>飾りの絵の素材。光の影響を受けない。角の外が透明な絵（斗方・切り紙）は抜く。</summary>
+        static Material DecoTexMat(Texture2D tex)
+        {
+            Material m;
+            if (decoTexMats.TryGetValue(tex, out m) && m != null) return m;
+            m = Mats.BasicTex(tex);
+            m.SetFloat("_AlphaClip", 1f); m.SetFloat("_Cutoff", 0.5f);
+            m.EnableKeyword("_ALPHATEST_ON");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
+            decoTexMats[tex] = m;
+            return m;
+        }
         public static DecoKind Deco(string v)
         {
             foreach (var d in DECO_KINDS) if (d.k == v) return d;
@@ -304,8 +341,62 @@ namespace Nekorobo
         {
             var g = new GameObject("Deco_" + D.k);
             g.transform.SetParent(parent, false);
-            var t = g.transform;
-            Part.Add(t, MeshGen.Box(D.w, D.h, 0.035f), Mats.Get(D.k == "board" ? 0x2f4038 : 0xe8e0cc, 0.9f), Vector3.zero);
+            // 差し替えた画像があればそちらを使う
+            var tex = TexOverride("deco_" + D.k);
+            // オーバークック風の枠と小物（models.json の deco_種類）。実寸で作ってあるのでそのまま置き、
+            // 中身の面（素材 deco_face）に絵を貼る。同じ枠を使い回す種類（絵画3枚・斗方3枚）は D.model の枠を使う
+            var M = ModelStore.For("deco_" + (D.model ?? D.k), null);
+            if (M != null)
+            {
+                var inst = Object.Instantiate(M.roots[0], g.transform, false);
+                inst.transform.localPosition = Vector3.zero;
+                inst.transform.localRotation = Quaternion.Euler(0, 180, 0);      // glTFast の向きをそろえる（ModelStore と同じ）
+                inst.SetActive(true);
+                Renderer face = null;
+                foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+                {
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
+                    var mn = r.sharedMaterial != null ? r.sharedMaterial.name : "";
+                    if (mn.StartsWith("deco_face")) face = r;
+                }
+                if (face != null)
+                {
+                    face.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    if (tex != null) face.sharedMaterial = DecoTexMat(tex);
+                    else
+                    {
+                        // 絵の画像が無い種類（ポスター・黒板・メニュー表・額）は、組んだ絵を枠の面のすぐ手前に置く
+                        var fb = FaceBounds(g.transform, face);
+                        face.enabled = false;
+                        var holder = new GameObject("Face").transform;
+                        holder.SetParent(g.transform, false);
+                        holder.localPosition = new Vector3(fb.center.x, fb.center.y, fb.min.z + 0.019f - 0.001f);
+                        DrawFace(holder, D);
+                    }
+                }
+                return g;
+            }
+            Part.Add(g.transform, MeshGen.Box(D.w, D.h, 0.035f), Mats.Get(D.k == "board" ? 0x2f4038 : 0xe8e0cc, 0.9f), Vector3.zero);
+            if (tex != null) Part.Add(g.transform, MeshGen.Plane(D.w, D.h), DecoTexMat(tex), new Vector3(0, 0, -0.019f), false);
+            else DrawFace(g.transform, D);
+            return g;
+        }
+
+        /// <summary>枠のモデルの絵の面の大きさ（g から見た向き）。</summary>
+        static Bounds FaceBounds(Transform g, Renderer r)
+        {
+            var mf = r.GetComponent<MeshFilter>();
+            var mb = mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds : new Bounds();
+            var m = g.worldToLocalMatrix * r.transform.localToWorldMatrix;
+            var bb = new Bounds(m.MultiplyPoint3x4(mb.center), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+                bb.Encapsulate(m.MultiplyPoint3x4(mb.center + Vector3.Scale(mb.extents, new Vector3((i & 1) != 0 ? 1 : -1, (i & 2) != 0 ? 1 : -1, (i & 4) != 0 ? 1 : -1))));
+            return bb;
+        }
+
+        /// <summary>飾りの絵を板と字で組む（JS版 decoTex の canvas の中身）。表はローカルの -Z。</summary>
+        static void DrawFace(Transform t, DecoKind D)
+        {
             // 絵の面（板の表から 1.9cm 手前）。256×256 の canvas の座標で置く
             float z = -0.019f;
             System.Action<float, float, float, float, int> rect = (x0, y0, w, h, col) =>
@@ -379,7 +470,6 @@ namespace Nekorobo
                     txt(128, 218, "たのしく！", 0x3f7fb8, 34, TextAnchor.MiddleCenter);
                     break;
             }
-            return g;
         }
     }
 }

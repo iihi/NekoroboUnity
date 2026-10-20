@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Nekorobo
@@ -146,6 +147,8 @@ namespace Nekorobo
         public GameObject dishVis;       // 皿の上の料理
         public Material body, bodyDmg;
         public MeshRenderer[] white;
+        public List<Material> modelMats;     // ロボのモデルに差し替えたとき、色を混ぜた素材（損壊で暗くする・無敵で光らせる）
+        public List<Color> modelBase;
         public Texture2D faceTex;
         public string faceNow = "";
 
@@ -184,6 +187,7 @@ namespace Nekorobo
             // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
             L.faceTex = new Texture2D(192, 96, TextureFormat.RGBA32, false, true) { filterMode = FilterMode.Bilinear };
             var face = Part.Add(rg, MeshGen.Plane(0.48f, 0.25f), Mats.BasicTex(L.faceTex), Coord.W(0, 0.38f, -0.243f), shadow: false);
+            face.AddComponent<KeepSlot>().slot = "face";          // モデルに差し替えても残す（models.json の attach で置き直す）
             // three.js: rotation.y = π（裏返して前へ向ける）, rotation.x = 0.22
             face.transform.localRotation = Part.Euler3(0.22f, Mathf.PI, 0f);
             // 横の装甲パネル
@@ -199,6 +203,7 @@ namespace Nekorobo
             plate.localPosition = Coord.W(0, 0.215f, 0.12f);
             Part.Add(plate, MeshGen.Cylinder(0.15f, 0.13f, 0.03f, 16), Mats.Get(0xfaf7f0, 0.9f), Vector3.zero);
             plate.gameObject.SetActive(false);
+            plate.gameObject.AddComponent<KeepSlot>().slot = "plate";
             L.plate = plate;
             L.DrawFace("norm");
             return L;
@@ -216,6 +221,9 @@ namespace Nekorobo
         {
             var m = dmg ? bodyDmg : body;
             foreach (var r in white) r.sharedMaterial = m;
+            // モデルに差し替えているときは、白い部品が無いので色を暗くして損壊を表す
+            if (modelMats != null)
+                for (int i = 0; i < modelMats.Count; i++) ModelStore.SetMatColor(modelMats[i], modelBase[i] * (dmg ? 0.55f : 1f));
         }
 
         /// <summary>運んでいる料理を出す／消す。</summary>

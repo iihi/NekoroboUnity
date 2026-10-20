@@ -407,7 +407,9 @@ namespace Nekorobo
         {
             var e = MakeBody("mover", new Vector3(b.x, -0.1f, b.z), new Vector3(1.45f, 0.1f, 0.45f), Coord.RotX(o.rot),
                              false, 1000, 0.9f, 0f, kinematic: true);
-            Part.Add(e.transform, MeshGen.Box(2.9f, 0.2f, 0.9f), Mats.Get(0xb08a5a), Vector3.zero);
+            var mg = Vis(e.transform, "Look");
+            Part.Add(mg.transform, MeshGen.Box(2.9f, 0.2f, 0.9f), Mats.Get(0xb08a5a), Vector3.zero);
+            ApplyModel(e, mg, "mover");                         // オーバークック風の動く床（models.json の mover）
             var d = Coord.Dir(o.rot);
             var raw = o.raw;
             movers.Add(new Mover

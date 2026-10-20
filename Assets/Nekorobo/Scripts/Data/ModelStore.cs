@@ -15,6 +15,24 @@ namespace Nekorobo
         public float scaleNum = -1, maxScale = float.PositiveInfinity;
         public Vector3 rotDeg, offset;
         public bool keepY, skinned;
+        public Dictionary<string, Vector3> attach = new Dictionary<string, Vector3>();   // 残す部品（顔など）の置き場所（three.js の向き）
+    }
+
+    /// <summary>モデルに差し替えても残す部品の印（JS版 userData.keep / slot）。attach にその名前があれば、そこへ置き直す。</summary>
+    public class KeepSlot : MonoBehaviour { public string slot; }
+
+    /// <summary>
+    /// モデルの素材の塗り替え（JS版 applyModel の素材のところ）。素材の名前で決まる。
+    ///   des_部位 … エディタで選んだデザイン（木目・大理石・朱塗り…）で塗る（des。部位は top / leg / wall など）
+    ///   cloth    … テーブルのランナー。"none" なら消し、柄を選んでいればその絵（assets/oc/cloth/柄.png）
+    ///   player…  … プレイヤーの色そのもの。screen… 以外の素材にはプレイヤーの色を tintAmt だけ混ぜる（ロボ）
+    /// </summary>
+    public class ModelOpts
+    {
+        public string des, desKind, cloth;
+        public Color? tint; public float tintAmt;
+        public Material desWall;                          // des_wall に貼る素材（受取口の塗り壁＝部屋の壁）
+        public List<Material> tinted;                     // 色を混ぜた素材（損壊で暗くする・無敵で光らせる）。ここへ入れて返す
     }
 
     /// <summary>
@@ -105,6 +123,7 @@ namespace Nekorobo
             var ms = J.FN(o, "maxScale"); if (ms != null) M.maxScale = ms.Value;
             M.rotDeg = V3(o["rotDeg"]); M.offset = V3(o["offset"]);
             M.keepY = J.B(o, "keepY"); M.skinned = J.B(o, "skinned");
+            if (o["attach"] is JObject at) foreach (var p in at.Properties()) M.attach[p.Name] = V3(p.Value);
             M.names = list;          // いったんファイル名を入れておき、読めた物だけ残す
             return M;
         }
@@ -228,13 +247,26 @@ namespace Nekorobo
         /// 戻り値は置いたモデル（無ければ null）。modelH に見た目の高さを返す。
         /// </summary>
         public static Transform Apply(Transform holder, GameObject look, string kind, string shopName, Vector3 size,
-                                      out float modelH, string want = null, float? footY = null, Vector2? foot = null)
+                                      out float modelH, string want = null, float? footY = null, Vector2? foot = null, ModelOpts opts = null)
         {
             modelH = 0;
             var M = For(kind, shopName);
             if (M == null) return null;
             var tmpl = Pick(M, kind, want);
-            if (look != null) look.SetActive(false);
+            if (look != null)
+            {
+                // 印（KeepSlot）を付けた部品（顔・料理）は残して、モデルに合わせて置き直す。ほかは隠す
+                bool anyKeep = false;
+                foreach (Transform ch in look.transform)
+                {
+                    var ks = ch.GetComponent<KeepSlot>();
+                    if (ks == null) { ch.gameObject.SetActive(false); continue; }
+                    anyKeep = true;
+                    Vector3 at;
+                    if (ks.slot != null && M.attach.TryGetValue(ks.slot, out at)) ch.localPosition = Coord.W(at.x, at.y, at.z);
+                }
+                if (!anyKeep) look.SetActive(false);
+            }
 
             // 外の箱：rotDeg（three.js の向き）と縮尺。中：glTFast の向きを 180度回してそろえる
             var outer = new GameObject("Model_" + tmpl.name).transform;
@@ -275,7 +307,75 @@ namespace Nekorobo
                 r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
                 r.receiveShadows = true;
             }
+            if (opts != null) Repaint(inst, opts);
             return outer;
+        }
+
+        // ---- glTF の素材（glTFast のシェーダー）の色と絵
+        public static Color MatColor(Material m) { return m.HasProperty("baseColorFactor") ? m.GetColor("baseColorFactor") : m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : m.color; }
+        public static void SetMatColor(Material m, Color c)
+        {
+            if (m.HasProperty("baseColorFactor")) m.SetColor("baseColorFactor", c);
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+        }
+        static string BaseName(Material m) { var n = m.name; int i = n.IndexOf(" (Instance)"); return i >= 0 ? n.Substring(0, i) : n; }
+
+        static readonly Dictionary<string, Texture2D> clothTex = new Dictionary<string, Texture2D>();
+        /// <summary>ランナーの柄の絵（assets/oc/cloth/柄.png）。</summary>
+        public static Texture2D ClothTex(string k)
+        {
+            Texture2D t;
+            if (clothTex.TryGetValue(k, out t)) return t;
+            t = DataRoot.Texture("oc/cloth/" + k + ".png");
+            if (t != null) { t.wrapMode = TextureWrapMode.Repeat; t.anisoLevel = 8; }
+            clothTex[k] = t;
+            return t;
+        }
+
+        /// <summary>素材を名前で塗り替える（ModelOpts）。</summary>
+        public static void Repaint(GameObject inst, ModelOpts o)
+        {
+            foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+            {
+                var ms = r.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < ms.Length; i++)
+                {
+                    var m = ms[i]; if (m == null) continue;
+                    var name = BaseName(m);
+                    if (o.tint != null)
+                    {
+                        m = new Material(m) { name = name };
+                        if (name.StartsWith("player")) SetMatColor(m, o.tint.Value);
+                        else if (!name.StartsWith("screen")) SetMatColor(m, Color.Lerp(MatColor(m), o.tint.Value, o.tintAmt));
+                        if (o.tinted != null) o.tinted.Add(m);
+                        ms[i] = m; changed = true;
+                    }
+                    if (name == "cloth" && !string.IsNullOrEmpty(o.cloth))
+                    {
+                        if (o.cloth == "none") { r.enabled = false; continue; }
+                        var t = ClothTex(o.cloth);
+                        if (t != null)
+                        {
+                            m = new Material(m) { name = name };
+                            if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", t);
+                            m.mainTexture = t;
+                            ms[i] = m; changed = true;
+                        }
+                    }
+                    if (name.StartsWith("des_"))
+                    {
+                        string part = name.Substring(4);
+                        if (part == "wall" && o.desWall != null) { ms[i] = o.desWall; changed = true; }
+                        else if (!string.IsNullOrEmpty(o.des))
+                        {
+                            ms[i] = Designs.Mat(o.des, part == "leg" ? Mats.Get(0x8a5730) : Mats.Get(0xd98b45, 0.75f), o.desKind, part);
+                            changed = true;
+                        }
+                    }
+                }
+                if (changed) r.sharedMaterials = ms;
+            }
         }
 
         /// <summary>物の見た目の大きさを、holder から見た向きで測る（縮尺1・原点に置いた状態で）。</summary>

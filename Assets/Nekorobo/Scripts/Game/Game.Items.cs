@@ -779,10 +779,13 @@ namespace Nekorobo
         /// 無敵の見た目。虹色に光りながら点滅する（終わり3秒は、ついたり消えたり）。
         /// 光らせるのはその人の機体の素材だけ。
         /// </summary>
+        static readonly Dictionary<Material, Color> emissive0 = new Dictionary<Material, Color>();
         void InvGlow(Player P)
         {
             bool on = P.invT > 0 && !P.down;
-            foreach (var m in new[] { P.look.body, P.look.bodyDmg })
+            var mats = new List<Material> { P.look.body, P.look.bodyDmg };
+            if (P.look.modelMats != null) mats.AddRange(P.look.modelMats);
+            foreach (var m in mats)
             {
                 if (on)
                 {
@@ -791,10 +794,17 @@ namespace Nekorobo
                     var c = Color.HSVToRGB((t * 2.2f) % 1, 1, 1) * (lit ? 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(t * 14)) : 0);
                     m.EnableKeyword("_EMISSION");
                     m.SetColor("_EmissionColor", c);
+                    if (m.HasProperty("emissiveFactor"))                                        // glTF の素材（ロボのモデル）。元の光は覚えておく
+                    {
+                        if (!emissive0.ContainsKey(m)) emissive0[m] = m.GetColor("emissiveFactor");
+                        m.SetColor("emissiveFactor", c);
+                    }
                 }
                 else if (m.IsKeywordEnabled("_EMISSION"))
                 {
                     m.SetColor("_EmissionColor", Color.black);
+                    Color e0;
+                    if (m.HasProperty("emissiveFactor") && emissive0.TryGetValue(m, out e0)) { m.SetColor("emissiveFactor", e0); emissive0.Remove(m); }
                     m.DisableKeyword("_EMISSION");
                 }
             }

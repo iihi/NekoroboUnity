@@ -123,6 +123,7 @@ namespace Nekorobo
             NewWallets();
             var mj = DataRoot.ReadJson("assets/models.json");
             if (mj != null) Designs.Register(mj["designs"] as Newtonsoft.Json.Linq.JObject);
+            SurfaceArt.Textures = mj != null ? mj["textures"] as Newtonsoft.Json.Linq.JObject : null;
             FloorSet.Load();                               // 床チップ・壁の絵・道路／水／氷のまとめ画像（assets/floor/floors.json）
             Debug.Log("[Nekorobo] データ: " + DataRoot.Path + "（" + TF.log + "）");
             SetupView();
@@ -356,6 +357,14 @@ namespace Nekorobo
             R.player = P;
             P.ent = R;
             P.look = RobotLook.Build(R.transform, P.col, TF.bodyTint);
+            // オーバークック風のロボ（models.json の robot）。誰の機体か分かるように、素材にプレイヤーの色を混ぜる
+            // （素材の名前が player… の所は色そのもの、screen… の所は混ぜない）。顔と料理の皿は残して attach の所へ置き直す
+            var tinted = new List<Material>();
+            if (ApplyModel(R, P.look.root, "robot", null, new ModelOpts { tint = Mats.Hex(P.col), tintAmt = TF.bodyTint, tinted = tinted }) != null)
+            {
+                P.look.modelMats = tinted;
+                P.look.modelBase = tinted.ConvertAll(m => ModelStore.MatColor(m));
+            }
             // 足元のリング（向きの矢印つき）
             var ringG = new GameObject("Ring_" + P.name);
             ringG.transform.SetParent(stageRoot, false);

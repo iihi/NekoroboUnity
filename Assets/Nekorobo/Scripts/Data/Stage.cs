@@ -9,6 +9,7 @@ namespace Nekorobo
     public class StageObj
     {
         public string t, des, gk, v, gm;   // gm … 客のモデルの名前（エディタで選んだとき）
+        public string cloth;               // テーブルのランナーの柄（"" は既定の赤チェック、"none" は無し）
         public int i, j, rot, pri;
         public float? speed;
         public JObject raw;          // ルートなど、まだ使っていない項目もここに残っている
@@ -60,7 +61,7 @@ namespace Nekorobo
                     c.objects.Add(new StageObj
                     {
                         raw = jo, t = J.S(jo, "t"), i = J.I(jo, "i", 0), j = J.I(jo, "j", 0),
-                        rot = J.I(jo, "rot", 0), des = J.S(jo, "des"), gk = J.S(jo, "gk"), v = J.S(jo, "v"), gm = J.S(jo, "gm"),
+                        rot = J.I(jo, "rot", 0), des = J.S(jo, "des"), gk = J.S(jo, "gk"), v = J.S(jo, "v"), gm = J.S(jo, "gm"), cloth = J.S(jo, "cloth"),
                         pri = J.I(jo, "pri", 0), speed = J.FN(jo, "speed"),
                     });
                 }
