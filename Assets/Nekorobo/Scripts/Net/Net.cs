@@ -17,7 +17,7 @@ namespace Nekorobo
     /// 中身を替えてもゲーム側は1行も変わらない。
     ///
     ///   ws … 部屋サーバー（WebSocket。HTML版と同じサーバ・同じ便りなので、HTML版と同じ部屋で遊べる）。既定
-    ///   （EOS を足すときは Backends に1行足す）
+    ///   eos … EOS（Epic Online Services）の Lobby と P2P。サーバーは要らない。Unity版どうしだけ（NetEos）
     ///
     ///   どれを使うか：起動の引数 -net=名前 → この端末で覚えた値（PlayerPrefs nekorobo.net）→ ws
     ///
@@ -54,10 +54,16 @@ namespace Nekorobo
         static readonly Dictionary<string, Func<INetBackend>> Backends = new Dictionary<string, Func<INetBackend>>
         {
             ["ws"] = () => new NetWs(),
+#if NEKOROBO_EOS
+            ["eos"] = () => new NetEos(),
+#endif
         };
         const string KIND_KEY = "nekorobo.net";
         static INetBackend be;
         static string kind;
+
+        /// <summary>使える中身の名前（ws・eos）。オンラインの画面で切り替える用。</summary>
+        public static IEnumerable<string> Kinds { get { return Backends.Keys; } }
 
         /// <summary>いま使っている中身の名前（ws など）。</summary>
         public static string Kind { get { Be(); return kind; } }
@@ -104,6 +110,7 @@ namespace Nekorobo
         /// <summary>届いた便りを配る。主スレッドから毎フレーム呼ぶ（Hud.Update）。</summary>
         public static void Pump()
         {
+            if (be != null) be.Tick();
             Action a;
             int n = 0;
             while (n++ < 500 && inbox.TryDequeue(out a))

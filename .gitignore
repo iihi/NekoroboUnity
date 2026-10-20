@@ -38,3 +38,13 @@ crashlytics-buildsettings.json
 *.apk
 *.aab
 *.unitypackage
+
+# EOS の鍵（GitHub に上げない）
+/eos.json
+
+# EOS の SDK（Epic の物なので上げない。Tools/eos_setup.ps1 で入れる）と、それを働かせる印
+/Assets/Plugins/EOS/
+/Assets/Plugins/EOS.meta
+/Assets/Plugins.meta
+/Assets/csc.rsp
+/Assets/csc.rsp.meta

@@ -24,7 +24,9 @@ namespace Nekorobo
             string where = "<i>" + Net.Label + "：" + Net.Where + "</i>";
             if (Net.State == "on") return "つながっています。" + (Net.Id >= 0 ? "（番号 " + Net.Id + "）" : "") + "\n" + where;
             if (Net.State == "connecting") return "つないでいます…\n" + where;
-            return "<color=#ff9e6b><b>つながっていません</b></color>" + (Net.Why.Length > 0 ? "（" + Net.Why + "）" : "") + "\n" + where
+            string bad = "<color=#ff9e6b><b>つながっていません</b></color>" + (Net.Why.Length > 0 ? "（" + Net.Why + "）" : "") + "\n" + where;
+            if (!Net.NeedsAddr) return bad + "\nネットにつながっているか確かめて、「もう一度つなぐ」を押してください。";
+            return bad
                  + "\n部屋サーバー（HTML版の <b>node server.js</b> か <b>node rooms-server.js</b>）が動いているか確かめてください。"
                  + "別の場所で動かしているなら、下の<b>「サーバ」</b>にそのマシンを入れてください。";
         }
@@ -43,6 +45,17 @@ namespace Nekorobo
                     + "部屋サーバーを別のマシンで動かしているときは、<b>ホスト名:ポート</b>（例 <b>192.168.0.10:8124</b>）で入れてください。",
                     Net.Addr, "Online", v => { Net.SetAddr(v); Net.Close(); Net.Connect(); }),
                 "つなぐ先の部屋サーバーを変えます（この端末で覚えます）。", false, "srv");
+            // つなぎ方（部屋サーバー・EOS）。この端末で覚える。部屋は仕組みごとに別なので、相手と同じにすること
+            // EOS の SDK を入れていない（NEKOROBO_EOS が無い）ときは選べる物が1つなので出さない
+            if (new List<string>(Net.Kinds).Count > 1)
+            Btn(st, "つなぎ方：" + Net.Label + "　▾", "sec", () =>
+                {
+                    var ks = new List<string>(Net.Kinds);
+                    Net.SetKind(ks[(ks.IndexOf(Net.Kind) + 1) % ks.Count]);
+                    Net.Connect();
+                    Go("Online");
+                },
+                "部屋サーバー（HTML版とも遊べる）と EOS（サーバー要らず・Unity版どうし）を切り替えます。相手と同じにしてください。", false, "kind");
             Tiles(st,
                 Tile("ルームを作る", "green", "make", () => { Lobby.ruleTo = "Make"; Go("Rule"); }, "あなたがホストになります。面を選ぶのもホストです。", "make", !on),
                 Tile("ルームに参加", "blue", "join", () => { Net.ListRooms(); Go("Join"); }, "開いている部屋の一覧から選ぶか、ルームIDを入れて入ります。", "join", !on));

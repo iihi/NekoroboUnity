@@ -144,15 +144,18 @@ namespace Nekorobo
             // 起動の引数（EXE で確かめる用。JS版の ?stage= に当たる）
             //   -stage=面の名前  … その面をすぐ遊ぶ（stages/名前.json）
             //   -shot=保存先.png … 少し遊ばせてから画面を撮って終わる
-            string shot = null;
+            //   -join=ルームID   … オンラインの画面を開いて、つながったらその部屋に入る（2つ目の EXE を手で動かさずに試す用）
+            string shot = null, join = null;
             foreach (var a in System.Environment.GetCommandLineArgs())
             {
                 if (a.StartsWith("-stage=")) stageFile = a.Substring(7);
                 if (a.StartsWith("-shot=")) shot = a.Substring(6);
+                if (a.StartsWith("-join=")) join = a.Substring(6).Trim();
             }
             if (shot != null) StartCoroutine(ShotAndQuit(shot));
             // 何も指定が無ければタイトルから（JS版と同じ）。stageFile を入れたときは、その面をすぐ遊ぶ
-            if (!string.IsNullOrEmpty(stageFile)) LoadFile(stageFile, shopName);
+            if (!string.IsNullOrEmpty(join)) { hud.OpenTitle("Online"); StartCoroutine(JoinWhenOn(join)); }
+            else if (!string.IsNullOrEmpty(stageFile)) LoadFile(stageFile, shopName);
             else if (startAtTitle) hud.OpenTitle("Top");
             else LoadCourseStage(courseIndex);
         }
@@ -167,6 +170,16 @@ namespace Nekorobo
             yield return new WaitForSecondsRealtime(1.5f);
             Debug.Log("[Nekorobo] 画面を撮りました: " + path);
             Application.Quit();
+        }
+
+        /// <summary>起動の引数 -join=。つながるのを待って（30秒まで）、その番号の部屋に入る。</summary>
+        System.Collections.IEnumerator JoinWhenOn(string code)
+        {
+            float t0 = Time.realtimeSinceStartup;
+            while (Net.State != "on" && Time.realtimeSinceStartup - t0 < 30f) yield return null;
+            Lobby.code = code;
+            Debug.Log("[Nekorobo] -join：" + (Net.State == "on" ? "部屋 " + code + " に入ります" : "つながりませんでした（" + Net.Why + "）"));
+            if (Net.State == "on") Net.JoinRoom(code);
         }
 
         void SetupView()

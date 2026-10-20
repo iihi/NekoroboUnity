@@ -4,7 +4,7 @@ namespace Nekorobo
 {
     /// <summary>
     /// 通信口の**中身**が守る形（JS版 net.js の「通信口の決まり」と同じ）。
-    /// いまの中身は NetWs（部屋サーバーへの WebSocket）。EOS などへ替えるときは、これを満たす別の物を作って
+    /// 中身は NetWs（部屋サーバーへの WebSocket）と NetEos（EOS）。ほかへ替えるときは、これを満たす別の物を作って
     /// Net.Backends に1行足す。ゲーム側は Net しか見ないので、1行も変わらない。
     ///
     /// **結果は Net の Report〜 で知らせる**（主スレッドから。裏の糸で受けたときは Net.Post で主スレッドへ渡す）。
@@ -33,6 +33,9 @@ namespace Nekorobo
 
         /// <summary>畳む。このあとは何も知らせない。</summary>
         void Close();
+
+        /// <summary>毎フレーム回す（Net.Pump から、届いた物を配る前に）。要らない仕組みは空でよい。</summary>
+        void Tick();
 
         bool SetName(string name);
         bool CreateRoom(string name, bool priv);

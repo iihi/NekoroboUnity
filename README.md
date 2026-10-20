@@ -28,6 +28,35 @@ HTML版（`H:\Source\AI\ClaudeCode\Serving\nekorobo3d`）を Unity へ移して�
 ホストが計算して配り、参加者は入力を送って、届いた位置を少し過去を描いて補間します。
 結果の「準備OK」・ショップ（互いの指と買い物）・ホストが次の面を選んで続ける所まで同じです。
 
+### EOS（Epic Online Services）でつなぐ（試し中）
+
+オンラインの画面の「**つなぎ方**」で、部屋サーバーと **EOS** を切り替えられます（この端末で覚えます。起動の引数 `-net=eos` でも選べます）。
+EOS では、部屋は EOS の Lobby、部屋の中のやりとりは EOS の P2P を使います。
+
+- **部屋サーバーを動かさなくてよい**です。ネット越しでもつながり、ルーターを越えられないときは Epic の中継を通ります。
+- 名乗りは**端末ID**（Epic アカウントは要らない）です。番号は EOS の ID から作る8桁の数で、どの端末から見ても同じになります。
+- ルームを作る・一覧から入る・12桁のルームIDで入る・ホストが抜けたら次の人へ移る、は部屋サーバーと同じです。
+- **HTML版とは一緒に遊べません**（ブラウザからは P2P を使えないため）。Unity版どうしだけです。
+- 遊んでいる間の通信は、1人あたり毎秒約6KB（約25通）です。1回に送れる量（1170バイト）より長い便りは、切って送ります。
+
+**使えるようにする手順**（SDK も鍵も GitHub には入れていません。SDK は Epic の物、鍵は秘密のため）：
+
+1. Epic Developer Portal から **C# の SDK**（`EOS-SDK-CSharp-….zip`）を落とします。
+2. プロジェクトの直下で `powershell -ExecutionPolicy Bypass -File Tools\eos_setup.ps1` を流します。
+   - SDK の要る分（ソースと Windows の DLL）を `Assets/Plugins/EOS` に入れます。
+   - `Assets/csc.rsp` に `NEKOROBO_EOS` を書きます。
+   - これをしなくてもプロジェクトは開けて遊べます。EOS のコード（`NetEos.cs` / `EosHost.cs`）が外れるだけです。
+3. 鍵の **`eos.json`** をプロジェクトの直下に置きます。中身は `productId`・`sandboxId`・`deploymentId`・`clientId`・`clientSecret` です。
+   - Developer Portal の「製品設定」の値を入れます。クライアントのポリシーは **Peer2Peer** です。
+   - 書き出すときは EXE の中（`Nekorobo_Data/StreamingAssets/eos.json`）へ写します。
+
+**同じ PC で2人を試すとき**：端末IDは Windows のユーザーごとに1つなので、そのままでは同じ人になります。
+2つ目は起動の引数 `-eosnewid` で起こします。端末IDを作り直して別人になります。先に1つ目をつないでから起こしてください。
+例：エディタでルームを作る → `Nekorobo.exe -net=eos -eosnewid -join=ルームID`（`-join` はつながったらその部屋に入る）。
+
+エディタでは、再生のたびに EOS の DLL を自分で読み、止めるとき（とコンパイルし直す前）に DLL ごと外します。
+SDK の決まりで、一度閉じると同じ DLL では始め直せないためです（`EosHost.cs`・`Editor/NetReset.cs`）。
+
 | 操作 | |
 |---|---|
 | ← → | 旋回 |
@@ -56,7 +85,7 @@ EXE は**窓（1280×720、大きさは変えられる）**で始まり、Alt+En
 オンラインは net.json の `ws`（部屋サーバーの場所）が空だと、受け取った人の PC の localhost を探すのでつながりません。
 
 起動の引数（確かめる用）：`-stage=面の名前` でその面をすぐ遊ぶ（HTML版の `?stage=`）、`-shot=保存先.png` で5秒後に画面を撮って終わる、
-`-net=名前` で通信の中身を選ぶ（いまは `ws` だけ）。
+`-net=名前` で通信の中身を選ぶ（`ws` か `eos`）、`-join=ルームID` でオンラインの画面を開いてつながったらその部屋に入る、`-eosnewid` で EOS の端末IDを作り直す（同じ PC で2人を試す用）。
 
 **素材やモデルを増やして EXE だけ色がおかしい（ピンク・何も出ない）ときは、シェーダーの控えを取り直します。**
 素材を全部コードで作っているので、使われていないと思われたシェーダーが書き出しから外れるためです（エディタでは起きません）。
@@ -155,8 +184,10 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
 | `Scripts/Net/Net.cs` | オンラインの通信口（JS版 net.js）。**差し替え口**で、決まりと「どの中身を使うか」だけを持つ。ゲーム側はここしか見ない。中身は起動の引数 `-net=名前` か PlayerPrefs `nekorobo.net` で選ぶ（既定 ws） |
-| `Scripts/Net/INetBackend.cs` | 中身が守る形（つなぐ・部屋の出入り・送る、結果は Net.Report〜 で知らせる）。EOS へ移すときは、これを満たす物を作って Net.Backends に1行足す |
+| `Scripts/Net/INetBackend.cs` | 中身が守る形（つなぐ・畳む・毎フレーム回す・部屋の出入り・送る、結果は Net.Report〜 で知らせる）。ほかの仕組みを足すときは、これを満たす物を作って Net.Backends に1行足す |
 | `Scripts/Net/NetWs.cs` | 中身その1：部屋サーバーへの WebSocket（JS版 net-ws.js）。HTML版と同じサーバ・同じ便り。WebSocket は TCP の上の自前（握手と文字のフレームだけ） |
+| `Scripts/Net/NetEos.cs` | 中身その2：EOS。部屋は Lobby（属性 code・name・priv・playing・game）、便りは P2P（確実・順番どおり。長い物は切って送る）。部屋の中身は部屋サーバーと同じ形に組んで知らせる。始めるときはホストの見ている並びを配る |
+| `Scripts/Net/EosHost.cs` | EOS の立ち上げと後片付け・鍵（eos.json）を読む。エディタでは DLL を自分で読んで外す |
 | `Scripts/Game/Game.Online.cs` / `TitleWin.Online.cs` | 部屋の状態（Lobby）・始まったときに枠を組む所（JS版 npBegin / start）と、オンライン・ルームを作る・参加・待機の画面 |
 | `Scripts/Game/Game.NetSync.cs` | ゲーム中の同期（JS版 npPayload / npApply / npSendInput）と、結果・ショップの便り。物は面を組んだ順の通し番号（nid）で指す |
 | `Editor/NetReset.cs` | 再生を止めるとき・コンパイルし直す前に、通信を畳む |

@@ -72,6 +72,8 @@ namespace Nekorobo
             c.Start();
         }
 
+        public void Tick() { }
+
         public void Close()
         {
             var c = conn;

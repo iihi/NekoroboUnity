@@ -48,6 +48,14 @@ namespace Nekorobo.EditorTools
             var rep = BuildPipeline.BuildPlayer(opt);
             var s = rep.summary;
             string line = s.result + " " + s.totalTime.TotalSeconds.ToString("0") + "s " + (s.totalSize / (1024 * 1024)) + "MB errors=" + s.totalErrors + " warnings=" + s.totalWarnings;
+            // EOS の鍵（eos.json、GitHub に上げない物）を EXE の中へ写す。無ければ EOS ではつなげない（部屋サーバーは使える）
+            if (s.result == BuildResult.Succeeded && File.Exists("eos.json"))
+            {
+                var sa = Path.Combine(dir, "Nekorobo_Data", "StreamingAssets");
+                Directory.CreateDirectory(sa);
+                File.Copy("eos.json", Path.Combine(sa, "eos.json"), true);
+                line += " | eos.json を同梱";
+            }
             if (s.result == BuildResult.Succeeded && share)
             {
                 try { line += " | " + Pack(dir); }
