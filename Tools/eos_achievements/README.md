@@ -43,7 +43,9 @@ Game Services → Achievements →「実績の作成」→ **単一の実績（�
 
 アイコンは仮の絵です（256×256 の PNG、Dev Portal の決まりは 256×256・256KB 以下）。作り直すときは `python make_icons.py`。本番の絵が来たら差し替えてください。
 
-**一括インポート（ZIP）**：形式の説明が見つからなかったので、1つ手で作ってから「一括エクスポート」で書き出した ZIP を見本にして、残りを同じ形で作るのが確実です。
+**一括インポート（ZIP）**：`python make_zip.py` で `nekorobo_achievements.zip` ができます（39個・英語が既定で日本語の上書き付き・アイコン入り）。
+「実績の作成」→「一括インポート」でこの ZIP を入れてください。形は Dev Portal のテンプレート（BulkTemplate.zip）と同じです
+（`achievementDefinitions.csv`・`achievementLocalizations.csv`・`stats.csv` とアイコンを直下に置く。統計は使わないので statThresholds は空、stats.csv は見出しだけ）。
 保存したら、Dev Portal の指示に従って公開（Publish）してください。
 
 最後の1つ（`tbd`・準備中）は登録しません。足すときは、ゲームの `Game.ACHS` と、この表の両方に足してください。
