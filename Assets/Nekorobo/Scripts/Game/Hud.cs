@@ -15,6 +15,7 @@ namespace Nekorobo
         public Game game;
         Canvas canvas;
         RectTransform root;
+        public RectTransform Root { get { return root; } }
         Text center, help;
         HudTop top;
         HudBar bar2;

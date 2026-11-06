@@ -85,7 +85,7 @@ namespace Nekorobo
         }
 
         /// <summary>星形を外へ d px 広げる（縁の太さのぶん。角の二等分線の向きへずらす）</summary>
-        static List<Vector2> Grow(List<Vector2> p, float d)
+        public static List<Vector2> Grow(List<Vector2> p, float d)
         {
             var o = new List<Vector2>();
             int n = p.Count;
@@ -105,7 +105,7 @@ namespace Nekorobo
             return o;
         }
 
-        static UiFan Fan(RectTransform parent, string name, List<Vector2> pts, Color c, Vector2 off)
+        public static UiFan Fan(RectTransform parent, string name, List<Vector2> pts, Color c, Vector2 off)
         {
             var r = UiKit.Rect(parent, name);
             UiKit.Stretch(r); r.anchoredPosition = off;

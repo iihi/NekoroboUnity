@@ -137,6 +137,9 @@ namespace Nekorobo
         // 実績用（この面）
         public float achDmg; public bool achWet;
         public bool emoOpen;                  // 煽りの板を開いている（その間は X / C で持ち替えない）
+        public float emoCd;                   // 煽りを次に出せるまでの秒数（連打で嫌がらせにならないように）
+        public int emoQs = -1, emoQi;         // 待ちの間に離した煽り（明けたら出す）
+        public bool emoBlock;                 // 救済のクレーンを押していた（L2・R2 を離すまで板を開かない）
         public Vector3 spawn;
         public float spawnRot;           // 出現位置の rot（度）
         public BotInput input;

@@ -362,6 +362,13 @@ namespace Nekorobo
                     HostAfterShop();
                     return;
                 }
+                // ---- 煽り。参加者が選んだものをホストが全員に配る
+                if (p == "emo" && NetHost)
+                {
+                    int i = np.ids.IndexOf(id);
+                    if (i >= 0 && i < players.Count && (int?)d["s"] != null && (int?)d["i"] != null) EmoFire(players[i], (int)d["s"], (int)d["i"]);
+                    return;
+                }
                 if (p == "in" && NetHost)
                 {
                     Vector2? am = null;
@@ -640,6 +647,7 @@ namespace Nekorobo
                 case "vip": { int a = (int)e[2]; hud.VipNotice((int)e[1], a >= 0 && a < players.Count ? players[a] : null, (float)e[3]); break; }
                 case "hx": HitFxLocal((string)e[1], FromJs((float)e[2], (float)e[3], (float)e[4]), (float)e[5]); break;
                 case "cr": { int a = (int)e[1]; if (a >= 0 && a < players.Count) CraneShow(players[a]); break; }
+                case "emo": { int a = (int)e[1]; if (a >= 0 && a < players.Count) EmoShow(players[a], (int)e[2], (int)e[3]); break; }
                 case "ddx": { var d = dropped.Find(x => x.ent != null && x.ent.nid == (int)e[1]); if (d != null) KillDropped(d); break; }
             }
         }

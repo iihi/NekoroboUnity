@@ -296,7 +296,7 @@ namespace Nekorobo
             if (stageRoot != null) DestroyImmediate(stageRoot.gameObject);
             stageRoot = new GameObject("Stage").transform;
             fxRoot = new GameObject("Fx").transform; fxRoot.SetParent(stageRoot, false);
-            ClearFx(); ClearItems();
+            ClearFx(); ClearItems(); EmoClear();
             ents.Clear(); guests.Clear(); furni.Clear(); players.Clear(); orders.Clear(); hits.Clear();
             cars.Clear(); movers.Clear(); routed.Clear(); walkers.Clear(); rafts.Clear(); objEnt.Clear(); routeMesh.Clear();
             routeT = 0; buildGen++; tailRoot = null; flowMats.Clear();
@@ -638,6 +638,7 @@ namespace Nekorobo
             UpdateBursts(Time.deltaTime);
             LightTick(Time.deltaTime);
             ChefTick(Time.deltaTime);
+            EmoTick(Time.deltaTime);
         }
 
         // ================================================================ 1/60秒ごとの更新（JS版 step）
