@@ -112,6 +112,10 @@ namespace Nekorobo
         readonly List<PopItem> pops = new List<PopItem>();
         Overhead over;
         HudVip vip;
+        Wipe wipe;
+        /// <summary>画面転換（覆ってから fn を呼び、抜ける）。JS版 screenWipe</summary>
+        public void Wipe(System.Action fn) { if (wipe != null) wipe.Run(fn); else fn(); }
+        public bool Wiping { get { return wipe != null && wipe.Busy; } }
         // 高額・VIP オーダー・売上の式・奪ったお金（HudVip）
         public void VipReset() { if (vip != null) vip.Reset(); }
         public void VipNotice(int kind, Player P, float amt) { if (vip != null) vip.Notice(kind, P, amt); }
@@ -156,6 +160,7 @@ namespace Nekorobo
             // ---- 上の帯の新しい並び（担当からの案・仮。JS版 #hud2）。設定で前の並びと切り替える
             bar2 = new HudBar(root, GetComponent<Game>());
             vip = new HudVip(root, GetComponent<Game>());
+            wipe = new Wipe(root, GetComponent<Game>());
 
             // ---- 右下：操作
             help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
@@ -380,6 +385,7 @@ namespace Nekorobo
             t.fontStyle = FontStyle.Bold;
             var o = t.GetComponent<Outline>(); o.effectColor = new Color(1, 1, 1, 0.9f); o.effectDistance = new Vector2(2, -2);
             t.gameObject.AddComponent<Outline>().effectColor = new Color(1, 1, 1, 0.9f);
+            t.transform.SetSiblingIndex(1);              // 結果・ショップなどの画面より下（ゲームの上）に出す
             pops.Add(new PopItem { t = t, w = world, life = 1.0f, big = big });
         }
 
@@ -398,6 +404,8 @@ namespace Nekorobo
         {
             Net.Pump();                                    // 部屋サーバーから届いた便りを配る（タイトルの間も）
             NetWaitTick();
+            if (wipe != null) wipe.Tick(Time.unscaledDeltaTime);
+            if (title != null) title.SsTick(Time.unscaledDeltaTime);      // ステージ選択（投票）。参加者はタイトルが閉じていても出る
             var g = game;
             if (g == null) return;
             if (title.Open)

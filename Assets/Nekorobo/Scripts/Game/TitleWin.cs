@@ -95,11 +95,13 @@ namespace Nekorobo
             {
                 // 入ってきた人にも、いま選んでいる面と空き席のNPCとルールを教える
                 Lobby.SendPick(); Lobby.SendNpc(); Lobby.SendRule();
+                if (SS.open && SS.net != null) { if (Net.Room != null) SsOnRoom(); return; }   // 面選びの間は、指を作り直すだけ
                 if (Open) GoLater(Net.Room != null ? "Wait" : "Online");
             };
             Net.OnFrom += (id, d) =>
             {
                 string p = (string)d["p"];
+                if (p != null && p.StartsWith("ss")) { SsOnFrom(id, d); return; }
                 if (p == "pick") Lobby.rpick = d["pick"] as Newtonsoft.Json.Linq.JObject;
                 else if (p == "npc" && d["npc"] is Newtonsoft.Json.Linq.JArray na)
                     for (int i = 0; i < 4; i++) Lobby.rnpc[i] = i < na.Count ? (string)na[i] ?? "off" : "off";
@@ -127,13 +129,23 @@ namespace Nekorobo
             Go(pg ?? "Top");
         }
 
-        public void Close() { Open = false; root.gameObject.SetActive(false); }
+        public void Close() { Open = false; root.gameObject.SetActive(false); SsClose(); }
 
         // ================================================================ ページ
         void Go(string pg)
         {
             goLater = null;
             if (pg == "Make" && Net.Room != null) pg = "Wait";            // 作れていれば待機へ
+            // 面選びは投票の画面（ステージ選択）。ほかの画面へ行くときは閉じる（参加者が待機へ戻るときは、決まった面を見せたまま）
+            if (pg == "Free" && SS_V2)
+            {
+                page = pg;
+                if (box != null) Object.Destroy(box.gameObject);
+                box = null; items.Clear(); gridItems.Clear(); freeDesc = null;
+                SsOpen();
+                return;
+            }
+            if (!(SS.net == "guest" && pg == "Wait")) SsClose();
             // 同じ画面の描き直し（部屋サーバーの知らせ）なら、カーソルを同じボタンへ戻す
             bool redraw = pg == page && Open && items.Count > 0;
             string keepKey = redraw && idx < items.Count ? items[idx].key : null;
@@ -568,7 +580,7 @@ namespace Nekorobo
         // ================================================================ 毎フレーム
         public void Tick(float dt)
         {
-            if (!Open) return;
+            if (!Open || SS.open) return;            // ステージ選択の間は、そちらが入力を見る（SsTick）
             if (goLater != null) { var pg = goLater; goLater = null; Go(pg); }
             if (lockT > 0) lockT -= dt;
             var kb = Keyboard.current;

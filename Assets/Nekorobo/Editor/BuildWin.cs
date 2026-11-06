@@ -24,8 +24,8 @@ namespace Nekorobo.EditorTools
         public const string ShareDir = "Builds/WinShare";
 
         // 同梱する物（HTML版のフォルダから）。Unity が読むのはこれだけ（DataRoot を使っている所）
-        static readonly string[] DataDirs = { "stages", "assets" };
-        static readonly string[] DataFiles = { "tune.json", "configs.js", "tiles.js", "net.json", "se.json" };   // se.json＝効果音のレシピ
+        static readonly string[] DataDirs = { "stages", "assets", "lang" };      // lang＝言葉（en.json など）
+        static readonly string[] DataFiles = { "tune.json", "configs.js", "tiles.js", "net.json", "se.json", "lights.js" };   // se.json＝効果音のレシピ、lights.js＝照明
 
         [MenuItem("Nekorobo/Windows で書き出す")]
         public static void Build() { Run(Dir, false); }

@@ -20,29 +20,34 @@ namespace Nekorobo
     public class ShopWin
     {
         readonly Game g;
-        readonly RectTransform root;
-        RectTransform box, pick, fingRoot;
+        readonly UiBoard B;
+        RectTransform pick, fingRoot;
         public bool Open { get; private set; }
 
         float t; bool timed;
         string msg = "";
-        float gw, gh;                                   // 指の動ける箱の大きさ
+        float gw, gh;                                   // 指の動ける箱の大きさ（板いっぱい）
         readonly List<Good> goods = new List<Good>();
         readonly List<Cur> cur = new List<Cur>();
         readonly List<CardUi> cards = new List<CardUi>();
         Rect rdyRect;
-        // 上と下
-        Text secText; Image clockFill; GameObject clockHurryTint;
-        readonly List<PillUi> pstrip = new List<PillUi>();
-        RectTransform pstripRow, clockRect;
-        bool single;
+        Text secText, msgText; RawImage clockFill; float clockW;
+        readonly List<PpUi> pps = new List<PpUi>();
         readonly List<Text> descRows = new List<Text>();
-        Image readyBg, readyHov; Text readyText; RectTransform readyKeys;
-        Text note2;
+        RawImage btnOn, btnOff; Text undoText; float pressT;
+        RectTransform root { get { return B.root; } }
 
-        // ---- 色（CSS の --ui*）
-        static readonly Color SUB2 = Mats.Hex(0x9fb0d4), CLK = Mats.Hex(0xcfd8ee), GOLD = Mats.Hex(0xffd558);
-        static readonly Color GREEN = Mats.Hex(0x4cbf68), GREEN_D = Mats.Hex(0x2f9448);
+        static readonly Color GREEN = Mats.Hex(0x68ff00), POOR = Mats.Hex(0xff5a45), UPC = Mats.Hex(0x45c3ff), ITC = Mats.Hex(0x4ac15d);
+        const string U = "ui/shop/";
+        // 品物の絵の大きさ（板の上の px）。PSD の元の絵を、画面案と同じ 0.147 倍にした値（JS版 ICON_SZ）
+        static readonly Dictionary<string, Vector2> ICON_SZ = new Dictionary<string, Vector2> {
+            { "repair", new Vector2(46, 46) }, { "banana", new Vector2(63, 50) }, { "drone", new Vector2(63, 31) }, { "boomerang", new Vector2(60, 51) },
+            { "laser", new Vector2(62, 30) }, { "ball", new Vector2(41, 58.5f) }, { "missile", new Vector2(53, 53) }, { "star", new Vector2(58, 55) },
+            { "accel", new Vector2(56, 46) }, { "armor", new Vector2(47, 53.5f) }, { "jump", new Vector2(46, 56) }, { "light", new Vector2(49, 52) } };
+        // 下の札の小さい絵の真ん中（札の左上からの x）。並びは ORDER と同じ
+        static readonly float[] PP_UP_X = { 45.8f, 71, 95.5f, 119.2f };
+        static readonly float[] PP_IT_X = { 33, 56.8f, 81, 104.8f, 130.2f, 153.8f, 174, 196.2f };
+        static readonly string[] RES_COLS = { "blue", "red", "green", "orange" };
 
         class Good
         {
@@ -60,28 +65,15 @@ namespace Nekorobo
             public float nx = -1, ny = -1; public bool netSeen;          // オンラインの相手の指（割合で届く）
             public float lockT, buyT; public bool pOk, pUse;
             public string navK = ""; public float navT;   // 矢印キー・十字キーの押しっぱなし（少し待ってから続けて跳ぶ）
-            public RectTransform el; public Text tag; public Image tagBg; public Image tagPoor;
+            public RectTransform el; public Text tag; public Image tagBg; public Image tagCant; public Text cantT;
         }
         class CardUi
         {
-            public Good gd; public RectTransform r; public CanvasGroup cg; public Image hov, hovWhite, hovGlow;
-            public void Hov(bool on, Color col)
-            {
-                hov.enabled = hovWhite.enabled = hovGlow.enabled = on;
-                if (on) { hov.color = col; hovGlow.color = col; }
-            }
-            public PillUi price, mine, cap; public Text own;
-            public float hitX, hitY, hitW, hitH;      // 指の動ける箱の中での位置（y は下向き）
+            public Good gd; public RectTransform r, sel; public RawImage bg, ic, full; public Image iv; public Text nm, pz, cp, fullT; public RectTransform own;
+            public float hitX, hitY, hitW, hitH;      // 指の動ける箱（板）の中での位置（y は下向き）
+            public float flash;
         }
-        class PillUi
-        {
-            public RectTransform r; public Image bg; public Text t, stText; public float padX;
-            public void Set(string s)
-            {
-                if (t.text == s) return;
-                t.text = s;
-            }
-        }
+        class PpUi { public Player P; public RectTransform r; public Text cs, sb; public List<Text> n = new List<Text>(); public RawImage pu, pi; public GameObject done; public bool doneNow; }
 
         // 並べる順は画面案のとおり（JS版 SHOP_ORDER）
         static readonly string[] ORDER = { "accel", "armor", "jump", "light", "repair", "banana", "drone", "boomerang", "laser", "ball", "missile", "star" };
@@ -90,12 +82,7 @@ namespace Nekorobo
         public ShopWin(RectTransform parent, Game game)
         {
             g = game;
-            root = UiKit.Rect(parent, "Shop");
-            UiKit.Stretch(root);
-            // 背景：上から青い光（radial-gradient）＋ 縦の濃い青（linear-gradient）
-            var bg = root.gameObject.AddComponent<RawImage>();
-            bg.texture = BgTex(); bg.raycastTarget = true;          // 後ろのゲームの画面を触らせない
-            root.gameObject.SetActive(false);
+            B = new UiBoard(parent, "Shop");
         }
 
         public bool Contains(Player P) { return cur.Exists(c => c.P == P); }
@@ -124,10 +111,11 @@ namespace Nekorobo
                 cur.Add(new Cur { P = g.players[i], lockT = g.T.menuLock, buyT = 0.8f + i * 0.45f,
                                   // 開く前に「もう買い終わった」と届いていたら、それを引き継ぐ
                                   ready = g.NpOn && g.np.rdy.ContainsKey(i) && g.np.rdy[i] });
-            shopSig = ""; ptrSig = ""; ptrT = 0;
+            shopSig = ""; ptrSig = ""; ptrT = 0; pressT = 0;
             Build();
-            root.gameObject.SetActive(true);
+            B.Active = true;
             Open = true;
+            B.StartIn();
         }
 
         /// <summary>開いた直後と同じく、少しのあいだ決定を受け付けない（店主の話を読み終えた指で買わないため）。</summary>
@@ -136,7 +124,7 @@ namespace Nekorobo
         public void Close()
         {
             Open = false;
-            root.gameObject.SetActive(false);
+            B.Active = false;
         }
 
         List<Player> Viewers() { return g.players.FindAll(P => P.src.kind == "key" || P.src.kind == "pad"); }
@@ -147,162 +135,142 @@ namespace Nekorobo
                  + (g.mode == "team" ? "・" + Game.TEAM_NAME[P.team] : "");
         }
 
-        // ================================================================ 組み立て（開いたときに1回）
+        // ================================================================ 組み立て（清書 1027。資料/ネコ配膳_ショップ画面清書1027.psd）
+        // 1280×720 の板に PSD から切り出した部品の絵（HTML版の assets/ui/shop/）を置き、字と数字を重ねる。
+        //   上：SHOP と残り時間 → 能力強化（1段）→ アイテム（2段）→ 指している物の説明 → 下：人ごとの札と「購入完了」
+        // 品物の絵は黒い影絵（PSD の元の絵）。色は塗り替える（強化は青、アイテムは緑、下の札は人の色）
+        string ColKey(Player P)
+        {
+            if (g.mode == "team" && g.players.Count > 1) return RES_COLS[Mathf.Clamp(P.team, 0, 3)];
+            int i = System.Array.IndexOf(Player.PCOL, P.col);
+            return i >= 0 ? RES_COLS[i] : "blue";
+        }
+        static readonly Dictionary<string, Texture2D> tinted = new Dictionary<string, Texture2D>();
+        /// <summary>影絵の絵を、色 col で塗った絵（形は透明度のまま）。CSS の mask の代わり</summary>
+        static Texture2D Tint(string src, Color col)
+        {
+            string key = src + "|" + ColorUtility.ToHtmlStringRGB(col);
+            Texture2D t;
+            if (tinted.TryGetValue(key, out t) && t != null) return t;
+            var o = DataRoot.Texture(src);
+            if (o == null) return null;
+            var px = o.GetPixels32();
+            var c32 = (Color32)col;
+            for (int i = 0; i < px.Length; i++) { var a = px[i].a; px[i] = c32; px[i].a = a; }
+            t = new Texture2D(o.width, o.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            t.SetPixels32(px); t.Apply(false);
+            tinted[key] = t;
+            return t;
+        }
+
         void Build()
         {
-            if (box != null) Object.Destroy(box.gameObject);
-            box = UiKit.Rect(root, "Box");
-            box.anchorMin = box.anchorMax = new Vector2(0.5f, 0.5f); box.pivot = new Vector2(0.5f, 0.5f);
-            box.sizeDelta = new Vector2(1280, 720);
-            cards.Clear(); pstrip.Clear(); descRows.Clear();
+            B.Clear();
+            cards.Clear(); pps.Clear(); descRows.Clear();
+            var bx = B.box;
             var viewers = Viewers();
-            single = g.players.Count <= 1;
-            const float L = 38, W = 1204;
-
-            // ---- 上：タイトル（金色の丸い札）
+            var one = viewers.Count == 1 ? viewers[0] : null;
+            B.In(UiBoard.Img(bx, U + "title.png", 49, 45.5f, 204, 56.5f), "slam", 0);
+            // ---- 残り時間
+            var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
+            if (timed)
             {
-                // 金色の丸い札に白い縁、下に濃い金の影（CSS の box-shadow 0 4px 0）
-                Box(box, L, 14 + 4, 260, 62, 31, GoldD(), "TitleShadow");
-                var ti = Box(box, L, 14, 260, 62, 0, Color.white, "Title");
-                ti.sprite = UiKit.Grad(260, 62, 31, Mats.Hex(0xffd558), Mats.Hex(0xf2b52c));
-                Ring(ti.transform, Color.white, 4, 31);
-                var tx = Lbl(box, "強化ショップ", 34, Color.white, TextAnchor.MiddleCenter, L, 14, 260, 60);
-                var s = tx.gameObject.AddComponent<Shadow>(); s.effectColor = GoldD(); s.effectDistance = new Vector2(0, -2);
+                UiBoard.Img(ck, U + "bar.png", 302, 61.5f, 773.5f, 25);
+                var fillBox = UiBoard.Box(ck, 323, 69, 742.5f, 10, "Fill");
+                fillBox.gameObject.AddComponent<RectMask2D>();
+                clockFill = UiBoard.Img(fillBox, U + "fill.png", 0, 0, 742.5f, 10);
+                clockW = 742.5f;
+                UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 61, 24, Color.white);
+                secText = UiBoard.T(ck, "", 1199.5f, 49, 58, GREEN, 1);
+                UiBoard.T(ck, Lang.Tr("秒"), 1238.5f, 61, 24, Color.white, 1);
             }
-
-            // ---- 人ごとの状態（1人ならタイトルの行の右端、何人もいれば2行目の左から）
-            pstripRow = UiKit.Rect(box, "PStrip");
-            pstripRow.anchorMin = pstripRow.anchorMax = new Vector2(0, 1);
-            pstripRow.pivot = single ? new Vector2(1, 0.5f) : new Vector2(0, 0.5f);
-            pstripRow.anchoredPosition = single ? new Vector2(L + W, -45) : new Vector2(L, -98);
-            var ph = UiKit.HRow(pstripRow.gameObject, 8, null, TextAnchor.MiddleLeft);
-            var pf = pstripRow.gameObject.AddComponent<ContentSizeFitter>();
-            pf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize; pf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            foreach (var P in g.players) pstrip.Add(MakePlayerPill(pstripRow, P, IsViewer(P)));
-            // 幅を測る前に中身を入れておく（空のまま測ると、時間の帯が札の下に潜る）
-            for (int i = 0; i < pstrip.Count; i++) if (pstrip[i].t != null) pstrip[i].t.text = Game.Yen(g.WalletOf(g.players[i]).cash);
-            Canvas.ForceUpdateCanvases();
-            LayoutRebuilder.ForceRebuildLayoutImmediate(pstripRow);
-            float pw = single ? pstripRow.rect.width : 0;
-
-            // ---- 残り時間（タイトルの横）
+            else
             {
-                float x0 = L + 260 + 27, x1 = single ? L + W - pw - 28 : L + W;
-                var ck = Box(box, x0, 28, x1 - x0, 33, 16.5f, new Color(1, 1, 1, 0.1f), "Clock");
-                clockRect = ck.rectTransform;
-                Ring(ck.transform, new Color(1, 1, 1, 0.22f), 3, 16.5f);
-                var row = UiKit.Rect(ck.transform, "Row"); UiKit.Stretch(row);
-                UiKit.HRow(row.gameObject, 10, UiKit.Pad(17, 17, 0, 0), TextAnchor.MiddleLeft);
-                if (timed)
+                secText = null; clockFill = null;
+                UiBoard.T(ck, Lang.Tr("1人のときは時間制限なし（右パネルで付けられます）"), 302, 66, 16, Mats.Hex(0xb8b8b8));
+            }
+            B.In(ck, "right", 1);
+            // ---- 指カーソルの動ける箱（板いっぱい）
+            pick = UiBoard.Box(bx, 0, 0, 1280, 720, "Pick");
+            gw = 1280; gh = 720;
+            B.In(UiBoard.Img(pick, U + "h_up.png", 50, 148, 145.5f, 60), "left", 2);
+            B.In(UiBoard.Img(pick, U + "h_it.png", 50, 290, 145.5f, 60), "left", 3);
+            int nUp = 0, nIt = 0;
+            foreach (var gd in goods)
+            {
+                int k = gd.kind == "up" ? nUp++ : nIt++;
+                float x = 226.5f + 258.5f * (k % 4);
+                float y = gd.kind == "up" ? 147.5f : 290.5f + 110.5f * (k / 4);
+                var c = new CardUi { gd = gd, hitX = x, hitY = y, hitW = 239, hitH = 106.5f };
+                c.r = UiBoard.Box(pick, x, y, 239, 106.5f, "Card_" + gd.k);
+                c.bg = UiBoard.Img(c.r, U + "card_" + gd.kind + ".png", 0, 0, 239, 106.5f);
+                c.iv = UiBoard.Fill(c.r, gd.kind == "up" ? UPC : ITC, 3.5f, 3.5f, 92.5f, 92, 10, "Iv");
+                c.iv.color = new Color(c.iv.color.r, c.iv.color.g, c.iv.color.b, 0);
+                Vector2 sz; if (!ICON_SZ.TryGetValue(gd.k, out sz)) sz = new Vector2(56, 50);
+                c.ic = UiBoard.Img(c.r, U + "ic_" + gd.k + ".png", 50 - sz.x / 2, 49 - sz.y / 2, sz.x, sz.y);
+                c.ic.texture = Tint(U + "ic_" + gd.k + ".png", gd.kind == "up" ? UPC : ITC);
+                bool lng = gd.n.Length > (Lang.IsJa ? 6 : 11);
+                c.nm = UiBoard.T(c.r, Lang.Tr(gd.n), 115.5f, lng ? 25.25f : 23.75f, lng ? 13 : 16, Color.white);
+                c.pz = UiBoard.T(c.r, "", 115.5f, 43.5f, 18, GREEN);
+                c.cp = UiBoard.T(c.r, "", 115.5f, 66.25f, 10, Color.white);
+                c.own = UiBoard.Box(c.r, 60, 80, 0, 15, "Own");
+                c.full = UiBoard.Img(c.r, U + "full.png", -1, 1.5f, 239, 106.5f);
+                c.full.color = new Color(1, 1, 1, 0.9f);
+                c.fullT = UiBoard.T(c.full.rectTransform, Lang.Tr(gd.kind == "up" ? "レベルが上限に達しています" : "所持数が上限に達しています"), 110.5f, 44, 16, Color.white, 2);
+                c.sel = UiBoard.Box(c.r, -6.5f, -6.5f, 112, 112, "Sel");
+                var bimg = c.r.gameObject.AddComponent<Image>(); bimg.color = new Color(0, 0, 0, 0);
+                B.In(c.r, "pop", gd.kind == "up" ? 2 + k * 0.5f : 3 + k * 0.5f);
+                cards.Add(c);
+            }
+            // ---- 指している物の説明（1人1行）
+            {
+                var ds = UiBoard.Box(bx, 226.5f, 507.5f, 1010, 54.5f, "Desc");
+                bool many = viewers.Count > 1;
+                for (int i = 0; i < Mathf.Max(1, viewers.Count); i++)
                 {
-                    UiKit.Label(row, "残り", 12, CLK);
-                    secText = UiKit.Label(row, "", 22, GOLD, true, TextAnchor.MiddleRight);
-                    UiKit.Size(secText, 42, -1, 0, 42);
-                    UiKit.Label(row, "秒", 12, CLK);
-                    Image back;
-                    clockFill = UiKit.Bar(row, new Color(0, 0, 0, 0.35f), GREEN, out back);
-                    back.sprite = UiKit.Round; back.type = Image.Type.Sliced; back.pixelsPerUnitMultiplier = 15.5f / 7f;
-                    clockFill.sprite = UiKit.Round; clockFill.type = Image.Type.Sliced; clockFill.pixelsPerUnitMultiplier = 15.5f / 7f;
-                    var bl = UiKit.Size(back, 0, 14, 1); bl.minHeight = 14; bl.flexibleHeight = 0;
-                    UiKit.Label(row, "0秒で次のステージへ", 12, CLK);
-                }
-                else UiKit.Label(row, "1人のときは時間制限なし（右パネルで付けられます）", 12, CLK);
-            }
-
-            // ---- 品物の並び。上から「能力強化」「アイテム」。高さは 1:2（CSS の flex）
-            int nDesc = Mathf.Max(1, viewers.Count);
-            float descH = 15 + 17 * nDesc, descTop = 570 - descH;
-            float gridTop = single ? 88 : 125;
-            float H = descTop - 9 - gridTop;
-            float secUp = (H - 12) / 3f, secIt = secUp * 2;
-            float upH = secUp - 26, itH = (secIt - 26 - 11) / 2f;
-            float cw = (W - 3 * 9) / 4f;
-            Lbl(box, "能力強化", 16, Color.white, TextAnchor.LowerLeft, L, gridTop, 300, 20);
-            Lbl(box, "アイテム", 16, Color.white, TextAnchor.LowerLeft, L, gridTop + secUp + 12, 300, 20);
-            int ui = 0, ii = 0;
-            for (int i = 0; i < goods.Count; i++)
-            {
-                var gd = goods[i];
-                float x, y, h;
-                if (gd.kind == "up") { x = L + (ui % 4) * (cw + 9); y = gridTop + 26; h = upH; ui++; }
-                else { x = L + (ii % 4) * (cw + 9); y = gridTop + secUp + 12 + 26 + (ii / 4) * (itH + 11); h = itH; ii++; }
-                cards.Add(MakeCard(gd, x, y, cw, h, single || viewers.Count == 1));
-            }
-
-            // ---- 指している物の説明（この画面の人ごとに1行）
-            {
-                var ds = Box(box, L, descTop, W, descH, 12, new Color(1, 1, 1, 0.1f), "Desc");
-                Ring(ds.transform, new Color(1, 1, 1, 0.2f), 2, 12);
-                ds.gameObject.AddComponent<RectMask2D>();
-                for (int i = 0; i < nDesc; i++)
-                {
-                    var tt = Lbl(ds.transform, "", 12, Color.white, TextAnchor.MiddleLeft, 14, 6 + i * 17, W - 28, 17);
-                    tt.fontStyle = FontStyle.Normal;
+                    float x = many ? (i % 2) * 514 : 0, y = many ? (viewers.Count > 2 ? 6 + (i / 2) * 22 : 20) : 18;
+                    var tt = UiBoard.T(ds, "", x, y, many ? 12 : 15, Color.white);
                     descRows.Add(tt);
                 }
             }
-
-            // ---- 購入完了のボタン（Y(△)/Z と同じはたらき。全員そろうと進む）
+            // ---- 下：人ごとの札（所持金・強化の Lv・アイテムの数・購入中／購入完了）
+            for (int n = 0; n < g.players.Count; n++)
             {
-                const float by = 579, bh = 44;
-                Box(box, L, by + 4, W, bh, 14, GREEN_D, "ReadyShadow");
-                readyBg = Box(box, L, by, W, bh, 0, Color.white, "Ready");
-                readyHov = Box(box, L - 7, by - 7, W + 14, bh + 14, 21, Color.white, "ReadyHov");
-                readyHov.sprite = UiKit.Ring(Mathf.RoundToInt(4 * 15.5f / 21f)); readyHov.type = Image.Type.Sliced; readyHov.pixelsPerUnitMultiplier = 15.5f / 21f;
-                readyHov.enabled = false;
-                readyKeys = UiKit.Rect(readyBg.transform, "Row");
-                readyKeys.anchorMin = readyKeys.anchorMax = new Vector2(0.5f, 0.5f);
-                UiKit.HRow(readyKeys.gameObject, 7, null, TextAnchor.MiddleCenter);
-                var kf = readyKeys.gameObject.AddComponent<ContentSizeFitter>();
-                kf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize; kf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                foreach (var k in new[] { "Y", "Z" })
-                {
-                    var kc = UiKit.Img(readyKeys, Color.white, 7, "Key");
-                    var kt = UiKit.Label(kc.transform, k, 13, Mats.Hex(0x3a352c), true, TextAnchor.MiddleCenter);
-                    UiKit.Stretch(kt.rectTransform);
-                    var kl = UiKit.Size(kc, 24, 20, 0, 24); kl.minHeight = 20;
-                }
-                readyText = UiKit.Label(readyKeys, "購入完了", 19, Color.white);
-                var rs = readyText.gameObject.AddComponent<Shadow>(); rs.effectColor = new Color(0, 0, 0, 0.22f); rs.effectDistance = new Vector2(0, -2);
+                var P = g.players[n]; var ck2 = ColKey(P);
+                var pp = new PpUi { P = P };
+                pp.r = UiBoard.Box(pick, 49 + 222 * n, 562, 250, 113, "Pp" + n);
+                UiBoard.Img(pp.r, U + "pp_" + ck2 + ".png", 0, 0, 250, 113);
+                pp.pu = UiBoard.Img(pp.r, U + "pi_up_" + ck2 + ".png", 40, 33.5f, 84.5f, 11.5f);
+                pp.pi = UiBoard.Img(pp.r, U + "pi_it_" + ck2 + ".png", 28, 67.5f, 174.5f, 12);
+                UiBoard.T(pp.r, P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P", 61.5f, 1.25f, 18, Mats.Hex(0x06223a), 2);
+                pp.cs = UiBoard.T(pp.r, "", 163, 0.5f, 18, Color.white);
+                for (int j = 0; j < 4; j++) pp.n.Add(UiBoard.T(pp.r, "", PP_UP_X[j], 51, 11, Color.white, 2));
+                for (int j = 0; j < 8; j++) pp.n.Add(UiBoard.T(pp.r, "", PP_IT_X[j], 85, 11, Color.white, 2));
+                // 購入中…（枠で囲んでゆっくり点滅）
+                var sbB = UiPoly.Skew(pp.r, new Color(0, 0, 0, 0.55f), 137, 30, 90, 22, -12);
+                UiPoly.SkewRing(pp.r, new Color(1, 1, 1, 0.9f), 137, 30, 90, 22, -12, 2);
+                pp.sb = UiBoard.T(pp.r, Lang.Tr("購入中…"), 182, 34, 14, Color.white, 2);
+                // 購入完了：札の中を暗く塗って、大きく「購入完了！」（担当の見本）
+                var dn = UiBoard.Box(pp.r, 0, 0, 250, 113, "Done");
+                UiPoly.Add(dn, new Color(0.03f, 0.03f, 0.03f, 0.72f), 0, 0, 250, 113, new Vector2(35, 26), new Vector2(239, 26), new Vector2(212, 98.5f), new Vector2(6, 98.5f));
+                var dt = UiBoard.T(dn, Lang.Tr("購入完了！"), 122, 43, 33, Mats.Hex(0xffe14d), 2);
+                UiBoard.Stroke(dt, Mats.Hex(0x1b1405), 2.5f);
+                pp.done = dn.gameObject;
+                B.In(pp.r, "up", 6 + n * 0.6f);
+                pps.Add(pp);
             }
-
-            // ---- 注意書き
+            // ---- 購入完了のボタン（Y(△)/Z と同じはたらき。全員そろうと進む）。右端は上の「秒」の字の右端にそろえる
             {
-                string sub;
-                if (g.entry == null) sub = "買い物がすんだら、次に遊ぶ面を選びます（買ったものは持ち越します）";
-                else
-                {
-                    int n = g.course.stages.Count, i = g.courseIndex;
-                    bool last = i + 1 >= n - 1;
-                    if (i + 1 >= n) sub = "ステージ " + (i + 1) + " 終了 — これで最後です";
-                    else
-                    {
-                        var ne = g.course.stages[i + 1];
-                        var nc = StageCfg.Ref(ne.cfg, true);
-                        sub = "ステージ " + (i + 1) + " 終了 — 次は " + (last ? "最終ステージ"
-                            : "ステージ " + (i + 2) + "（" + ne.shop + " × " + (nc != null ? nc.n : ne.cfg) + "）");
-                    }
-                }
-                Lbl(box, sub, 11, SUB2, TextAnchor.MiddleCenter, 0, 632, 1280, 16);
-                note2 = Lbl(box, "", 12, SUB2, TextAnchor.MiddleCenter, 0, 658, 1280, 16);
-                var n3 = Lbl(box, "カーソルを下の「購入完了」へ動かしても押せます　／　[ R ] 最初から　／　[ T ] タイトルへ", 12, SUB2, TextAnchor.MiddleCenter, 0, 688, 1280, 16);
-                n3.color = new Color(SUB2.r, SUB2.g, SUB2.b, 0.65f);
+                var btn = UiBoard.Box(pick, 978, 591, 260, 83, "Ready");
+                btnOff = UiBoard.Img(btn, U + "btn.png", 0, 0, 260, 83);
+                btnOn = UiBoard.Img(btn, U + "btn_on.png", 0, 0, 260, 83);
+                undoText = UiBoard.T(btn, Lang.Tr("もう一度押すと取り消し"), 130, 86, 11, Mats.Hex(0xc8c8c8), 2);
+                B.In(btn, "pop", 7);
+                rdyRect = new Rect(978, 591, 260, 83);
             }
-
-            // ---- 指カーソルの動ける箱（品物の並びから「購入完了」まで）
-            pick = UiKit.Rect(box, "Pick");
-            pick.anchorMin = pick.anchorMax = new Vector2(0, 1); pick.pivot = new Vector2(0, 1);
-            pick.anchoredPosition = new Vector2(L, -gridTop);
-            gw = W; gh = 579 + 44 - gridTop;
-            pick.sizeDelta = new Vector2(gw, gh);
-            foreach (var c in cards)
-            {
-                var p = c.r.anchoredPosition;
-                c.hitX = p.x - L; c.hitY = -p.y - gridTop; c.hitW = c.r.sizeDelta.x; c.hitH = c.r.sizeDelta.y;
-            }
-            rdyRect = new Rect(0, 579 - gridTop, W, 44);
-            fingRoot = UiKit.Rect(pick, "Fingers"); UiKit.Stretch(fingRoot);
-            // 初めて開いたときは、それぞれ別のカードの上から始める（重なって始まらないように）
+            msgText = UiBoard.T(bx, "", 688.75f, 98, 16, Mats.Hex(0xffd400), 2);
+            // ---- 指カーソル
+            fingRoot = UiBoard.Box(pick, 0, 0, 1280, 720, "Fingers");
             for (int i = 0; i < cur.Count; i++)
             {
                 var c = cur[i];
@@ -313,113 +281,17 @@ namespace Nekorobo
             Refresh();
         }
 
-        // ------------------------------------------------------------ 部品
-        CardUi MakeCard(Good gd, float x, float y, float w, float h, bool one)
-        {
-            var c = new CardUi { gd = gd };
-            var col0 = gd.kind == "up" ? Mats.Hex(0x25a8e6) : Mats.Hex(0x1cc266);
-            var col1 = gd.kind == "up" ? Mats.Hex(0x0f78b8) : Mats.Hex(0x0a9046);
-            var bg = Box(box, x, y, w, h, 0, Color.white, "Card_" + gd.k);
-            bg.sprite = UiKit.Grad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), 14, col0, col1);
-            c.r = bg.rectTransform;
-            c.cg = bg.gameObject.AddComponent<CanvasGroup>();
-            Ring(bg.transform, new Color(1, 1, 1, 0.55f), 3, 14);
-            // 選択枠。指している人の色で縁取る。矢印キー・十字キーで選ぶときはこれが頼りなので、太く・外へ光らせる
-            // （CSS の inset 0 0 0 5px 色, 0 0 0 3px #fff, 0 0 16px 4px 色）
-            c.hov = Ring(bg.transform, Color.white, 5, 11, 3);
-            c.hovWhite = Ring(bg.transform, Color.white, 3, 17, -3);
-            c.hovGlow = Glow(bg.transform, 14, 4, 16);
-            c.hov.enabled = false;
-            // 絵（白い板に乗せる。4:3、高さは 100 まで）
-            float ih = Mathf.Min(h - 18, 100), iw = ih * 4 / 3f;
-            var ic = Box(bg.transform, 13, (h - ih) / 2, iw, ih, 12, new Color(1, 1, 1, 0.92f), "Icon");
-            var tex = Resources.Load<Texture2D>("Ui/" + gd.k);
-            if (tex != null)
-            {
-                var ri = UiKit.Rect(ic.transform, "Pic").gameObject.AddComponent<RawImage>();
-                ri.texture = tex; ri.raycastTarget = false;
-                float aw = Mathf.Min(iw - 8, 104), ah = ih - 8;
-                float pw = Mathf.Min(aw, ah * 1.5f), phh = pw / 1.5f;
-                ri.rectTransform.sizeDelta = new Vector2(pw, phh);
-            }
-            // 文字の列（名前・値段・自分の Lv）。縦のまん中にそろえる
-            float tx0 = 13 + iw + 13;
-            var col = UiKit.Rect(bg.transform, "Tx");
-            col.anchorMin = new Vector2(0, 0.5f); col.anchorMax = new Vector2(0, 0.5f); col.pivot = new Vector2(0, 0.5f);
-            col.anchoredPosition = new Vector2(tx0, 0);
-            var v = UiKit.VCol(col.gameObject, 3, null, TextAnchor.MiddleLeft);
-            var vf = col.gameObject.AddComponent<ContentSizeFitter>();
-            vf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize; vf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var nm = UiKit.Label(col, gd.n, 15, Color.white);
-            var ns = nm.gameObject.AddComponent<Shadow>(); ns.effectColor = new Color(0, 0, 0, 0.25f); ns.effectDistance = new Vector2(0, -2);
-            if (one)
-            {
-                // 1人なら、値段と自分の Lv を大きく縦に
-                c.price = Pill(col, 13, 8, new Color(0, 0, 0, 0.32f));
-                c.mine = Pill(col, 14, 10, new Color(0, 0, 0, 0.35f));
-            }
-            else
-            {
-                // 何人もいれば、値段（強化は「〜」）と最大の札。持っている数は人の色の札で
-                var row = UiKit.Rect(col, "Row");
-                UiKit.HRow(row.gameObject, 6, null, TextAnchor.MiddleLeft);
-                c.price = Pill(row, 13, 8, new Color(0, 0, 0, 0.32f));
-                c.cap = Pill(row, 9, 6, new Color(0, 0, 0, 0.28f));
-                c.cap.Set(gd.ammo > 0 ? gd.ammo + "発入り" : gd.kind == "up" ? "最大Lv" + gd.max : "最大" + gd.max + "個");
-                c.own = UiKit.Label(col, "", 11, Color.white);
-            }
-            return c;
-        }
-
-        PillUi MakePlayerPill(RectTransform parent, Player P, bool viewer)
-        {
-            var pl = new PillUi();
-            var im = UiKit.Img(parent, new Color(1, 1, 1, 0.1f), 16, "P_" + P.name);
-            Ring(im.transform, new Color(1, 1, 1, 0.2f), 2, 16);
-            UiKit.HRow(im.gameObject, 9, UiKit.Pad(14, 14, 0, 0), TextAnchor.MiddleLeft);
-            var ie = UiKit.Size(im, -1, 32); ie.minHeight = 32;
-            var dot = UiKit.Img(im.transform, Mats.Hex(P.col)); dot.sprite = UiKit.Ellipse;
-            var dl = UiKit.Size(dot, 12, 12, 0, 12); dl.minHeight = 12; dl.flexibleHeight = 0;
-            UiKit.Label(im.transform, NmOf(P), 13, Color.white);
-            pl.t = viewer ? UiKit.Label(im.transform, "", 15, Color.white) : null;     // 所持金はこの画面の人だけ
-            var st = UiKit.Img(im.transform, new Color(1, 1, 1, 0.16f), 9, "St");
-            var se = UiKit.Size(st, -1, 18); se.minHeight = 18;
-            UiKit.HRow(st.gameObject, 0, UiKit.Pad(10, 10, 1, 1), TextAnchor.MiddleCenter);
-            var stt = UiKit.Label(st.transform, "ショッピング中", 11, Mats.Hex(0xdfe6f5));
-            pl.bg = st; pl.r = st.rectTransform;
-            pl.stText = stt;
-            return pl;
-        }
-
-        PillUi Pill(Transform parent, float fs, int padX, Color bg)
-        {
-            var p = new PillUi { padX = padX };
-            var im = UiKit.Img(parent, bg, 10, "Pill");
-            UiKit.HRow(im.gameObject, 0, UiKit.Pad(padX, padX, 0, 0), TextAnchor.MiddleCenter);
-            p.t = UiKit.Label(im.transform, "", fs, Color.white);
-            var le = UiKit.Size(p.t, -1, Mathf.Round(fs * 1.45f)); le.minHeight = le.preferredHeight;
-            // 角丸の絵の大きさ（30）が中身より優先されないよう、札の高さを決め打ちにする
-            var pe = UiKit.Size(im, -1, Mathf.Round(fs * 1.45f)); pe.minHeight = pe.preferredHeight;
-            p.bg = im; p.r = im.rectTransform;
-            return p;
-        }
-
         void MakeFinger(Cur c)
         {
-            var f = UiKit.Rect(fingRoot, "Finger_" + c.P.name);
-            f.anchorMin = f.anchorMax = new Vector2(0, 1); f.pivot = new Vector2(0, 1);
-            var hand = UiKit.Rect(f, "Hand").gameObject.AddComponent<RawImage>();
-            hand.texture = Resources.Load<Texture2D>("Ui/finger"); hand.raycastTarget = false;
-            var hr = hand.rectTransform; hr.anchorMin = hr.anchorMax = new Vector2(0, 1); hr.pivot = new Vector2(0, 1);
-            hr.sizeDelta = new Vector2(32, 32); hr.anchoredPosition = new Vector2(-5, 5);
-            c.tagBg = UiKit.Img(f, Mats.Hex(c.P.col), 5, "Tag");
-            var tr = c.tagBg.rectTransform; tr.anchorMin = tr.anchorMax = new Vector2(0, 1); tr.pivot = new Vector2(0, 1);
-            tr.anchoredPosition = new Vector2(9, -22);
-            UiKit.HRow(c.tagBg.gameObject, 0, UiKit.Pad(5, 5, 1, 1), TextAnchor.MiddleCenter);
-            var tf = c.tagBg.gameObject.AddComponent<ContentSizeFitter>();
-            tf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize; tf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            c.tag = UiKit.Label(c.tagBg.transform, "", 11, Color.white);
-            c.tagPoor = Ring(c.tagBg.transform, Mats.Hex(0xe8604a), 2, 5);
+            var f = UiBoard.Box(fingRoot, 0, 0, 0, 0, "Finger_" + c.P.name);
+            Hand.Add(f, c.P.col);
+            // 値札（指の下）。人の色
+            c.tagBg = UiBoard.Fill(f, Mats.Hex(c.P.col), 6, 44, 10, 20, 6, "Tag");
+            c.tag = UiBoard.T(c.tagBg.rectTransform, "", 6, 3, 13, Color.white);
+            // 「買えません」（指の左上に灰色の札。担当の見本）
+            c.tagCant = UiBoard.Fill(f, Mats.Hex(0xd9d9d9), -10, -30, 10, 22, 6, "Cant");
+            c.cantT = UiBoard.T(c.tagCant.rectTransform, Lang.Tr("買えません"), 7, 4, 13, Mats.Hex(0x333333));
+            var cb = c.tagCant.gameObject.AddComponent<Outline>(); cb.effectColor = Color.white; cb.effectDistance = new Vector2(2, -2);
             c.el = f;
             if (!IsViewer(c.P) && c.P.src.kind != "net") f.gameObject.SetActive(false);   // NPC の指は出さない（オンラインの相手の指は出す）
         }
@@ -449,7 +321,7 @@ namespace Nekorobo
                     if (inside && ms.leftButton.wasPressedThisFrame)
                     {
                         mc.x = mx; mc.y = my; Over(mc);
-                        if (mc.onRdy) { mc.ready = !mc.ready; Game.SeUi(mc.ready ? "ok" : "back"); }
+                        if (mc.onRdy) { mc.ready = !mc.ready; pressT = Game.PRESS_SHOW; Game.SeUi(mc.ready ? "ok" : "back"); }
                         else if (mc.idx >= 0 && !mc.ready) Buy(mc);
                     }
                 }
@@ -516,10 +388,10 @@ namespace Nekorobo
                 if (!inp.ok) c.armed = true;                        // 一度離すまで決定しない
                 if (inp.ok && !c.pOk && c.armed && c.lockT <= 0)
                 {
-                    if (c.onRdy) { c.ready = !c.ready; Game.SeUi(c.ready ? "ok" : "back"); }   // 下の「購入完了」の上なら Y/Z と同じ
+                    if (c.onRdy) { c.ready = !c.ready; pressT = Game.PRESS_SHOW; Game.SeUi(c.ready ? "ok" : "back"); }   // 下の「購入完了」の上なら Y/Z と同じ
                     else if (!c.ready) Buy(c);
                 }
-                if (inp.use && !c.pUse && c.lockT <= 0) { c.ready = !c.ready; Game.SeUi(c.ready ? "ok" : "back"); }
+                if (inp.use && !c.pUse && c.lockT <= 0) { c.ready = !c.ready; pressT = Game.PRESS_SHOW; Game.SeUi(c.ready ? "ok" : "back"); }
                 c.pOk = inp.ok; c.pUse = inp.use;
             }
 
@@ -529,7 +401,8 @@ namespace Nekorobo
             // オンラインでは**自分の画面で動かしている枠だけ**を見る（相手の入力は相手の画面にしか届かない）
             bool all = true; bool any = false;
             for (int i = 0; i < cur.Count; i++) { if (g.NpOn && !Mine(i)) continue; any = true; if (!cur[i].ready) all = false; }
-            if (any && all) { g.ShopDone(); return; }
+            if (any && all) { if ((allT += dt) >= Game.PRESS_SHOW) { allT = 0; g.ShopDone(); return; } }
+            else allT = 0;
             if (t > 0)
             {
                 int was = Mathf.CeilToInt(t);
@@ -550,7 +423,7 @@ namespace Nekorobo
             if (k == "npc") return !g.NpOn || g.NetHost;
             return true;
         }
-        string shopSig = "", ptrSig = ""; float ptrT;
+        string shopSig = "", ptrSig = ""; float ptrT, allT;
         /// <summary>この画面で動かしている枠の財布と「買い終わり」を配る（変わったときだけ）。last は買い終わった時の1回。</summary>
         public void NetSendW(bool last)
         {
@@ -695,12 +568,13 @@ namespace Nekorobo
             if (c.idx < 0 || c.idx >= goods.Count) return;
             var gd = goods[c.idx]; var W = g.WalletOf(c.P);
             float sv = c.P.src.kind == "npc" ? 0.5f : 1;    // NPC の買い物は控えめに
-            if (gd.Full(W)) { msg = gd.n + "はもう最大です"; Game.SeUi("ng", sv); return; }
+            if (gd.Full(W)) { msg = Lang.Tr("{0}はもう最大です", Lang.Tr(gd.n)); Game.SeUi("ng", sv); return; }
             // 足りなければ買えない（借金はやめた）
-            if (W.cash < gd.Cost(W)) { msg = "所持金が足りません（" + gd.n + " " + Game.Yen(gd.Cost(W)) + "）"; Game.SeUi("ng", sv); return; }
+            if (W.cash < gd.Cost(W)) { msg = Lang.Tr("所持金が足りません（{0} {1}）", Lang.Tr(gd.n), Game.Yen(gd.Cost(W))); Game.SeUi("ng", sv); return; }
             msg = "";
             Game.SeUi("buy", sv);
             if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
+            if (IsViewer(c.P)) cards[c.idx].flash = 0.2f;
         }
 
         // ------------------------------------------------------------ 表示を今の値に合わせる
@@ -708,88 +582,121 @@ namespace Nekorobo
         {
             var viewers = Viewers();
             var one = viewers.Count == 1 ? viewers[0] : null;
-            // 1人のときは、時間の帯を右の札の手前で止める（札の幅は中身が決まってからでないと測れない）
-            if (single) clockRect.sizeDelta = new Vector2(38 + 1204 - pstripRow.rect.width - 28 - clockRect.anchoredPosition.x, 33);
+            B.Tick(Time.unscaledDeltaTime);
             if (secText != null)
             {
                 secText.text = Mathf.CeilToInt(Mathf.Max(0, t)).ToString();
-                bool hurry = t <= 10;
-                secText.color = hurry ? Mats.Hex(0xff8f7c) : GOLD;
-                UiKit.SetBar(clockFill, Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime));
-                clockFill.color = hurry ? Mats.Hex(0xe8604a) : GREEN;
+                secText.color = t <= 10 ? Mats.Hex(0xff4b4b) : GREEN;
+                if (clockFill != null) clockFill.rectTransform.sizeDelta = new Vector2(clockW * Mathf.Clamp01(Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime)), 10);
             }
-            // 人ごとの状態
-            for (int i = 0; i < pstrip.Count && i < cur.Count; i++)
-            {
-                var c = cur[i]; var pl = pstrip[i]; var W = g.WalletOf(c.P);
-                if (pl.t != null) { pl.t.text = Game.Yen(W.cash); pl.t.color = W.cash < 0 ? Mats.Hex(0xe8604a) : Color.white; }
-                pl.stText.text = c.ready ? "購入完了" : "ショッピング中";
-                pl.stText.color = c.ready ? Color.white : Mats.Hex(0xdfe6f5);
-                pl.bg.color = c.ready ? GREEN : new Color(1, 1, 1, 0.16f);
-            }
-            // タイル
+            // この画面の人が全員「購入完了」なら、品物を選べない見た目に
+            bool lockAll = viewers.Count > 0 && viewers.TrueForAll(P => { var c = cur.Find(x => x.P == P); return c != null && c.ready; });
             foreach (var cd in cards)
             {
                 var gd = cd.gd;
+                var W1 = one != null ? g.WalletOf(one) : null;
+                int cost = one != null ? gd.Cost(W1) : Mathf.RoundToInt(gd.bas);
+                // 強化は買うほど上がるので「〜」を付ける。**アイテムは固定額なので付けない**
+                cd.pz.text = Game.Yen(cost) + (gd.rise && one == null ? "〜" : "");
+                cd.pz.color = one != null && W1.cash < cost && !gd.Full(W1) ? POOR : GREEN;
+                cd.cp.text = one != null ? (gd.ammo > 0 ? Lang.Tr("残{0}/{1}", gd.Rest(W1), gd.ammo) : gd.kind == "up" ? "Lv" + gd.Lv(W1) + "/" + gd.max : Lang.Tr("所持{0}/{1}", gd.Lv(W1), gd.max))
+                                        : (gd.ammo > 0 ? Lang.Tr("{0}発入り", gd.ammo) : gd.kind == "up" ? Lang.Tr("最大Lv{0}", gd.max) : Lang.Tr("最大{0}個", gd.max));
                 bool full = viewers.Count > 0 && viewers.TrueForAll(P => gd.Full(g.WalletOf(P)));
-                cd.cg.alpha = full ? 0.5f : 1f;
-                if (one != null)
+                cd.full.gameObject.SetActive(full);
+                // 何人も居れば、持っている数を人の色の札で絵の右下に
+                foreach (Transform ch in cd.own) Object.Destroy(ch.gameObject);
+                if (one == null)
                 {
-                    var W = g.WalletOf(one);
-                    cd.price.Set(Game.Yen(gd.Cost(W)));
-                    cd.mine.Set(gd.ammo > 0 ? "残 " + gd.Rest(W) + "/" + gd.ammo
-                              : gd.kind == "up" ? "Lv " + gd.Lv(W) + "/" + gd.max : "所持 " + gd.Lv(W) + "/" + gd.max);
-                }
-                else
-                {
-                    // 強化は買うほど上がるので「〜」を付ける。アイテムは固定額なので付けない
-                    cd.price.Set(Game.Yen(gd.bas) + (gd.rise ? "〜" : ""));
-                    var sb = new System.Text.StringBuilder();
+                    float ox = 0;
                     foreach (var P in viewers)
                     {
                         int v = gd.ammo > 0 ? gd.Rest(g.WalletOf(P)) : gd.Lv(g.WalletOf(P));
-                        if (v > 0) sb.Append("<color=" + UiKit.Hex(Mats.Hex(P.col)) + ">●</color>" + v + " ");
+                        if (v <= 0) continue;
+                        var chip = UiBoard.Fill(cd.own, Mats.Hex(P.col), ox, 0, 17, 15, 8, "Own");
+                        UiBoard.T(chip.rectTransform, v.ToString(), 8.5f, 2.5f, 10, Color.white, 2);
+                        ox += 19;
                     }
-                    cd.own.text = sb.ToString().TrimEnd();
-                    cd.own.gameObject.SetActive(cd.own.text.Length > 0);
                 }
-                cd.Hov(false, Color.white);
+                // 買ったとき：絵の白い四角を一瞬だけ色反転（四角は品物の色、絵は白）
+                if (cd.flash > 0) cd.flash -= Time.unscaledDeltaTime;
+                var ic = cd.iv.color; ic.a = cd.flash > 0 ? 1 : Mathf.MoveTowards(ic.a, 0, Time.unscaledDeltaTime * 4); cd.iv.color = ic;
+                cd.ic.color = cd.flash > 0 ? Color.white : Color.white;
+                cd.ic.texture = Tint(U + "ic_" + gd.k + ".png", cd.flash > 0 ? Color.white : (gd.kind == "up" ? UPC : ITC));
+                cd.bg.color = cd.ic.color = lockAll ? new Color(0.45f, 0.45f, 0.45f) : Color.white;
+                foreach (Transform ch in cd.sel) Object.Destroy(ch.gameObject);
             }
             // 指カーソル
-            bool anyRdyHov = false;
             foreach (var c in cur)
             {
                 if (c.el == null) continue;
-                c.el.anchoredPosition = new Vector2(c.x - 11 + 6, -(c.y - 2));
+                c.el.anchoredPosition = new Vector2(c.x, -c.y);
                 var cg = c.el.GetComponent<CanvasGroup>();
                 if (cg == null) cg = c.el.gameObject.AddComponent<CanvasGroup>();
                 cg.alpha = c.ready ? 0.45f : 1f;
                 var col = Mats.Hex(c.P.col);
-                c.tagPoor.enabled = false;
+                c.tagCant.gameObject.SetActive(false);
                 if (c.onRdy)
                 {
                     c.tagBg.gameObject.SetActive(true);
-                    c.tag.text = c.ready ? "取り消す" : "購入完了";
-                    c.tagBg.color = col;
-                    if (IsViewer(c.P)) { readyHov.enabled = true; readyHov.color = col; anyRdyHov = true; }
+                    SetTag(c, Lang.Tr(c.ready ? "取り消す" : "購入完了"), col);
                     continue;
                 }
                 if (c.idx < 0) { c.tagBg.gameObject.SetActive(false); continue; }
-                c.tagBg.gameObject.SetActive(true);
                 var gd = goods[c.idx]; var W = g.WalletOf(c.P);
                 int lv = gd.Lv(W), cost = gd.Cost(W); bool maxed = gd.Full(W);
-                c.tag.text = (gd.ammo > 0 ? "残 " + gd.Rest(W) + "/" + gd.ammo : gd.kind == "up" ? "Lv" + lv + "/" + gd.max : "×" + lv + "/" + gd.max)
-                           + (maxed ? " 最大" : " " + Game.Yen(cost));
-                c.tagBg.color = maxed ? Mats.Hex(0x8b93a0) : col;
-                c.tagPoor.enabled = !maxed && W.cash < cost;            // 所持金が足りない物は赤で囲う
-                if (!c.ready && IsViewer(c.P)) cards[c.idx].Hov(true, col);
+                // 所持金が足りない物は「買えません」（担当）
+                if (!maxed && W.cash < cost)
+                {
+                    c.tagBg.gameObject.SetActive(false);
+                    c.tagCant.gameObject.SetActive(true);
+                    c.tagCant.rectTransform.sizeDelta = new Vector2(c.cantT.preferredWidth + 14, 22);
+                    c.tagCant.rectTransform.anchoredPosition = new Vector2(-c.cantT.preferredWidth - 14 + 6, 30);
+                }
+                else
+                {
+                    c.tagBg.gameObject.SetActive(true);
+                    SetTag(c, (gd.ammo > 0 ? Lang.Tr("残 {0}/{1}", gd.Rest(W), gd.ammo) : gd.kind == "up" ? "Lv" + lv + "/" + gd.max : "×" + lv + "/" + gd.max)
+                              + " " + (maxed ? Lang.Tr("最大") : Game.Yen(cost)), maxed ? Mats.Hex(0x8b93a0) : col);
+                }
+                // 指している枠（PSD の「選択1P」どおり、外が人の色・内側が少し明るい2重の縁）。何人も同じ物に乗ったら外へ重ねる
+                if (!c.ready && IsViewer(c.P))
+                {
+                    var sel = cards[c.idx].sel; int k = sel.childCount / 2;
+                    var o = UiBoard.Fill(sel, col, -6 * k, -6 * k, 112 + 12 * k, 112 + 12 * k, 16 + 6 * k, "SelO");
+                    o.sprite = UiKit.Ring(5); o.type = Image.Type.Sliced; o.pixelsPerUnitMultiplier = 32f / (16 + 6 * k);
+                    var i2 = UiBoard.Fill(sel, Color.Lerp(col, Color.white, 0.4f), 4.5f - 6 * k, 4.5f - 6 * k, 103 + 12 * k, 103 + 12 * k, 12 + 6 * k, "SelI");
+                    i2.sprite = UiKit.Ring(4); i2.type = Image.Type.Sliced; i2.pixelsPerUnitMultiplier = 32f / (12 + 6 * k);
+                }
             }
-            if (!anyRdyHov) readyHov.enabled = false;
+            // 下の札
+            foreach (var pp in pps)
+            {
+                var W = g.WalletOf(pp.P); var c = cur.Find(x => x.P == pp.P);
+                bool done = c != null && c.ready;
+                pp.cs.text = Game.Yen(W.cash); pp.cs.color = W.cash < 0 ? POOR : Color.white;
+                for (int j = 0; j < 12 && j < pp.n.Count; j++)
+                {
+                    var gd = goods.Find(x => x.k == ORDER[j]);
+                    pp.n[j].text = gd == null ? "" : (gd.ammo > 0 ? gd.Rest(W) : gd.Lv(W)).ToString();
+                    pp.n[j].color = done ? Mats.Hex(0x8a8a8a) : Color.white;
+                }
+                pp.done.SetActive(done);
+                pp.sb.transform.parent.Find("Poly");
+                float bl = 0.35f + 0.65f * (0.5f + 0.5f * Mathf.Cos(Time.unscaledTime / 1.6f * Mathf.PI * 2));
+                pp.sb.color = new Color(1, 1, 1, done ? 0 : bl);
+                var gr = done ? new Color(0.35f, 0.35f, 0.35f) : Color.white;
+                pp.pu.color = gr; pp.pi.color = gr;
+                foreach (var poly in pp.r.GetComponentsInChildren<UiPoly>(true))
+                    if (poly.transform.parent == pp.r) { var cc = poly.color; poly.enabled = !done; }
+            }
             // 購入完了のボタン（この画面の人のぶん）
             var meC = cur.Find(c => c.P == g.me) ?? cur.Find(c => c.P.src.kind != "npc");
             bool rdy = meC != null && meC.ready;
-            readyBg.sprite = rdy ? UiKit.Grad(1204, 44, 14, Mats.Hex(0x9aa3ae), Mats.Hex(0x6f7884)) : UiKit.Grad(1204, 44, 14, Mats.Hex(0x63d47f), GREEN);
-            readyText.text = rdy ? "購入完了（もう一度で取り消し）" : "購入完了";
+            if (pressT > 0) pressT -= Time.unscaledDeltaTime;
+            bool hov = cur.Exists(c => c.onRdy && IsViewer(c.P));
+            btnOn.color = new Color(1, 1, 1, rdy || pressT > 0 ? 1 : 0);
+            btnOff.color = hov ? new Color(1.35f, 1.35f, 1.35f) : Color.white;
+            undoText.gameObject.SetActive(rdy);
             // 説明の行
             for (int i = 0; i < descRows.Count; i++)
             {
@@ -797,109 +704,28 @@ namespace Nekorobo
                 var c = P != null ? cur.Find(x => x.P == P) : null;
                 descRows[i].text = c != null ? DescOf(c) : "";
             }
-            note2.text = msg.Length > 0 ? msg : "所持金の範囲で買えます（足りない物は買えません）　／　全員が購入完了になると残り時間を待たずに進みます";
-            note2.color = msg.Length > 0 ? Mats.Hex(0xffb4a6) : SUB2;
+            msgText.text = msg;
+        }
+        void SetTag(Cur c, string s, Color col)
+        {
+            c.tag.text = s; c.tagBg.color = col;
+            c.tagBg.rectTransform.sizeDelta = new Vector2(c.tag.preferredWidth + 12, 20);
         }
 
         string DescOf(Cur c)
         {
-            string head = "<color=" + UiKit.Hex(Mats.Hex(c.P.col)) + ">●</color>  ";
-            const string DS = "#cfd8ee";
-            if (c.onRdy) return head + "<b>買い終わり</b>  <color=" + DS + ">"
-                + (c.ready ? "決定でもう一度押すと、買い物に戻れます。" : "決定で「買い終わり」になります（全員そろうと次のステージへ）。") + "</color>";
-            if (c.idx < 0) return head + "<color=" + DS + ">" + (c.ready ? "買い終わり" : "品物の上へカーソルを動かしてください") + "</color>";
+            string head = "<color=" + UiKit.Hex(Mats.Hex(c.P.col)) + ">●</color> ";
+            const string DS = "#c8d0d8";
+            if (c.onRdy) return head + Lang.Tr("買い終わり") + "  <color=" + DS + ">"
+                + Lang.Tr(c.ready ? "決定でもう一度押すと、買い物に戻れます。" : "決定で「買い終わり」になります（全員そろうと次のステージへ）。") + "</color>";
+            if (c.idx < 0) return head + "<color=" + DS + ">" + Lang.Tr(c.ready ? "買い終わり" : "品物の上へカーソルを動かしてください") + "</color>";
             var gd = goods[c.idx]; var W = g.WalletOf(c.P);
             int lv = gd.Lv(W), cost = gd.Cost(W); bool maxed = gd.Full(W);
-            return head + "<b><size=13>" + gd.n + "</size></b>" + (gd.sub.Length > 0 ? "（" + gd.sub + "）" : "") + "  "
-                 + (gd.ammo > 0 ? "残 " + gd.Rest(W) + "/" + gd.ammo : gd.kind == "up" ? "Lv" + lv + "/" + gd.max : "×" + lv + "/" + gd.max) + "  "
-                 + "<b><color=" + (maxed ? "#8b93a0" : W.cash >= cost ? "#4cd07a" : "#ff7a66") + ">"
-                 + (maxed ? "最大" : Game.Yen(cost) + (W.cash >= cost ? "" : "（足りません）")) + "</color></b>  "
-                 + "<color=" + DS + ">" + gd.ds + "</color>";
-        }
-
-        // ================================================================ 絵の部品
-        static Color GoldD() { return Mats.Hex(0xd18f10); }
-
-        /// <summary>左上を (x, y) にした板（y は下向き）。</summary>
-        static Image Box(Transform parent, float x, float y, float w, float h, float radius, Color c, string name)
-        {
-            var im = UiKit.Img(parent, c, radius, name);
-            var r = im.rectTransform;
-            r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
-            r.anchoredPosition = new Vector2(x, -y); r.sizeDelta = new Vector2(w, h);
-            return im;
-        }
-
-        static Text Lbl(Transform parent, string s, float size, Color c, TextAnchor al, float x, float y, float w, float h)
-        {
-            var t = UiKit.Label(parent, s, size, c, true, al);
-            var r = t.rectTransform;
-            r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
-            r.anchoredPosition = new Vector2(x, -y); r.sizeDelta = new Vector2(w, h);
-            return t;
-        }
-
-        /// <summary>
-        /// 外へ広がる光（CSS の box-shadow 0 0 blur spread）。親の外側だけに出す（内側は透明）。
-        /// 角の丸み radius の箱から、spread だけ広げて blur でぼかした形。色は Image の color。
-        /// </summary>
-        static Image Glow(Transform parent, float radius, float spread, float blur)
-        {
-            float ext = spread + blur * 1.5f;
-            int cr = Mathf.CeilToInt(radius + ext);                 // 角の大きさ（切り分ける幅）
-            int N = cr * 2 + 2;
-            var px = new Color32[N * N];
-            float sg = blur / 2;                                    // CSS の blur はσの2倍
-            for (int y = 0; y < N; y++)
-                for (int x = 0; x < N; x++)
-                {
-                    // 角の丸い箱（外から ext 内側）の外への距離 d
-                    float qx = Mathf.Max(0, Mathf.Abs(x + 0.5f - N / 2f) - (N / 2f - ext - radius));
-                    float qy = Mathf.Max(0, Mathf.Abs(y + 0.5f - N / 2f) - (N / 2f - ext - radius));
-                    float d = Mathf.Sqrt(qx * qx + qy * qy) - radius;
-                    // 箱の中は出さない。外は spread の縁を中心に、ガウスでぼかした縁（ロジスティックで近似）
-                    float a = d <= 0 ? 0 : 1f / (1 + Mathf.Exp(1.702f * (d - spread) / sg));
-                    px[y * N + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255));
-                }
-            var tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            tex.SetPixels32(px); tex.Apply(false);
-            var sp = Sprite.Create(tex, new Rect(0, 0, N, N), new Vector2(0.5f, 0.5f), 100, 0, SpriteMeshType.FullRect, new Vector4(cr, cr, cr, cr));
-            var b = UiKit.Img(parent, Color.white, 0, "Glow");
-            b.sprite = sp; b.type = Image.Type.Sliced; b.fillCenter = false;
-            UiKit.Stretch(b.rectTransform, -ext);
-            var le = b.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
-            b.transform.SetAsFirstSibling();
-            return b;
-        }
-
-        /// <summary>角の丸い枠を、親いっぱい（inset だけ内側）に重ねる。</summary>
-        static Image Ring(Transform parent, Color c, int th, float radius, float inset = 0)
-        {
-            var b = UiKit.Img(parent, c, 0, "Ring");
-            b.sprite = UiKit.Ring(Mathf.Max(1, Mathf.RoundToInt(th * 15.5f / radius)));
-            b.type = Image.Type.Sliced; b.pixelsPerUnitMultiplier = 15.5f / radius;
-            UiKit.Stretch(b.rectTransform, inset);
-            var le = b.gameObject.AddComponent<LayoutElement>(); le.ignoreLayout = true;
-            return b;
-        }
-
-        /// <summary>背景（radial-gradient(1200px 500px at 50% -10%, #1b3f8f, transparent 70%) と linear-gradient(#0b2463, #071a4a)）。</summary>
-        public static Texture2D BgTex()
-        {
-            const int W = 160, H = 90;
-            var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            var top = Mats.Hex(0x0b2463); var bot = Mats.Hex(0x071a4a); var glow = Mats.Hex(0x1b3f8f);
-            for (int y = 0; y < H; y++)
-                for (int x = 0; x < W; x++)
-                {
-                    float X = (x + 0.5f) / W * 1280, Y = (1 - (y + 0.5f) / H) * 720;
-                    var c = Color.Lerp(top, bot, Y / 720f);
-                    float d = Mathf.Sqrt(Mathf.Pow((X - 640) / 1200f, 2) + Mathf.Pow((Y + 72) / 500f, 2));
-                    float a = Mathf.Clamp01(1 - d / 0.7f);
-                    tex.SetPixel(x, y, Color.Lerp(c, glow, a));
-                }
-            tex.Apply(false);
-            return tex;
+            return head + Lang.Tr(gd.n) + (gd.sub.Length > 0 ? (Lang.IsJa ? "（" + Lang.Tr(gd.sub) + "）" : " (" + Lang.Tr(gd.sub) + ")") : "") + "  "
+                 + (gd.ammo > 0 ? Lang.Tr("残 {0}/{1}", gd.Rest(W), gd.ammo) : gd.kind == "up" ? "Lv" + lv + "/" + gd.max : "×" + lv + "/" + gd.max) + "  "
+                 + "<color=" + (maxed ? "#8b93a0" : W.cash >= cost ? "#68ff00" : "#ff5a45") + ">"
+                 + (maxed ? Lang.Tr("最大") : Game.Yen(cost) + (W.cash >= cost ? "" : Lang.Tr("（足りません）"))) + "</color>  "
+                 + "<color=" + DS + ">" + Lang.Tr(gd.ds) + "</color>";
         }
     }
 }

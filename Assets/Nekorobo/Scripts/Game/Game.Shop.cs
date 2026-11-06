@@ -96,6 +96,14 @@ namespace Nekorobo
 
         // ================================================================ 面の送り
         /// <summary>結果の画面のあと（JS版 afterResult）。ふつうはショップへ。</summary>
+        // ---- ラウンドマッチ（3/5/10 ラウンド。0 はフリープレイ＝とことん続ける）。中身は段階4
+        [System.NonSerialized] public int matchRounds;
+        public bool IsMatch { get { return !IsStory && matchRounds > 0; } }
+        public bool MatchOver { get { return IsMatch && runDone >= matchRounds; } }
+        public bool StoryNoShop { get { return entry != null && entry.noShop; } }
+        /// <summary>押したボタンの絵（緑）を見せてから画面を替えるまでの秒数（JS版 PRESS_SHOW）</summary>
+        public const float PRESS_SHOW = 0.3f;
+
         public void AfterResult()
         {
             if (result == null) return;
@@ -119,7 +127,7 @@ namespace Nekorobo
         /// <summary>全員が購入完了・時間切れ（JS版 shopDone）。</summary>
         public void ShopDone()
         {
-            if (!hud.ShopOpen) return;
+            if (!hud.ShopOpen || hud.Wiping) return;
             if (NpOn)
             {
                 // この画面で動かしている枠は、これで買い終わり。最後にもう一度配る（配らないと相手の帯が「買い物中…」のまま）
@@ -137,7 +145,7 @@ namespace Nekorobo
                 }
                 return;
             }
-            NextStage();
+            hud.Wipe(NextStage);                 // ショップ → 次の面も画面転換
         }
 
         /// <summary>

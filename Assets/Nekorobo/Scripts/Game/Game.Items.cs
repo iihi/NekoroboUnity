@@ -59,7 +59,7 @@ namespace Nekorobo
             new ItemDef { k = "repair", n = "リペア", price = 1500, rate = 1.5f, max = 3, col = 0x5fd08a, ds = "体力を50%ぶん回復して、旋回・駆動の故障も直す" },
             new ItemDef { k = "drone", n = "ドローン", price = 1800, rate = 1.5f, max = 2, col = 0x8fd4ff, ds = "運搬中の料理を、乱さずターゲットへ自動で届ける（使い捨て）" },
             new ItemDef { k = "laser", n = "レーザービーム", shortN = "レーザー", sn = "エネルギーパック", price = 10000, max = 1, ammo = 20, col = 0x6be0ff, ds = "まっすぐ飛ぶ光線を20発。当たると爆発して周りが吹っ飛ぶ（車も）" },
-            new ItemDef { k = "ball", n = "弾道ミサイル", shortN = "弾道", price = 20000, max = 1, col = 0xffcf3a, aim = true, ds = "上へ打ち上げて、狙った場所へ落とす。押しっぱなしで照準、離すと発射" },
+            new ItemDef { k = "ball", n = "ICBM", shortN = "ICBM", price = 20000, max = 1, col = 0xffcf3a, aim = true, ds = "上へ打ち上げて、狙った場所へ落とす。押しっぱなしで照準、離すと発射" },
             new ItemDef { k = "missile", n = "追尾ミサイル", shortN = "追尾", price = 6000, rate = 1.5f, max = 2, col = 0xff6b4a, ds = "いちばん近い相手を追いかける。高いぶん当たりやすいが、急旋回でかわされる" },
             new ItemDef { k = "boomerang", n = "ブーメラン", price = 3000, rate = 1.5f, max = 2, col = 0xe0913a, ds = "前へ投げると戻ってくる。運んでいる料理を奪う／受取口の料理を取ってくる（手ぶらのときだけ）" },
             new ItemDef { k = "star", n = "無敵", price = 8000, rate = 1.5f, max = 2, col = 0xff7ad9, ds = "10秒間ダメージを受けない。ぶつけた客にもダメージを与えず、壊しても修理費がかからない" },

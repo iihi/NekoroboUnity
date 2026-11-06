@@ -26,7 +26,7 @@ namespace Nekorobo
             root = UiKit.Rect(parent, "Ending");
             UiKit.Stretch(root);
             var bg = root.gameObject.AddComponent<RawImage>();
-            bg.texture = ShopWin.BgTex(); bg.raycastTarget = true;
+            bg.texture = DataRoot.Texture("ui/res/bg.jpg"); bg.raycastTarget = true;
             root.gameObject.SetActive(false);
         }
 
