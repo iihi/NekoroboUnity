@@ -103,23 +103,36 @@ namespace Nekorobo
         public void ResetWallets() { NewWallets(); runDone = 0; }
 
         // ================================================================ 選ぶ・使う
+        // 何も選んでいないときに、持っている先頭の物を選ぶ。**使い切ったときは先頭へ戻さない**（担当）。
+        // 選んだまま空になり（slotEmpty）、次に持ち替えたときから選べなくなる
         public void FixSlot(Player P)
         {
+            if (NetGuest) return;                  // オンラインの参加者の選択はホストが配る
             var W = WalletOf(P);
             if (P.slot != null && W.Has(P.slot) > 0) return;
+            if (P.slot != null && P.slotEmpty) return;
             P.slot = null;
             foreach (var it in ItemsInOrder()) if (W.Has(it.k) > 0) { P.slot = it.k; break; }
         }
 
+        // 持ち替え。上の帯に並べる順（左から右）で、持っている物だけを回る。
+        // 選んだアイテムは頭の上に少しのあいだ出す（前は名前を吹き出しで出していた）
+        public const float ITEM_POP_SEC = 1.4f;
         void CycleItem(Player P, int step)
         {
             var W = WalletOf(P);
-            var have = new List<ItemDef>();
-            foreach (var it in ItemsInOrder()) if (W.Has(it.k) > 0) have.Add(it);
-            if (have.Count == 0) { P.slot = null; return; }
-            int cur = have.FindIndex(i => i.k == P.slot), n = have.Count;
-            P.slot = have[((cur + step) % n + n) % n].k;
-            Say(P, ItemOf(P.slot).n, 0.8f);
+            var all = ItemsInOrder();
+            P.slotEmpty = false;
+            if (!all.Exists(i => W.Has(i.k) > 0)) return;      // 何も持っていなければ、そのまま
+            int n = all.Count, d = step < 0 ? -1 : 1;
+            int cur = all.FindIndex(i => i.k == P.slot);
+            if (cur < 0) cur = d > 0 ? -1 : 0;
+            for (int s = 1; s <= n; s++)
+            {
+                var it = all[((cur + d * s) % n + n) % n];
+                if (W.Has(it.k) > 0) { P.slot = it.k; break; }
+            }
+            P.itemPopUntil = t + ITEM_POP_SEC;
             Se("cycle", P.ent.rb.position, P, 1, 0.7f);
         }
 
@@ -157,7 +170,7 @@ namespace Nekorobo
             FixSlot(P);
             if (P.slot == null) return;
             var it = ItemOf(P.slot);
-            if (W.Has(it.k) <= 0) return;
+            if (W.Has(it.k) <= 0) { Se("ng", null, P, 1, 0.5f); return; }   // 使い切った物を選んだまま
             if (!CanUse(P, it)) { Say(P, "いま使えないにゃ", 0.9f); Se("ng", null, P, 1, 0.6f); return; }
             if (DoUse(P, it))
             {
@@ -170,7 +183,8 @@ namespace Nekorobo
                     if (W.ammo[it.k] <= 0) W.items[it.k] = 0;
                 }
                 else W.items[it.k]--;
-                FixSlot(P);
+                if (W.Has(it.k) <= 0) P.slotEmpty = true;      // 使い切った。先頭へは戻さない（FixSlot）
+                AchItem(P, it.k);
             }
         }
 
@@ -179,8 +193,10 @@ namespace Nekorobo
         {
             var inp = P.input;
             if (inp.use && !P.prevUse && AimItemOf(P) == null) UseItem(P);
-            if (inp.cycle && !P.prevCycle) CycleItem(P, 1);
-            if (inp.cycleBack && !P.prevBack) CycleItem(P, -1);
+            // 煽りのお盆を開いている間・救済の4つ長押しを押しているときは持ち替えない（X / C ＝ R1 / L1 も使うため）
+            bool rs = inp.rescue;
+            if (inp.cycle && !P.prevCycle && !P.emoOpen && !rs) CycleItem(P, 1);
+            if (inp.cycleBack && !P.prevBack && !P.emoOpen && !rs) CycleItem(P, -1);
             P.prevUse = inp.use; P.prevCycle = inp.cycle; P.prevBack = inp.cycleBack;
         }
 
@@ -230,13 +246,14 @@ namespace Nekorobo
             {
                 var b = bananas[i];
                 b.t += dt;
-                b.mesh.Rotate(0, -dt * 0.6f * Mathf.Rad2Deg, 0);
+                // 皮は床に置いたまま（前は回していた）
                 if (b.t < 0.35f) continue;                       // 置いた本人がすぐ踏まないように
                 foreach (var P in players)
                 {
                     var p = P.ent.rb.position;
                     if (p.y > 0.9f) continue;                    // 跳び越えているときは踏まない
                     if (new Vector2(p.x - b.p.x, p.z - b.p.z).magnitude > 0.62f) continue;
+                    if (b.owner != null && b.owner != P && !InvOn(P)) Ach(b.owner, "banana");   // 自分で踏んだのは数えない
                     Slip(P);
                     Destroy(b.mesh.gameObject);
                     bananas.RemoveAt(i);
@@ -388,6 +405,7 @@ namespace Nekorobo
                     if (Mathf.Abs(qp.y - m.y) > 1.3f || new Vector2(qp.x - m.x, qp.z - m.z).magnitude > T.boomR) continue;
                     b.dish = Q.carried;
                     Q.carried = null; Q.look.ShowDish(null);
+                    Ach(P, "steal");
                     Say(Q, "取られたにゃ！！", 1.3f); SetFace(Q, "hit", 0.8f);
                     hud.Pop(qp + Vector3.up * 1.1f, "うばった！", 0xe0913a, true);
                     break;
@@ -688,7 +706,7 @@ namespace Nekorobo
                     float was = e.hp;
                     e.hp = Mathf.Max(0, e.hp - GuestHurt(f * T.blastGuestDmg));
                     e.walkStop = true;
-                    if (owner != null && was > 50 && e.hp <= 50) owner.hurt++;
+                    if (owner != null && was > 50 && e.hp <= 50) GuestKill(owner, e);
                     if (was > 0 && e.hp <= 0) GuestDown(e);
                 }
                 if (e.kind == "table" || e.kind == "chair")
@@ -701,9 +719,12 @@ namespace Nekorobo
                 if (e.player != null && !InvOn(e.player))
                 {
                     var P = e.player;
+                    float bd0 = P.botDmg;
                     P.botDmg = Mathf.Min(100, P.botDmg + Toughed(f * T.blastBotDmg));
+                    StealMoney(owner, P, P.botDmg - bd0);          // 壊したぶん、相手のお金を奪う
                     SetFace(P, "hit", 1.0f);
                     if (P != owner) Say(P, "うわーっ！", 1.2f);
+                    if (owner != null && P != owner) Ach(owner, "hit");
                     // 近くで爆発したら、運んでいる料理を落とす（爆心の反対側へ）
                     if (T.dropBlast > 0 && f >= T.dropBlast && P.carried != null && !P.down)
                     {
@@ -714,7 +735,7 @@ namespace Nekorobo
                     if (P.botDmg >= 100) DownPlayer(P, 0);
                 }
             }
-            hud.Pop(at + Vector3.up * 1.0f, boom ? "ボカーン！" : "ジュッ！", boom ? 0xff8a3d : 0x49d8ff, true);
+            // 文字（「ドカーン！！」「ジュッ！」）は ExplodeFx の描き文字で出す（前の浮き文字は二重になるので外した）
         }
 
         void UpdateBlasts(float dt)
@@ -754,7 +775,22 @@ namespace Nekorobo
             fl.localScale = Vector3.one * 0.35f;
             blasts.Add(new Blast { mesh = fl, m = m, fast = !boom });
             Se(boom ? "boom" : "zap_hit", at, null, 1, 1, true);
-            if (boom) SpawnPuffs(at); else SpawnFlash(at);
+            if (boom)
+            {
+                SpawnPuffs(at);
+                // マンガの「ドカーン」。ギザギザの星形を2重に、地面に衝撃の輪、描き文字
+                SpawnBurst(at + Vector3.up * 0.3f, "boom", 3.2f, 0.55f);
+                SpawnBurst(at + Vector3.up * 0.5f, "hit", 1.8f, 0.4f);
+                SpawnShock(at, 4.2f, 0xffb000);
+                hud.Comic(at + Vector3.up * 1.0f, "ドカーン！！", 46, 0xff3b00);
+                if (me != null && new Vector2(me.ent.rb.position.x - at.x, me.ent.rb.position.z - at.z).magnitude < 7) shake = Mathf.Min(14, shake + 9);
+            }
+            else
+            {
+                SpawnFlash(at);
+                SpawnBurst(at + Vector3.up * 0.2f, "zap", 1.6f, 0.32f);
+                hud.Comic(at + Vector3.up * 0.7f, "ジュッ！", 30, 0x00a8ff);
+            }
             bool keep = npReplay; npReplay = true;                 // 飛沫は "bl" を受けた側で出すので、別に配らない
             SpawnSplash(at, boom ? 0xff9040 : 0xdff6ff, boom ? 14 : 8);
             npReplay = keep;

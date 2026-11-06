@@ -30,6 +30,14 @@ namespace Nekorobo
         float scW = -1;
         // 人の札
         readonly List<PCard> cards = new List<PCard>();
+        /// <summary>その人の札の差引の位置（layer の中）。札が無ければ null（奪ったお金が飛んでいく先）</summary>
+        public Vector2? TotalPos(Player P, RectTransform layer)
+        {
+            var c = cards.Find(x => x.P == P);
+            if (c == null || c.tot == null || !c.tot.gameObject.activeInHierarchy) return null;
+            var w = c.tot.rectTransform.TransformPoint(c.tot.rectTransform.rect.center);
+            return (Vector2)layer.InverseTransformPoint(w);
+        }
         string layoutKey = "";
         // コンボ
         Image comboCard; Text combo;
@@ -393,7 +401,9 @@ namespace Nekorobo
             // ---- お金と配膳数
             c.sales.text = Num(L.sales + L.wreck);
             c.cost.text = Num(L.repair + L.ambCost);
-            c.tot.text = (L.total < 0 ? "-" : "") + Num(L.total);
+            // 奪ったお金が飛んでいる途中のぶんは引いて出す（着いたところで増える。JS版 lootFly）
+            float shownTot = L.total - P.lootFly;
+            c.tot.text = (shownTot < 0 ? "-" : "") + Num(shownTot);
             var tc = L.total >= 0 ? GREEN_D : RED_D;
             c.tot.color = tc; c.yen.color = tc;
             c.dl.text = "<size=" + (many ? 8 : 10) + "><color=#4a5262>配膳数</color></size> " + P.delivered;

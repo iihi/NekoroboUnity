@@ -759,6 +759,9 @@ namespace Nekorobo
                                 Coord.W(PickupOffset, 0.008f, 0), shadow: false, name: "PickupZone");
         }
 
+        public int CounterPlateCount { get { return counterPlates.Count; } }
+        public Vector3 CounterPlateWorld(int i) { return i < counterPlates.Count && counterPlates[i] != null ? counterPlates[i].position : counterPos; }
+
         /// <summary>カウンターに並ぶ料理を NEXT の中身に合わせる。</summary>
         void SyncCounterPlates()
         {

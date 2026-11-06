@@ -63,6 +63,13 @@ namespace Nekorobo
         static float YawToJs(Transform t) { return R2(-t.eulerAngles.y * Mathf.Deg2Rad); }
         public static string Hex6(int c) { return "#" + c.ToString("x6"); }
         /// <summary>数字の吹き出しを出来事として控える（Hud.Pop から）。</summary>
+        /// <summary>売上の式（JS版 "sp2"）。倍率は [[値, 名前], …]（名前は「状態」「速達」「3連続」など）</summary>
+        public void NetEvSale(Vector3 w, string tag, float price, float[] ks, string[] names, float sale)
+        {
+            var m = new JArray();
+            for (int i = 0; i < ks.Length; i++) m.Add(new JArray(Mathf.Round(ks[i] * 100) / 100f, names[i]));
+            NetEv("sp2", R2(w.x), R2(w.y), R2(-w.z), tag ?? "", Mathf.RoundToInt(price), m, Mathf.RoundToInt(sale));
+        }
         public void NetEvPop(Vector3 w, string text, int col, bool big) { NetEv("pop", R2(w.x), R2(w.y), R2(-w.z), text, Hex6(col), big ? 1 : 0); }
         static int HexOf(string s, int dflt)
         {
@@ -616,6 +623,23 @@ namespace Nekorobo
                         MakeDropped((int)e[1], dish, ord, FromJs((float)e[4], (float)e[5], (float)e[6]), (float)e[7]);
                     }
                     break;
+                case "sp2":
+                    {
+                        var m = e[6] as JArray; var ks = new List<float>(); var ns = new List<string>();
+                        if (m != null) foreach (var x in m)
+                            {
+                                var xa = x as JArray; if (xa == null || xa.Count < 2) continue;
+                                ks.Add((float)xa[0]);
+                                var nm = xa[1] as JArray;    // JS版は ["{0}連続", 3] の形で送る
+                                ns.Add(nm != null ? Lang.Tr((string)nm[0], nm.Count > 1 ? (object)nm[1] : null) : (string)xa[1]);
+                            }
+                        hud.SalePop(FromJs((float)e[1], (float)e[2], (float)e[3]), (string)e[4], (float)e[5], ks.ToArray(), ns.ToArray(), (float)e[7]);
+                        break;
+                    }
+                case "lt": { int a = (int)e[1], b = (int)e[2]; if (a >= 0 && a < players.Count && b >= 0 && b < players.Count) hud.CoinFly(players[a], players[b], (float)e[3]); break; }
+                case "vip": { int a = (int)e[2]; hud.VipNotice((int)e[1], a >= 0 && a < players.Count ? players[a] : null, (float)e[3]); break; }
+                case "hx": HitFxLocal((string)e[1], FromJs((float)e[2], (float)e[3], (float)e[4]), (float)e[5]); break;
+                case "cr": { int a = (int)e[1]; if (a >= 0 && a < players.Count) CraneShow(players[a]); break; }
                 case "ddx": { var d = dropped.Find(x => x.ent != null && x.ent.nid == (int)e[1]); if (d != null) KillDropped(d); break; }
             }
         }

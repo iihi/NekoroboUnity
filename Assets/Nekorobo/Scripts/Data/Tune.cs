@@ -19,21 +19,28 @@ namespace Nekorobo
         [Header("吹っ飛び")]
         public float knockback = 2.0f, knockUp = 1.6f;
         [Header("ジャンプ")]
-        public float jumpSpeed = 3.4f, jumpCooldown = 0.5f, airControl = 0.35f;
-        // 飛距離[m]：平らな所を全速で走って跳んだときの、横に進む距離の上限（JS版 jumpDist）。
-        // 抑えないと 4m 以上跳んで川を橋もジャンプ台も使わずに渡れていた。横の速さだけを抑えるので、高さは変わらない。
-        // ショップの「ジャンプ性能アップ」で1段ごとに +15%
-        public float jumpDist = 1.4f;
+        // 高さは「普通」の踏み切り速度 jumpBase（3.4m/s・頂点 約0.59m）を1倍として、強化なしは jumpH0 倍、
+        // ジャンプ性能アップを最後まで上げると jumpHMax 倍（担当「普通基準で、最初は1/3で、最大1.5倍」）。調子によらず同じ。
+        // 飛距離の上限（前の jumpDist）はやめた。踏み切りで横の速さを jumpUpDist ×段 足して伸ばす（JS版と同じ）
+        public float jumpBase = 3.4f, jumpH0 = 1f / 3f, jumpHMax = 1.5f, jumpCooldown = 0.5f, airControl = 0.35f;
+        public float jumpUpDist = 0.05f;
+        [Header("救済のクレーン")]
+        // L1・L2・R1・R2 を4つとも長押し（キーボードは Q・E・X・C）。押し続ける秒数と1回の費用
+        public float rescueHold = 1.2f, rescueCost = 10000;
         [Header("ダメージ")]
         public float hitThreshold = 18, hitCooldown = 0.30f, botTough = 1.0f, botDmg = 0.033f,
                      shopDmg = 0.039f, chairWeight = 0.30f, chainWeight = 0.50f, dishDmg = 0.32f,
                      guestDmg = 0.43f, guestTough = 1.0f, guestOut = 100;
         [Header("池・海")]
-        public float seaPenalty = 10.0f, waterDrag = 3.0f, waterDmg = 2.5f, lavaBurn = 9.0f;
+        // 海から戻るまで（10→3秒。担当）。穴・場外へ落ちたロボも holePenalty 秒止めてから戻す（0 ならすぐ）
+        public float seaPenalty = 3.0f, holePenalty = 3.0f, waterDrag = 3.0f, waterDmg = 2.5f, lavaBurn = 9.0f;
         // NPC が家具（テーブル・イス・ベンチ）を避ける強さ。そのマスを通るときに足す手間（ふつうの床が1）。0 で避けない
         public float npcAvoid = 6;
-        [Header("アイテム（まだ移していない）")]
-        public float bananaSlip = 2.0f, bananaSpin = 5.5f, droneSpeed = 4.6f, invTime = 10,
+        [Header("アイテム")]
+        // バナナを踏むと bananaSlip 秒のあいだ床との摩擦がゼロ（加速は bananaPush 倍）。bananaSpin は前の形（いまは使わない）
+        // 無敵のロボが無敵でないロボに当たったら、決まった速さ（横 invKnock・上 invKnockUp）で飛ばす
+        public float bananaSlip = 10, bananaPush = 0.25f, bananaSpin = 5.5f, droneSpeed = 4.6f, invTime = 10,
+                     invKnock = 9.0f, invKnockUp = 4.5f,
                      boomSpeed = 11, boomOut = 0.6f, boomR = 0.8f, missileSpeed = 16.0f,
                      homingSpeed = 11.0f, homingTurn = 2.4f, homingLife = 6.0f,
                      ballRange = 12.0f, ballAimSpeed = 9.0f, ballFlight = 1.6f, ballHeight = 9.0f,
@@ -43,23 +50,39 @@ namespace Nekorobo
         public float iceGrip = 0.10f, iceDrag = 0.35f, icePush = 0.50f;
         [Header("落とした料理")]
         public float dropImpulse = 55, dropBlast = 0.40f, dropDmg = 28, dropSettle = 0.6f,
-                     dropArm = 1.2f, pickupR = 0.85f, dishTimeout = 30;
+                     dropArm = 1.2f, pickupR = 0.85f, dishTimeout = 10;   // 30→10（終わりの3秒は点滅）
         [Header("壁・ジャンプ台")]
         public float wallLow = 0.55f, wallHigh = 3.00f, wallPhys = 20.00f, rampRise = 0.85f;
         [Header("故障")]
         public float breakSteer = 50, breakDrive = 75, repairHeal = 50;
         [Header("画面")]
-        public float menuLock = 0.7f, shopTime = 45, ptrCross = 1.1f;
+        public float menuLock = 0.7f, shopTime = 45, ptrCross = 1.1f, stageSelTime = 30;
+        // 画面転換（結果・ショップ・次の面へ）。ドットが走って覆い、また抜ける
+        public bool wipe = true;
+        public float wipeDur = 0.4f;
         public bool soloShopTimer = false;
         public float resultTime = 0;
         [Header("大暴れ・配膳コンボ")]
         public float wreckMin = 4, wreckBack = 0.40f, wreckStep = 0.15f, wreckMax = 0.95f,
                      comboWindow = 20, comboBonus = 0.25f, comboMax = 5;
+        [Header("速達ボーナス")]
+        // 受取口で受け取ってから早く届けるほど売上に倍率（最大 1+rushBonus）。目安＝道のり÷rushRef＋rushGrace、過ぎると rushFade 秒で1倍
+        public bool rushOn = true;
+        public float rushBonus = 1.0f, rushRef = 4.0f, rushGrace = 1.5f, rushFade = 8;
         [Header("収支")]
-        public float startCash = 20000, stageBonus = 10000, bonusEvery = 3, bonusSpread = 0.5f,
-                     repairPerPct = 150, ambulance = 2000;
+        // 始めの所持金 20000→0（担当）。N ステージごとのボーナスはやめた（ストーリーの面ごとのボーナスだけ）
+        public float startCash = 0,
+                     repairPerPct = 150, ambulance = 2000,
+                     killCost = 3000,      // 客を倒した一撃の費用（お店の修理費の倍率を掛ける）
+                     stealPerPct = 600;    // 攻撃で相手を壊したダメージ1%ごとに奪う額（お店の単価の倍率を掛ける）
         public bool countAmb = true;
         public float repairShare = 0.30f, orderCount = 6, orderAddPer = 3;
+        // 制限時間[秒]（0 で無し。ストーリーは付けない）
+        public float timeLimit = 300;
+        [Header("高額・VIP オーダー")]
+        public float richRate = 0.30f, richMin = 30000, richMax = 30000;
+        public bool vipOn = true;
+        public float vipEvery = 60, vipTime = 30, vipPrice = 60000;
 
         public Tune Clone() { return (Tune)MemberwiseClone(); }
 
@@ -92,7 +115,7 @@ namespace Nekorobo
         {
             var t = new Tune();
             t.thrust = 34; t.linDamp = 3.4f; t.reverseRatio = 0.75f; t.steerAccel = 20; t.steerMax = 4.5f;
-            t.jumpSpeed = 4.6f; t.airControl = 0.50f; t.jumpDist = 2.8f;
+            t.airControl = 0.50f;      // ジャンプの高さは調子によらず同じ（jumpBase）
             t.botTough = 8.0f; t.botDmg = 0.024f; t.breakSteer = 65; t.breakDrive = 90;
             t.knockback = 7.0f; t.knockUp = 3.2f; t.guestDmg = 0.05f;
             t.guestTough = 10.0f;

@@ -354,6 +354,8 @@ namespace Nekorobo
         public float price, repair, fric;
         public string[] menu;        // そのお店で出す料理（Dishes の k）。ステージで menu / dishes を書いた面はそちらが先
         public string counter;       // 受取カウンターの既定の形（hotel / ryotei / classic。空はいつもの形）
+        public string light;         // 照明の既定（lights.js の INTERIORS のキー）。ステージで "light" を書いた面はそちらが先
+        public string rich;          // 高額オーダーの料理（Dishes の k）
     }
 
     /// <summary>お店の種類。JS版 shops.js と同じ。</summary>
@@ -361,21 +363,21 @@ namespace Nekorobo
     {
         public static readonly List<ShopDef> All = new List<ShopDef>
         {
-            new ShopDef { n = "カフェ",               price = 0.6f, repair = 0.6f, fric = 1.00f, fricLabel = "普通",
+            new ShopDef { n = "カフェ",               price = 0.6f, repair = 1.0f, fric = 1.00f, fricLabel = "普通", light = "warm", rich = "rich_parfait",
                           menu = new[] { "parfait", "pancake", "sandwich", "shortcake", "latte", "salad" } },
-            new ShopDef { n = "定食屋",               price = 0.6f, repair = 0.6f, fric = 0.72f, fricLabel = "やや滑る",
+            new ShopDef { n = "定食屋",               price = 0.6f, repair = 1.0f, fric = 0.72f, fricLabel = "やや滑る", light = "fluo", rich = "rich_unaju",
                           menu = new[] { "karaage_set", "fish_set", "ginger_set", "katsudon", "curry", "hamburg" } },
-            new ShopDef { n = "町中華",               price = 1.0f, repair = 0.6f, fric = 0.32f, fricLabel = "超滑る",
+            new ShopDef { n = "町中華",               price = 1.0f, repair = 1.2f, fric = 0.32f, fricLabel = "超滑る", light = "fluo", rich = "rich_duck",
                           menu = new[] { "ramen", "fried_rice", "gyoza", "mapo", "tenshin", "ebichili" } },
-            new ShopDef { n = "ファミレス",           price = 1.0f, repair = 1.0f, fric = 1.00f, fricLabel = "普通",
+            new ShopDef { n = "ファミレス",           price = 1.0f, repair = 1.6f, fric = 1.00f, fricLabel = "普通", rich = "rich_hamburg_tower",
                           menu = new[] { "hamburg", "steak", "pilaf", "soup", "parfait", "omurice" } },
-            new ShopDef { n = "カジュアルレストラン", price = 1.6f, repair = 1.0f, fric = 1.00f, fricLabel = "普通",
+            new ShopDef { n = "カジュアルレストラン", price = 1.6f, repair = 2.4f, fric = 1.00f, fricLabel = "普通", rich = "rich_tomahawk",
                           menu = new[] { "pasta", "pizza", "burger", "steak", "paella", "salad" } },
-            new ShopDef { n = "高級和食",             price = 1.6f, repair = 1.8f, fric = 1.00f, fricLabel = "普通", counter = "ryotei",
+            new ShopDef { n = "高級和食",             price = 4.0f, repair = 6.0f, fric = 1.00f, fricLabel = "普通", counter = "ryotei", light = "dim", rich = "rich_sushioke",
                           menu = new[] { "sushi", "tempura", "sashimi", "sukiyaki", "chawanmushi", "bento" } },
-            new ShopDef { n = "高級フレンチ",         price = 2.6f, repair = 1.8f, fric = 1.35f, fricLabel = "高", counter = "classic",
+            new ShopDef { n = "高級フレンチ",         price = 4.0f, repair = 6.0f, fric = 1.35f, fricLabel = "高", counter = "classic", light = "dim", rich = "rich_caviar",
                           menu = new[] { "potage", "poisson", "filet", "terrine", "dessert_plate", "souffle" } },
-            new ShopDef { n = "最高級ホテル",         price = 2.6f, repair = 3.0f, fric = 1.35f, fricLabel = "高", counter = "hotel",
+            new ShopDef { n = "最高級ホテル",         price = 6.0f, repair = 10.0f, fric = 1.35f, fricLabel = "高", counter = "hotel", light = "warm", rich = "rich_goldcake",
                           menu = new[] { "roastbeef", "lobster", "afternoon_tea", "fruit_tart", "vichyssoise", "special_cake" } },
         };
 
@@ -452,9 +454,27 @@ namespace Nekorobo
             new Dish { k = "vichyssoise", n = "ビシソワーズ", price = 1100, frag = 2.2f, col = 0xf2eedc, set = "shop" },
             new Dish { k = "special_cake", n = "特製ケーキ", price = 2200, frag = 2.2f, col = 0xfaf4ec, set = "shop" },
             new Dish { k = "paella", n = "パエリア", price = 1600, frag = 1.0f, col = 0xf0b030, set = "shop" },
+            // ---- 高額オーダー・VIP オーダーの料理。ふつうの注文には混ぜない。値段は注文ごとの高額の値段・vipPrice で決まる（ここは目安）
+            new Dish { k = "rich_parfait",       n = "金箔のジャンボパフェ",   price = 10000, frag = 1.9f, col = 0xf0c24a, set = "rich" },
+            new Dish { k = "rich_unaju",         n = "特上うな重",             price = 10000, frag = 1.0f, col = 0x9c5420, set = "rich" },
+            new Dish { k = "rich_duck",          n = "北京ダック",             price = 10000, frag = 1.1f, col = 0xaa481a, set = "rich" },
+            new Dish { k = "rich_hamburg_tower", n = "特大ハンバーグのタワー", price = 10000, frag = 1.6f, col = 0x7a4424, set = "rich" },
+            new Dish { k = "rich_tomahawk",      n = "トマホークステーキ",     price = 10000, frag = 0.7f, col = 0x7b3a2c, set = "rich" },
+            new Dish { k = "rich_sushioke",      n = "特上寿司の桶",           price = 10000, frag = 1.2f, col = 0xd84a50, set = "rich" },
+            new Dish { k = "rich_caviar",        n = "キャビアとトリュフ",     price = 10000, frag = 1.4f, col = 0x1a1c20, set = "rich" },
+            new Dish { k = "rich_goldcake",      n = "金のケーキ",             price = 10000, frag = 2.2f, col = 0xf2c650, set = "rich" },
+            new Dish { k = "rich_crepe",         n = "金箔のクレープ",         price = 10000, frag = 1.6f, col = 0xf0c24a, set = "rich" },
+            new Dish { k = "vip_cloche",         n = "VIPスペシャル",          price = 20000, frag = 1.2f, col = 0xf6cc56, set = "vip" },
         };
 
         public static Dish Find(string k) { foreach (var d in All) if (d.k == k) return d; return null; }
+        /// <summary>高額オーダーの料理。クレープの面（メニューが全部クレープ）は金箔のクレープ、ほかはお店の rich。無ければ null</summary>
+        public static Dish RichOf(StageCfg C, ShopDef shop)
+        {
+            var menu = MenuOf(C, shop);
+            if (menu.Count > 0 && menu.TrueForAll(d => d.set == "crepe")) return Find("rich_crepe");
+            return shop != null && shop.rich != null ? Find(shop.rich) : null;
+        }
 
         /// <summary>
         /// その面で出す料理（JS版 menuOf）。決め方は上から順に：

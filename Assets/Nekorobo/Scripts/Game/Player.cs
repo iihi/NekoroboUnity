@@ -14,6 +14,11 @@ namespace Nekorobo
         public float axX, axY;
         // 決定と戻る（ショップの指・結果の画面）。遊んでいる間は誰も見ない
         public bool ok, back;
+        // 煽り：L2（Q）＝応援の板・R2（E）＝挑発の板。右スティックで選ぶ（キーボードは X / C で次・前）
+        public bool emL, emR;
+        public float axRX, axRY;
+        // 救済のクレーン：L1・R1・L2・R2 を4つとも（キーボードは Q・E・X・C）
+        public bool rescue;
     }
 
     /// <summary>運んでいる料理。</summary>
@@ -22,6 +27,7 @@ namespace Nekorobo
         public Dish dish;
         public float integ;
         public Order order;
+        public float rush;               // オンラインの参加者：ホストから届いた速達の倍率
     }
 
     public class Order
@@ -30,6 +36,17 @@ namespace Nekorobo
         public Ent guest;
         public bool done;
         public Player taker;
+        // 高額オーダー（料理の上に「高額オーダー」の札）と、その値段
+        public bool rich, ann;
+        public float richAmt;
+        // VIP オーダー（その時の1位限定。VIP 台に出る）。at … stand / held、res … ok / ng
+        public bool vip;
+        public Player leader;
+        public float left;
+        public string at, res;
+        // 速達：受け取ったときのフレームと目安の時間[秒]
+        public int pickF = -1;
+        public float rushPar;
     }
 
     /// <summary>
@@ -106,8 +123,19 @@ namespace Nekorobo
         public float? steerHold;
         public float lastJump = -9f, prevVy;
         public bool airborne;
-        public float jumpCap;                 // 跳んでいる間の横の速さの上限（0 は抑えない。ジャンプ台から跳んだとき）
         public float invT, slipT, slipSpin;
+        public float knockT;                  // 無敵の相手に吹っ飛ばされた直後（地面の減速を掛けない）
+        public bool slotEmpty;                // 選んだアイテムを使い切った（先頭へは戻さない）
+        public float itemPopUntil;            // 持ち替えたアイテムを頭の上に出す時刻
+        // 救済のクレーン
+        public RescueRun cr;                  // 運ばれている間だけ
+        public float crHold, crCost;
+        public RescueFx crFx;
+        // 攻撃で奪った・奪われたお金（この面）と、上の帯へ飛んでいる途中の額
+        public float lootIn, lootOut, lootFly;
+        // 実績用（この面）
+        public float achDmg; public bool achWet;
+        public bool emoOpen;                  // 煽りの板を開いている（その間は X / C で持ち替えない）
         public Vector3 spawn;
         public float spawnRot;           // 出現位置の rot（度）
         public BotInput input;

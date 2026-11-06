@@ -73,6 +73,8 @@ namespace Nekorobo
             {
                 if (P.src.kind != "npc" || !NpcMayShop(P)) continue;
                 var W = WalletOf(P);
+                // まずジャンプを1段（池・川から岸へ跳び上がれる高さ。強化なしでは上がれない）
+                foreach (var u in UPGRADES) if (u.k == "jump" && W.Up("jump") < 1 && UpCost(u, W) <= W.cash) BuyUpgrade("jump", W);
                 for (int guard = 0; guard < 8; guard++)
                 {
                     bool wantItem = guard % 3 == 1;

@@ -170,16 +170,7 @@ namespace Nekorobo
         public string RoundLine()
         {
             int next = runDone + 1;
-            string t = "<b>" + next + "面目</b>";
-            if (T.bonusEvery > 0 && T.stageBonus > 0)
-            {
-                int left = Mathf.RoundToInt(T.bonusEvery) - (runDone % Mathf.Max(1, Mathf.RoundToInt(T.bonusEvery)));
-                float lo = Mathf.Round(T.stageBonus * (1 - T.bonusSpread)), hi = Mathf.Round(T.stageBonus * (1 + T.bonusSpread));
-                string amt = Lobby.mode != "coop" && T.bonusSpread > 0 ? Yen(lo) + "〜" + Yen(hi) + "・順位で変わります" : Yen(T.stageBonus);
-                t += left == 1 ? "　🎁 <b>この面を終えるとステージボーナス</b> " + amt
-                               : "　あと <b>" + left + "面</b> でステージボーナス（" + amt + "）";
-            }
-            return t;
+            return "<b>" + next + "面目</b>";
         }
     }
 }

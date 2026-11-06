@@ -258,6 +258,7 @@ namespace Nekorobo
         void ClearFx()
         {
             splash.Clear(); puffs.Clear(); flashes.Clear(); marks.Clear(); arrows.Clear(); dropped.Clear();
+            bursts.Clear(); vipLook = null;
         }
 
         // ================================================================ 落ちた料理
@@ -317,6 +318,7 @@ namespace Nekorobo
             d.order.taker = P;
             P.look.ShowDish(d.dish);
             Say(P, d.owner == P ? "拾い直したにゃ" : "いただきにゃ！", 1.2f);
+            Ach(P, "pickup");
             Se("pick", P.ent.rb.position, P);
             KillDropped(d);
         }
@@ -324,6 +326,7 @@ namespace Nekorobo
         /// <summary>注文をカウンターへ出し直す（並びの長さは変えないので、クリア条件は変わらない）。</summary>
         void ReissueOrder(Order order)
         {
+            if (order.vip) { VipFail(order); VipClose(order); return; }   // VIP は作り直さない（なくなったら失敗）
             int i = orders.IndexOf(order);
             if (i < 0 || order.done) return;
             orders.RemoveAt(i);

@@ -111,6 +111,19 @@ namespace Nekorobo
         ResultWin resultWin;
         readonly List<PopItem> pops = new List<PopItem>();
         Overhead over;
+        HudVip vip;
+        // 高額・VIP オーダー・売上の式・奪ったお金（HudVip）
+        public void VipReset() { if (vip != null) vip.Reset(); }
+        public void VipNotice(int kind, Player P, float amt) { if (vip != null) vip.Notice(kind, P, amt); }
+        public void SalePop(Vector3 at, string tag, float price, float[] ks, string[] names, float sale)
+        {
+            if (game != null) game.NetEvSale(at, tag, price, ks, names, sale);
+            if (vip != null) vip.SalePop(at, tag, price, ks, names, sale);
+        }
+        public void CoinFly(Player from, Player to, float amt) { if (vip != null) vip.CoinFly(from, to, amt); }
+        public void Comic(Vector3 w, string text, int px, int col) { if (vip != null) vip.Comic(w, text, px, col); }
+        /// <summary>上の帯のその人の差引（奪ったお金が飛んでいく先）。layer の中の位置。無ければ null</summary>
+        public Vector2? CardTotalPos(Player P, RectTransform layer) { return bar2 != null ? bar2.TotalPos(P, layer) : (Vector2?)null; }
         Text toast; float toastT;
 
         class PopItem { public Text t; public Vector3 w; public float age, life; public bool big; }
@@ -142,6 +155,7 @@ namespace Nekorobo
             top = new HudTop(root, GetComponent<Game>());
             // ---- 上の帯の新しい並び（担当からの案・仮。JS版 #hud2）。設定で前の並びと切り替える
             bar2 = new HudBar(root, GetComponent<Game>());
+            vip = new HudVip(root, GetComponent<Game>());
 
             // ---- 右下：操作
             help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
@@ -444,6 +458,7 @@ namespace Nekorobo
                 p.t.gameObject.SetActive(sp.z > 0);
             }
             over.Tick();
+            vip.Tick(Time.deltaTime);
             SideTick();
         }
 
