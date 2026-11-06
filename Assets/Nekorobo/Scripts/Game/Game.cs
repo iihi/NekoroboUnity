@@ -1530,7 +1530,7 @@ namespace Nekorobo
                 // ゲーム → 結果は画面転換でつなぐ（担当が選んだ「先頭に色」）
                 hud.Wipe(() => { if (hud.ShopOpen) return; resultAt = Time.unscaledTime; hud.ShowResult(); });
             };
-            hud.Story.Bang(cleared, cleared ? "\u2572(^o^)\u2571" : (players.Count > 1 ? "全員が動けなくなった" : "動けなくなった"), () =>
+            hud.Story.Bang(cleared, timeUp, cleared && timeUp ? "そこまで！" : cleared ? "\u2572(^o^)\u2571" : (players.Count > 1 ? "全員が動けなくなった" : "動けなくなった"), () =>
             {
                 if (hud.ShopOpen || hud.TitleOpen) return;
                 System.Action go = () =>

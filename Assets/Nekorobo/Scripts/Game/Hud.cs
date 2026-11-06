@@ -45,7 +45,7 @@ namespace Nekorobo
             if (from != null) title.from = from;
             title.OpenPage(page);
         }
-        GameObject gearBtn;
+        GameObject gearBtn; Image gearBg; Text gearTx; RawImage gearPic;
         Image sndBtn; RawImage sndIcon;
         static Texture2D sndOnTex, sndOffTex;
 
@@ -209,7 +209,11 @@ namespace Nekorobo
                 b.onClick.AddListener(() => { settings.Toggle(); UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null); });
                 var t = UiKit.Label(im.transform, "⚙", 22, Color.white, false, TextAnchor.MiddleCenter);
                 UiKit.Stretch(t.rectTransform);
-                gearBtn = im.gameObject;
+                gearBtn = im.gameObject; gearBg = im; gearTx = t;
+                // 上の帯の清書のときは歯車の絵（assets/ui/hud/gear.png・押している間は gear_on.png）
+                gearPic = UiKit.Rect(im.transform, "Pic").gameObject.AddComponent<RawImage>();
+                gearPic.raycastTarget = false; UiKit.Stretch(gearPic.rectTransform);
+                gearPic.texture = DataRoot.Texture("ui/hud/gear.png");
             }
             // ---- 音の ON/OFF（歯車の下）。M キーでも切り替わる。BGM も効果音もまとめて止める
             {
@@ -478,10 +482,25 @@ namespace Nekorobo
             if (kbd != null && kbd.tabKey.wasPressedThisFrame) settings.Toggle();
             gearBtn.SetActive(!settings.Open);
             bool tall = Opt.hud2 && game.stage != null && !title.Open;
-            ((RectTransform)gearBtn.transform).anchoredPosition = new Vector2(-12, tall ? -122 : -88);
+            // 上の帯と同じ倍率（JS版 --h2s）。帯の清書のときは歯車の絵を右上（帯の下）に
+            var rr = root.rect;
+            float hs = rr.width > 0 ? Mathf.Min(rr.width / 1280f, rr.height / 720f) : 1;
+            var gr = (RectTransform)gearBtn.transform;
+            bool pic = tall && gearPic.texture != null;
+            gearPic.gameObject.SetActive(pic); gearTx.enabled = !pic;
+            gearBg.color = pic ? new Color(0, 0, 0, 0) : new Color(0.16f, 0.19f, 0.24f, 0.9f);
+            if (pic)
+            {
+                bool press = UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.isPressed
+                             && RectTransformUtility.RectangleContainsScreenPoint(gr, UnityEngine.InputSystem.Mouse.current.position.ReadValue(), null);
+                var gt = DataRoot.Texture(press ? "ui/hud/gear_on.png" : "ui/hud/gear.png");
+                if (gt != null) gearPic.texture = gt;
+                gr.sizeDelta = new Vector2(69, 52) * hs; gr.anchoredPosition = new Vector2(-6 * hs, -120 * hs);
+            }
+            else { gr.sizeDelta = new Vector2(36, 36); gr.anchoredPosition = new Vector2(-12, tall ? -122 : -88); }
             // 音のボタンはタイトルの上でも押せるように、いちばん手前へ
             sndBtn.gameObject.SetActive(!settings.Open);
-            sndBtn.rectTransform.anchoredPosition = new Vector2(-12, tall ? -166 : -132);
+            sndBtn.rectTransform.anchoredPosition = pic ? new Vector2(-20 * hs, -178 * hs) : new Vector2(-12, tall ? -166 : -132);
             sndBtn.transform.SetAsLastSibling();
             toast.rectTransform.offsetMin = new Vector2(0, tall ? -150 : -110); toast.rectTransform.offsetMax = new Vector2(0, tall ? -126 : -70);
             if (toastT > 0)

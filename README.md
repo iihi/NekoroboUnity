@@ -190,7 +190,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Npc.cs` | NPC（JS版 NPC_LV・findPath・driveNpc）。道探しに教えるマス（動く床・いかだ・置き物）と、通りにくいマス（家具とそのまわり。JS版 npcAvoidMap、強さは T.npcAvoid） |
 | `Scripts/Game/Game.Fx.cs` | 演出（飛沫・モクモク・閃光・光の柱・矢印・客の虹）と落ちた料理 |
 | `Scripts/Game/Scenery.cs` | ステージのまわりの飾り（JS版 scenery.js） |
-| `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久と故障・セリフ・▼Target!） |
+| `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久・1位の王冠（名前の左）・故障の札（名前の右）・速達の倍率・持ち替えたアイテムの札・セリフ・▼Target!） |
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
 | `Scripts/Net/Net.cs` | オンラインの通信口（JS版 net.js）。**差し替え口**で、決まりと「どの中身を使うか」だけを持つ。ゲーム側はここしか見ない。中身は起動の引数 `-net=名前` か PlayerPrefs `nekorobo.net` で選ぶ（既定 ws） |
 | `Scripts/Net/INetBackend.cs` | 中身が守る形（つなぐ・畳む・毎フレーム回す・部屋の出入り・送る、結果は Net.Report〜 で知らせる）。ほかの仕組みを足すときは、これを満たす物を作って Net.Backends に1行足す |
@@ -200,7 +200,8 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Online.cs` / `TitleWin.Online.cs` | 部屋の状態（Lobby）・始まったときに枠を組む所（JS版 npBegin / start）と、オンライン・ルームを作る・参加・待機の画面 |
 | `Scripts/Game/Game.NetSync.cs` | ゲーム中の同期（JS版 npPayload / npApply / npSendInput）と、結果・ショップの便り。物は面を組んだ順の通し番号（nid）で指す |
 | `Editor/NetReset.cs` | 再生を止めるとき・コンパイルし直す前に、通信を畳む |
-| `Scripts/Game/HudBar.cs` | 上の帯の新しい並び（担当の案・仮）。左に面の札（何回戦・店名／配膳数・損壊率・昇天数／経過時間）、右へ全員ぶんの札（名前・耐久・順位／売上・修理費・差引・配膳数／アイテム8種／運んでいる料理）。JS版 #hud2 |
+| `Scripts/Game/HudBar.cs` | 上の帯（清書 1020。JS版 #hud2）。絵は HTML版の `assets/ui/hud/`（面の札・人の札・HP・アイテム・順位・クロッシュ）、座標は PSD の 1280×720 のまま。人の札は 263px おきで前の人が上。字は変わる物だけ重ねる。金額は増えたときだけ数え上げて跳ねる |
+| `Scripts/Game/ComicUi.cs` | マンガ調の大きな知らせの部品（ギザギザの吹き出し・網点・集中線・太い縁取りの字。JS版 comicBurstSvg / speedLinesSvg）。STAGE CLEAR!!／TIME UP!!／FAILED…（StoryUi.Bang）と、高額・VIP オーダー出現（HudVip）で使う |
 | `Scripts/Game/ShineText.cs` / `Thicken.cs` | 順位の数字の金・銀・銅のグラデーションと走る光 ／ 字を太らせる（CSS の font-weight:900 の代わり） |
 | `Scripts/Game/HudTop.cs` | 上の帯の前の並び（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards。設定パネルの「上の帯を新しい並び（試し）にする」を切るとこちら |
 | `Scripts/Game/DishPic.cs` | 運んでいる料理の今の状態の絵（JS版 drawDishState）。料理のモデルがあれば、別のカメラで1回だけ撮った写真を傾けたり割ったりして4段を描く（JS版 dishShot） |

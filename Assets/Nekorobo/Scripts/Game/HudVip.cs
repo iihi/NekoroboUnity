@@ -22,7 +22,7 @@ namespace Nekorobo
         readonly Dictionary<object, Ic> icons = new Dictionary<object, Ic>();
         readonly HashSet<object> seen = new HashSet<object>();
 
-        RectTransform annc; Text anncL1, anncL2; Image anncBg; float anncT;
+        RectTransform annc, anncBx; Graphic anncSl; CanvasGroup anncCg; float anncT, anncAge, anncRot, anncTop, anncSc;
         readonly Queue<KeyValuePair<string, float>> anncQ = new Queue<KeyValuePair<string, float>>();
         RectTransform bar; Text barT; Image barBg;
         int nKind; float nT, nAmt; Player nP;
@@ -43,14 +43,8 @@ namespace Nekorobo
             UiKit.Stretch(layer);
             layer.SetSiblingIndex(1);
             // まん中上の大きな知らせ
-            annc = UiKit.Rect(layer, "Annc");
-            annc.anchorMin = annc.anchorMax = new Vector2(0.5f, 1); annc.pivot = new Vector2(0.5f, 1);
-            annc.anchoredPosition = new Vector2(0, -70); annc.sizeDelta = new Vector2(560, 150);
-            anncBg = annc.gameObject.AddComponent<Image>(); anncBg.color = GOLD; anncBg.raycastTarget = false;
-            annc.gameObject.AddComponent<Outline>().effectColor = INK;
-            anncL1 = Lbl(annc, "", 34, INK, new Vector2(0, 26));
-            anncL2 = Lbl(annc, "", 50, Color.white, new Vector2(0, -30));
-            var o2 = anncL2.gameObject.AddComponent<Outline>(); o2.effectColor = INK; o2.effectDistance = new Vector2(3, -3);
+            // マンガ調（JS版 #annc。集中線と網点のギザギザの吹き出し）。中身は出すたびに作る
+            annc = UiKit.Rect(layer, "Annc"); UiKit.Stretch(annc);
             annc.gameObject.SetActive(false);
             // VIP の残り秒数の帯
             bar = UiKit.Rect(layer, "VipBar");
@@ -105,13 +99,52 @@ namespace Nekorobo
             if (anncQ.Count == 0) { annc.gameObject.SetActive(false); anncT = 0; return; }
             var a = anncQ.Dequeue();
             bool vip = a.Key == "vip";
-            anncL1.text = Lang.Tr(vip ? "♛ VIP オーダー出現！" : "高額オーダー出現！");
-            anncL2.text = Game.Yen(a.Value) + (Lang.IsJa ? "！" : "!");
-            var o = anncL2.GetComponent<Outline>(); o.effectColor = vip ? Mats.Hex(0xc0006a) : Mats.Hex(0xe05a00);
-            annc.localRotation = Quaternion.Euler(0, 0, (Random.value < 0.5f ? -1 : 1) * (3 + Random.value * 4));
-            annc.gameObject.SetActive(true);
-            anncT = vip ? 2.2f : 1.7f;
+            for (int i = annc.childCount - 1; i >= 0; i--) Object.Destroy(annc.GetChild(i).gameObject);
+            anncSl = ComicUi.SpeedLines(annc, 0.36f);
+            // VIP も高額も、まん中上に出す。字の影の色だけ変える（VIP は赤紫、高額は橙）。高額は小さめで、もう少し上へ
+            var cc = Mats.Hex(vip ? 0xc0006a : 0xe05a00);
+            anncBx = UiKit.Rect(annc, "Bx");
+            anncBx.anchorMin = anncBx.anchorMax = new Vector2(0.5f, 1); anncBx.pivot = new Vector2(0.5f, 0.5f);
+            anncBx.sizeDelta = new Vector2(600, 132);
+            anncSc = vip ? 1 : 0.72f; anncTop = vip ? 112 : 92;
+            anncBx.anchoredPosition = new Vector2(0, -(anncTop + 66 * anncSc));
+            anncCg = anncBx.gameObject.AddComponent<CanvasGroup>();
+            ComicUi.Burst(anncBx, 600, 270, 18, Mats.Hex(0xffd400), Color.white,
+                          new ComicUi.Dots { bg = Color.white, dot = Mats.Hex(0xff4d6d), r = 3.1f, gap = 10 });
+            var l1 = ComicUi.Label(anncBx, Lang.Tr(vip ? "♛ VIP オーダー出現！" : "高額オーダー出現！"), 44, Color.white, cc);
+            l1.rectTransform.anchoredPosition = new Vector2(0, 42);
+            var l2 = ComicUi.Label(anncBx, Game.Yen(a.Value) + (Lang.IsJa ? "！" : "!"), 74, Mats.Hex(0xffe14a), cc);
+            l2.rectTransform.anchoredPosition = new Vector2(0, -25);
+            anncRot = (Random.value < 0.5f ? -1 : 1) * (3 + Random.value * 4);
+            annc.gameObject.SetActive(true); annc.SetAsLastSibling();     // 料理の上の印より手前
+            anncT = vip ? 2.2f : 1.7f; anncAge = 0;
+            AnncAnim();
             Game.SeUi(vip ? "talk_open" : "buy");
+        }
+
+        /// <summary>出てくる（0.5 秒、回りながら 0.15 → 1）→ 脈打つ → 最後の 0.28 秒で大きくなって消える</summary>
+        void AnncAnim()
+        {
+            if (anncBx == null) return; annc.SetAsLastSibling();
+            float k = Mathf.Clamp01(anncAge / 0.5f), e = ComicUi.Bezier(k, 0.2f, 1.7f, 0.4f, 1);
+            float rot = Mathf.LerpUnclamped(anncRot * 5, anncRot, e), sc = Mathf.LerpUnclamped(0.15f, 1, e), al = Mathf.Clamp01(e);
+            if (anncAge > 0.5f)
+            {
+                float u = (anncAge - 0.5f) / 0.45f, ph = u - Mathf.Floor(u);
+                if (((int)Mathf.Floor(u)) % 2 == 1) ph = 1 - ph;
+                sc = 1 + 0.05f * (0.5f - 0.5f * Mathf.Cos(ph * Mathf.PI));
+            }
+            if (anncT < 0.28f)
+            {
+                float o = 1 - Mathf.Max(0, anncT) / 0.28f; o = o * o;
+                sc = Mathf.Lerp(1, 1.6f, o); rot = anncRot; al = 1 - o;
+            }
+            anncBx.localScale = Vector3.one * sc * anncSc;
+            anncBx.localRotation = Quaternion.Euler(0, 0, -rot);
+            anncCg.alpha = al;
+            float ks = Mathf.Clamp01(anncAge / 0.3f), es = 1 - Mathf.Pow(1 - ks, 3);
+            anncSl.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.35f, 1, es);
+            var c = anncSl.color; c.a = 0.45f * es * (anncT < 0.28f ? Mathf.Max(0, anncT) / 0.28f : 1); anncSl.color = c;
         }
 
         // ------------------------------------------------------------ 売上の式
@@ -239,9 +272,8 @@ namespace Nekorobo
             // まん中上の大きな知らせ
             if (anncT > 0)
             {
-                anncT -= dt;
-                float s = anncT > 0.28f ? 1 : Mathf.Max(0, anncT / 0.28f);
-                annc.localScale = Vector3.one * s;
+                anncT -= dt; anncAge += dt;
+                AnncAnim();
                 if (anncT <= 0) AnncNext();
             }
             // VIP の帯

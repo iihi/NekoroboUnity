@@ -23,6 +23,8 @@ namespace Nekorobo
         class RobotMark
         {
             public RectTransform r; public Text nm; public Bar hp; public Text brk;
+            public RectTransform pill; public RawImage crown; public Image brkBg, rsBg; public Text rs;
+            public RectTransform itp; public RawImage itpIc; public string itpK; public float itpT;
             public RectTransform msg; public Text msgText;
             public RectTransform tgt; public Text tgtText;
         }
@@ -46,7 +48,7 @@ namespace Nekorobo
             foreach (var b in guestBars.Values) Object.Destroy(b.r.gameObject);
             foreach (var m in robots.Values)
             {
-                Object.Destroy(m.r.gameObject); Object.Destroy(m.msg.gameObject); Object.Destroy(m.tgt.gameObject);
+                Object.Destroy(m.r.gameObject); Object.Destroy(m.msg.gameObject); Object.Destroy(m.tgt.gameObject); Object.Destroy(m.itp.gameObject);
             }
             guestBars.Clear(); robots.Clear();
             foreach (var t in drops.Values) Object.Destroy(t.gameObject);
@@ -172,6 +174,13 @@ namespace Nekorobo
                 Project(d.ent.transform.position + Vector3.up * (0.55f + Mathf.Sin(g.t * 7) * 0.05f), t.rectTransform);
             }
             bool many = g.players.Count > 1;
+            // 1位の王冠。全員が同じ順位のとき（始まったばかり）は出さない
+            Dictionary<Player, int> crownRK = null;
+            if (many && g.state != "ready")
+            {
+                var rk = Ranks();
+                foreach (var v in rk.Values) if (v != 1) { crownRK = rk; break; }
+            }
             foreach (var P in g.players)
             {
                 RobotMark m;
@@ -184,10 +193,49 @@ namespace Nekorobo
                 m.nm.text = P.down ? (P.revT > 0 ? P.Label + " 復帰まで " + Mathf.CeilToInt(P.revT) : P.Label + " リタイア")
                                    : P.Label + " " + Mathf.RoundToInt(left) + "%";
                 FitPill(m.nm);
-                string bad = "";
-                if (P.broken != null) bad += P.broken == "left" ? "左" : "右";
-                if (P.brokenDrive) bad += "駆";
-                m.brk.text = bad.Length > 0 ? "⚠" + bad : "";
+                // 王冠は名前の左、故障は名前の右に、はみ出して付ける（担当）
+                float pw = m.pill.sizeDelta.x;
+                int rk1; bool crown = crownRK != null && crownRK.TryGetValue(P, out rk1) && rk1 == 1 && !P.down;
+                m.crown.gameObject.SetActive(crown);
+                m.crown.rectTransform.anchoredPosition = new Vector2(-pw / 2 - 2 - 10, 9);
+                // 故障は対戦で読み合いの材料になるので、名前の右に札で並べる（担当）
+                var bad = new List<string>();
+                if (P.broken != null) bad.Add(Lang.Tr(P.broken == "left" ? "⚠左" : "⚠右"));
+                if (P.brokenDrive) bad.Add(Lang.Tr("⚠駆動"));
+                string bk = string.Join(" ", bad.ToArray());
+                m.brkBg.gameObject.SetActive(bk != "");
+                if (m.brk.text != bk) { m.brk.text = bk; m.brkBg.rectTransform.sizeDelta = new Vector2(m.brk.preferredWidth + 8, 14); }
+                m.brkBg.rectTransform.anchoredPosition = new Vector2(pw / 2 + 3, 9);
+                // 速達ボーナスのいまの倍率。耐久バーの右に。下がりきったら消す
+                {
+                    float r = P.carried != null && !P.down ? g.CarriedRush(P) : 1;
+                    string rk = r > 1.005f ? Lang.Tr("速達×{0}", r.ToString("0.0")) : "";
+                    m.rsBg.gameObject.SetActive(rk != "");
+                    if (m.rs.text != rk) { m.rs.text = rk; m.rsBg.rectTransform.sizeDelta = new Vector2(m.rs.preferredWidth + 8, 13); }
+                    m.rsBg.color = r >= 1 + g.T.rushBonus * 0.75f ? Mats.Hex(0xff4f9a) : Mats.Hex(0x8a5a78);
+                }
+                // ---- 持ち替えたアイテムを、頭の上に少しのあいだ出す（白い札に金の枠）
+                {
+                    bool on = !string.IsNullOrEmpty(P.slot) && g.t < P.itemPopUntil && !P.down && g.state == "play";
+                    if (!on) m.itp.gameObject.SetActive(false);
+                    else
+                    {
+                        if (m.itpK != P.slot)
+                        {
+                            m.itpK = P.slot; m.itpT = 0;
+                            var tx = Resources.Load<Texture2D>("Ui/" + P.slot);
+                            m.itpIc.texture = tx; m.itpIc.enabled = tx != null;
+                            if (tx != null) { float k = Mathf.Min(44f / tx.width, 30f / tx.height); m.itpIc.rectTransform.sizeDelta = new Vector2(tx.width * k, tx.height * k); }
+                        }
+                        if (!m.itp.gameObject.activeSelf) m.itpT = 0;
+                        Project(rp + Vector3.up * 1.45f, m.itp);
+                        m.itpT += Time.unscaledDeltaTime;
+                        float u = Mathf.Clamp01(m.itpT / 0.22f);
+                        m.itp.localScale = Vector3.one * Mathf.LerpUnclamped(0.4f, 1, ComicUi.Bezier(u, 0.2f, 1.6f, 0.4f, 1));
+                        var cg = m.itp.GetComponent<CanvasGroup>();
+                        cg.alpha = Mathf.Min(1, (P.itemPopUntil - g.t) / 0.25f);
+                    }
+                }
                 // ---- セリフ
                 if (P.msgT > 0 && !string.IsNullOrEmpty(P.msg))
                 {
@@ -206,6 +254,19 @@ namespace Nekorobo
             }
         }
 
+        Dictionary<Player, int> Ranks()
+        {
+            var PL = g.players;
+            var val = new Dictionary<Player, float>();
+            foreach (var P in PL) val[P] = g.mode == "coop" ? P.sales + P.wreck : g.LedgerOf(P).total;
+            var pool = new List<float>();
+            if (g.mode == "team") foreach (var t in g.TeamsInPlay()) pool.Add(g.LedgerOf(g.TeamLead(t)).total);
+            else foreach (var P in PL) pool.Add(val[P]);
+            var r = new Dictionary<Player, int>();
+            foreach (var P in PL) { int k = 1; foreach (var v in pool) if (v > val[P] + 1e-4f) k++; r[P] = k; }
+            return r;
+        }
+
         RobotMark MakeRobotMark(Player P, bool many)
         {
             var m = new RobotMark();
@@ -218,9 +279,38 @@ namespace Nekorobo
             m.nm = Label(pill.transform, P.Label, 12, Mats.Hex(P.col));
             m.hp = MakeBar(m.r, new Vector2(44, 7), Mats.Hex(0x2b313c), new Color(0, 0, 0, 0.55f));
             m.hp.r.anchoredPosition = new Vector2(0, -4);
-            m.brk = Label(m.r, "", 12, Mats.Hex(0xff5252));
-            m.brk.rectTransform.anchoredPosition = new Vector2(0, -15);
-            m.brk.gameObject.AddComponent<Outline>().effectColor = Color.black;
+            m.pill = pill.rectTransform;
+            // 王冠（名前の左）
+            m.crown = new GameObject("Crown", typeof(RectTransform)).AddComponent<RawImage>();
+            m.crown.rectTransform.SetParent(m.r, false);
+            m.crown.texture = Resources.Load<Texture2D>("Ui/crown"); m.crown.raycastTarget = false;
+            m.crown.rectTransform.sizeDelta = new Vector2(20, 14);
+            var cs = m.crown.gameObject.AddComponent<Shadow>(); cs.effectColor = new Color(0, 0, 0, 0.6f); cs.effectDistance = new Vector2(0, -1);
+            m.crown.gameObject.SetActive(false);
+            // 故障の札（名前の右。赤）
+            m.brkBg = Img(m.r, Mats.Hex(0xe53935), new Vector2(30, 14));
+            m.brkBg.rectTransform.pivot = new Vector2(0, 0.5f);
+            m.brkBg.gameObject.AddComponent<Outline>().effectColor = new Color(0, 0, 0, 0.45f);
+            m.brk = Label(m.brkBg.transform, "", 10, Color.white);
+            m.brkBg.gameObject.SetActive(false);
+            // 速達の倍率（耐久バーの右）
+            m.rsBg = Img(m.r, Mats.Hex(0x8a5a78), new Vector2(40, 13));
+            m.rsBg.rectTransform.pivot = new Vector2(0, 0.5f);
+            m.rsBg.rectTransform.anchoredPosition = new Vector2(26, -4);
+            m.rs = Label(m.rsBg.transform, "", 10, Color.white);
+            m.rsBg.gameObject.SetActive(false);
+            // 持ち替えたアイテムの札（頭の上。白い札に金の枠、まわりに黒い細い縁）
+            {
+                var edge = Img(layer, Mats.Hex(0x1d1d1d), new Vector2(56, 56));
+                m.itp = edge.rectTransform; m.itp.pivot = new Vector2(0.5f, 0);
+                m.itp.gameObject.AddComponent<CanvasGroup>();
+                var gold = Img(edge.transform, Mats.Hex(0xffc400), new Vector2(52, 52));
+                var white = Img(gold.transform, Color.white, new Vector2(44, 44));
+                m.itpIc = new GameObject("Ic", typeof(RectTransform)).AddComponent<RawImage>();
+                m.itpIc.rectTransform.SetParent(white.transform, false); m.itpIc.raycastTarget = false;
+                var sh = edge.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.4f); sh.effectDistance = new Vector2(0, -4);
+                m.itp.gameObject.SetActive(false);
+            }
             // セリフの吹き出し（枠の色でどの機体か分かる）。下の端を頭の上に合わせる
             var border = Img(layer, Mats.Hex(P.col), new Vector2(80, 30));
             m.msg = border.rectTransform;

@@ -35,7 +35,7 @@ namespace Nekorobo
             foreach (var x in a)
             {
                 var r = x as JArray;
-                if (r != null && r.Count >= 2) o.Add(new[] { (string)r[0], (string)r[1] });
+                if (r != null && r.Count >= 2) o.Add(r.Count >= 3 ? new[] { (string)r[0], (string)r[1], (string)r[2] } : new[] { (string)r[0], (string)r[1] });   // 3つ目はロボの表情
             }
             return o.Count > 0 ? o : null;
         }

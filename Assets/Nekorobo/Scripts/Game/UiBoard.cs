@@ -87,6 +87,22 @@ namespace Nekorobo
             return im;
         }
 
+        static readonly System.Collections.Generic.Dictionary<Texture, Texture2D> bright = new System.Collections.Generic.Dictionary<Texture, Texture2D>();
+        /// <summary>明るくした絵（CSS の filter:brightness(k)。uGUI の色は 1 を超えられないので、絵を作っておく）</summary>
+        public static Texture Bright(Texture src, float k = 1.35f)
+        {
+            var t2 = src as Texture2D;
+            if (t2 == null || !t2.isReadable) return src;
+            Texture2D o;
+            if (bright.TryGetValue(src, out o) && o != null) return o;
+            var px = t2.GetPixels();
+            for (int i = 0; i < px.Length; i++) { var c = px[i]; px[i] = new Color(Mathf.Min(1, c.r * k), Mathf.Min(1, c.g * k), Mathf.Min(1, c.b * k), c.a); }
+            o = new Texture2D(t2.width, t2.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            o.SetPixels(px); o.Apply(false);
+            bright[src] = o;
+            return o;
+        }
+
         /// <summary>色の板（角の丸み radius）。</summary>
         public static Image Fill(RectTransform parent, Color c, float x, float y, float w, float h, float radius = 0, string name = "Fill")
         {

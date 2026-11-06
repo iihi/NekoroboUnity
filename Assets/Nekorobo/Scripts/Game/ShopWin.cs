@@ -34,7 +34,7 @@ namespace Nekorobo
         Text secText, msgText; RawImage clockFill; float clockW;
         readonly List<PpUi> pps = new List<PpUi>();
         readonly List<Text> descRows = new List<Text>();
-        RawImage btnOn, btnOff; Text undoText; float pressT;
+        RawImage btnOn, btnOff; Text undoText; float pressT; Texture btnOffTex;
         RectTransform root { get { return B.root; } }
 
         static readonly Color GREEN = Mats.Hex(0x68ff00), POOR = Mats.Hex(0xff5a45), UPC = Mats.Hex(0x45c3ff), ITC = Mats.Hex(0x4ac15d);
@@ -262,7 +262,7 @@ namespace Nekorobo
             // ---- 購入完了のボタン（Y(△)/Z と同じはたらき。全員そろうと進む）。右端は上の「秒」の字の右端にそろえる
             {
                 var btn = UiBoard.Box(pick, 978, 591, 260, 83, "Ready");
-                btnOff = UiBoard.Img(btn, U + "btn.png", 0, 0, 260, 83);
+                btnOff = UiBoard.Img(btn, U + "btn.png", 0, 0, 260, 83); btnOffTex = null;
                 btnOn = UiBoard.Img(btn, U + "btn_on.png", 0, 0, 260, 83);
                 undoText = UiBoard.T(btn, Lang.Tr("もう一度押すと取り消し"), 130, 86, 11, Mats.Hex(0xc8c8c8), 2);
                 B.In(btn, "pop", 7);
@@ -695,7 +695,8 @@ namespace Nekorobo
             if (pressT > 0) pressT -= Time.unscaledDeltaTime;
             bool hov = cur.Exists(c => c.onRdy && IsViewer(c.P));
             btnOn.color = new Color(1, 1, 1, rdy || pressT > 0 ? 1 : 0);
-            btnOff.color = hov ? new Color(1.35f, 1.35f, 1.35f) : Color.white;
+            if (btnOffTex == null) btnOffTex = btnOff.texture;
+            if (btnOffTex != null) btnOff.texture = hov ? UiBoard.Bright(btnOffTex) : btnOffTex;   // 選んでいるときは地を少し明るく
             undoText.gameObject.SetActive(rdy);
             // 説明の行
             for (int i = 0; i < descRows.Count; i++)

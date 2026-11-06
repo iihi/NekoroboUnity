@@ -20,10 +20,12 @@ namespace Nekorobo
         readonly RectTransform root;
 
         // ---- 会話
-        RectTransform talkRoot, talkBox, talkSkip;
-        Text talkTitle, talkTitleSmall, talkText, talkNx, talkName;
-        Image talkNameBg, faceL, faceR;
-        RectTransform talkBoxShadow;
+        RectTransform talkRoot, talkBox, talkSkip, talkKeyBg;
+        Text talkTitle, talkTitleSmall, talkText, talkNx, talkName, talkArrow, talkKey;
+        RawImage talkFrame, faceL, faceR;
+        CanvasGroup talkCg;
+        string talkSide; float whoT = 1;
+        static readonly Color TALK_INK = Mats.Hex(0x1a1a1a), TALK_GREY = Mats.Hex(0x8f8f8f);
         List<string[]> lines;
         int li;
         System.Action done;
@@ -40,9 +42,7 @@ namespace Nekorobo
         public bool TutShown { get { return tutRoot.gameObject.activeSelf; } }
 
         // ---- バン
-        RectTransform bangRoot, bangPill;
-        Text bangText, bangSub;
-        Image bangBg, bangShadow;
+        RectTransform bangRoot, bangBox, bangBx; Graphic bangSl; CanvasGroup bangCg; float bangRot, bangSlA;
         float bangT = -1; System.Action bangThen;
         public bool BangOn { get { return bangT >= 0; } }
 
@@ -81,29 +81,31 @@ namespace Nekorobo
             {
                 var sh = t.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.53f); sh.effectDistance = new Vector2(0, -3);
             }
-            // 顔（左が店主、右がロボ）。話していないほうは暗く小さく
-            faceL = Face(box, "face_owner", 1280 * 0.07f);
-            faceR = Face(box, "face_robo", 1280 - 1280 * 0.07f - 230);
-            // 吹き出しの箱
-            talkBoxShadow = Img(box, new Color(59 / 255f, 42 / 255f, 28 / 255f, 0.4f), 18, "BoxShadow").rectTransform;
-            var bb = Img(box, PAPER, 18, "Box");
-            talkBox = bb.rectTransform;
-            Ring(bb.transform, INK, 5, 18);
-            talkText = UiKit.Label(talkBox, "", 22, TEXT);
+            // 枠と顔は PSD（2560×1440）から切り出した絵。1280×720 の板に半分の座標で置く。
+            // 話している人だけを出す（店主は左・ロボは右）
+            faceL = UiBoard.Img(box, "ui/face_owner.png", 24, 447, 171, 236, "FaceL");
+            faceR = UiBoard.Img(box, "ui/face_robo.png", 1098, 459, 178, 220.5f, "FaceR");
+            foreach (var f in new[] { faceL, faceR })
+            {
+                var sh = f.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.35f); sh.effectDistance = new Vector2(0, -8);
+            }
+            // 吹き出し（出るときに 50% 85% を中心に弾む）
+            talkBox = UiBoard.Box(box, 0, 0, 1280, 720, "TalkBox");
+            talkBox.pivot = new Vector2(0.5f, 0.15f); talkBox.anchoredPosition = new Vector2(640, -720 * 0.85f);
+            talkCg = talkBox.gameObject.AddComponent<CanvasGroup>();
+            talkFrame = UiBoard.Img(talkBox, "ui/talk/frame_owner.png", 219, 531.5f, 844, 158, "Frame");
+            talkName = UiBoard.T(talkBox, "", 285.5f, 535, 26, TALK_INK);
+            talkText = UiBoard.T(talkBox, "", 266, 580, 24, TALK_INK);
             talkText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            talkText.alignment = TextAnchor.UpperLeft;
-            talkText.lineSpacing = 1.12f;
-            var tr = talkText.rectTransform; tr.anchorMin = Vector2.zero; tr.anchorMax = Vector2.one;
-            tr.offsetMin = new Vector2(29, 33); tr.offsetMax = new Vector2(-29, -23);
-            talkNx = UiKit.Label(talkBox, "", 12, Mats.Hex(0x8a7a66), true, TextAnchor.LowerRight);
-            var nr = talkNx.rectTransform; nr.anchorMin = new Vector2(1, 0); nr.anchorMax = new Vector2(1, 0); nr.pivot = new Vector2(1, 0);
-            nr.anchoredPosition = new Vector2(-21, 9); nr.sizeDelta = new Vector2(300, 18);
-            // 名前の札（箱の上の縁にかかる）
-            talkNameBg = Img(talkBox, Mats.Hex(0xe8682c), 17, "Name");
-            Ring(talkNameBg.transform, INK, 3, 17);
-            var nb = talkNameBg.rectTransform; nb.anchorMin = nb.anchorMax = new Vector2(0, 1);
-            talkName = UiKit.Label(talkNameBg.transform, "", 15, Color.white, true, TextAnchor.MiddleCenter);
-            UiKit.Stretch(talkName.rectTransform);
+            talkText.rectTransform.sizeDelta = new Vector2(760, 90);
+            talkText.lineSpacing = 1.05f;
+            // 何行目か・▼・決定のボタン（右下）
+            talkNx = UiBoard.T(talkBox, "", 0, 649.75f, 17, TALK_GREY, 1);
+            talkArrow = UiBoard.T(talkBox, "▼", 0, 649.75f, 17, TALK_GREY, 1);
+            var kb = UiBoard.Fill(talkBox, TALK_GREY, 0, 647, 40, 22.5f, 6, "Key");
+            talkKeyBg = kb.rectTransform;
+            talkKey = UiBoard.T(talkKeyBg, "", 0, 3.75f, 15, Color.white, 2);
+            talkKey.rectTransform.anchorMin = talkKey.rectTransform.anchorMax = new Vector2(0.5f, 1);
             // スキップ
             var sk = Img(box, new Color(0, 0, 0, 0.35f), 15, "Skip");
             Ring(sk.transform, new Color(1, 1, 1, 0.53f), 2, 15);
@@ -114,18 +116,15 @@ namespace Nekorobo
             talkRoot.gameObject.SetActive(false);
         }
 
-        Image Face(RectTransform parent, string pic, float x)
+        /// <summary>
+        /// ロボの表情。せりふの3つ目に書けばそれ（"smile" / "smile2" / "fear"）。
+        /// 書かなければ、せりふから決める：「……」はこわごわ（怯え）、「にゃー！」と伸ばすのは＞＜の笑顔（JS版 roboFace）
+        /// </summary>
+        static string RoboFace(string text, string face)
         {
-            var r = UiKit.Rect(parent, "Face_" + pic);
-            r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0.5f, 0.5f);
-            r.sizeDelta = new Vector2(230, 230);
-            r.anchoredPosition = new Vector2(x + 115, -(720 - 160 - 230 + 115));
-            var im = r.gameObject.AddComponent<Image>();
-            var tex = Resources.Load<Texture2D>("Ui/" + pic);
-            if (tex != null) im.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100);
-            im.raycastTarget = false;
-            var sh = r.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.3f); sh.effectDistance = new Vector2(0, -8);
-            return im;
+            if (!string.IsNullOrEmpty(face)) return face == "smile" ? "" : face;
+            var t = text ?? "";
+            return t.Contains("……") || t.EndsWith("…") ? "fear" : t.Contains("ー！") ? "smile2" : "";
         }
 
         /// <summary>会話を出す。lines は [話す人, 文] の並び。読み終わったら done。</summary>
@@ -152,29 +151,32 @@ namespace Nekorobo
             string who = ln.Length > 0 ? ln[0] : "", text = ln.Length > 1 ? ln[1] : "";
             string[] sp; if (!TALKERS.TryGetValue(who, out sp)) sp = new[] { who, "L" };
             bool L = sp[1] == "L";
-            SetFace(faceL, L); SetFace(faceR, !L);
-            talkText.text = TutText(text, 22);
-            // 箱の高さは文の長さで決める（最低 120）
-            float tw = 880 - 58;
-            var set = talkText.GetGenerationSettings(new Vector2(tw, 0));
-            float th = talkText.cachedTextGeneratorForLayout.GetPreferredHeight(talkText.text, set) / talkText.pixelsPerUnit;
-            float h = Mathf.Max(120, th + 23 + 33 + 4);
-            Place(talkBox, 200, 720 - 30 - h, 880, h);
-            Place(talkBoxShadow, 200, 720 - 30 - h + 7, 880, h);
-            talkName.text = sp[0];
-            talkNameBg.color = L ? Mats.Hex(0xe8682c) : Mats.Hex(0x2f9bff);
-            float nw = talkName.preferredWidth + 36 + 6;
-            var nb = talkNameBg.rectTransform; nb.pivot = new Vector2(L ? 0 : 1, 1);
-            nb.anchorMin = nb.anchorMax = new Vector2(L ? 0 : 1, 1);
-            nb.sizeDelta = new Vector2(nw, 34); nb.anchoredPosition = new Vector2(L ? 24 : -24, 21);
-            talkNx.text = (li + 1) + " / " + lines.Count + "　▼ " + Key("ok", 12);
+            // 話している人の顔だけ。前と同じ人が続けて話すときは、顔を飛び込ませない
+            faceL.gameObject.SetActive(L); faceR.gameObject.SetActive(!L);
+            if (!L)
+            {
+                string rf = RoboFace(text, ln.Length > 2 ? ln[2] : null);
+                var ft = DataRoot.Texture("ui/face_robo" + (rf != "" ? "_" + rf : "") + ".png");
+                if (ft == null) ft = DataRoot.Texture("ui/face_robo.png");
+                if (ft != null) faceR.texture = ft;
+            }
+            if (li == 0 || talkSide != sp[1]) whoT = 0;
+            talkSide = sp[1];
+            var fr = DataRoot.Texture("ui/talk/frame_" + (L ? "owner" : "robo") + ".png");
+            if (fr != null) { talkFrame.texture = fr; talkFrame.rectTransform.sizeDelta = new Vector2(fr.width * 158f / fr.height, 158); }
+            talkName.text = Lang.Tr(sp[0]);
+            talkName.rectTransform.anchoredPosition = new Vector2(L ? 285.5f : 936, talkName.rectTransform.anchoredPosition.y);
+            talkText.text = TutText(text, 24);
+            // 右下：1／5 ▼ [Enter]
+            talkKey.text = Gamepad.all.Count > 0 ? "A" : "Enter";
+            float kw = talkKey.preferredWidth + 12, right = 1280 - 266.5f;
+            talkKeyBg.sizeDelta = new Vector2(kw, 22.5f); talkKeyBg.anchoredPosition = new Vector2(right - kw, -647);
+            talkKey.rectTransform.anchoredPosition = new Vector2(0, -3.75f + 15 * 0.12f);
+            float ax = right - kw - 7;
+            talkArrow.rectTransform.anchoredPosition = new Vector2(ax, talkArrow.rectTransform.anchoredPosition.y);
+            talkNx.text = (li + 1) + "／" + lines.Count;
+            talkNx.rectTransform.anchoredPosition = new Vector2(ax - talkArrow.preferredWidth - 7, talkNx.rectTransform.anchoredPosition.y);
             popT = 0;
-        }
-
-        void SetFace(Image im, bool on)
-        {
-            im.color = on ? Color.white : new Color(0.42f, 0.42f, 0.45f, 1);
-            im.rectTransform.localScale = Vector3.one * (on ? 1f : 0.9f);
         }
 
         void TalkNext()
@@ -196,10 +198,28 @@ namespace Nekorobo
 
         void TalkTick(float dt)
         {
-            // 箱が出るときの小さな弾み（scale .96 → 1、薄い → 濃い）
+            // 箱が出るときの小さな弾み（scale .97 → 1、薄い → 濃い。0.22 秒）
             popT += dt;
-            float k = Mathf.Clamp01(popT / 0.22f), e = EaseBack(k, 1.4f);
-            talkBox.localScale = Vector3.one * Mathf.LerpUnclamped(0.96f, 1f, e);
+            float k = Mathf.Clamp01(popT / 0.22f), e = ComicUi.Bezier(k, 0.2f, 1.4f, 0.4f, 1);
+            talkBox.localScale = Vector3.one * Mathf.LerpUnclamped(0.97f, 1f, e);
+            talkCg.alpha = Mathf.Lerp(0.4f, 1, Mathf.Clamp01(e));
+            // 顔が下から飛び込む（0.25 秒）
+            whoT = Mathf.Min(1, whoT + dt / 0.25f);
+            {
+                float ew = ComicUi.Bezier(whoT, 0.2f, 1.4f, 0.4f, 1);
+                var f = talkSide == "R" ? faceR : faceL;
+                float fy = talkSide == "R" ? 459 : 447;
+                f.rectTransform.anchoredPosition = new Vector2(f.rectTransform.anchoredPosition.x, -(fy + 24 * (1 - ew)));
+                f.color = new Color(1, 1, 1, Mathf.Clamp01(ew));
+            }
+            // ▼ が上下に揺れる（0.7 秒で行って戻る）
+            {
+                float u = Time.unscaledTime / 0.7f, ph = u - Mathf.Floor(u);
+                if (((int)Mathf.Floor(u)) % 2 == 1) ph = 1 - ph;
+                var ar = talkArrow.rectTransform;
+                ar.anchoredPosition = new Vector2(ar.anchoredPosition.x, -649.75f + 17 * 0.12f - (-2 + 4 * ph));
+                var c = talkArrow.color; c.a = Mathf.Lerp(0.35f, 1, ph); talkArrow.color = c;
+            }
             var kb = Keyboard.current;
             bool now = kb != null && (kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed || kb.zKey.isPressed);
             foreach (var gp in Gamepad.all) if (gp.buttonSouth.isPressed || gp.buttonWest.isPressed) now = true;
@@ -422,41 +442,37 @@ namespace Nekorobo
             bangRoot = UiKit.Rect(root, "Bang"); UiKit.Stretch(bangRoot);
             var bg = bangRoot.gameObject.AddComponent<RawImage>();
             bg.texture = Radial(); bg.raycastTarget = false;
-            var box = Box1280(bangRoot);
-            bangPill = UiKit.Rect(box, "Pill");
-            bangPill.anchorMin = bangPill.anchorMax = new Vector2(0.5f, 0.5f);
-            bangShadow = Img(bangPill, Mats.Hex(0x2f9448), 0, "Shadow");
-            bangBg = Img(bangPill, Color.white, 0, "Bg");
-            UiKit.Stretch(bangBg.rectTransform);
-            var sr = bangShadow.rectTransform; UiKit.Stretch(sr); sr.offsetMin = new Vector2(0, -6); sr.offsetMax = new Vector2(0, -6);
-            bangText = UiKit.Label(bangPill, "", 78, Color.white, true, TextAnchor.MiddleCenter);
-            UiKit.Stretch(bangText.rectTransform);
-            bangText.gameObject.AddComponent<Shadow>().effectDistance = new Vector2(0, -4);
-            bangSub = UiKit.Label(box, "", 20, Color.white, true, TextAnchor.MiddleCenter);
-            var bs = bangSub.gameObject.AddComponent<Shadow>(); bs.effectColor = new Color(0, 0, 0, 0.8f); bs.effectDistance = new Vector2(0, -2);
+            bangBox = Box1280(bangRoot);
             bangRoot.gameObject.SetActive(false);
         }
 
-        /// <summary>ステージの終わりの大きな知らせ。1.5 秒出してから then を呼ぶ。</summary>
-        public void Bang(bool cleared, string sub, System.Action then)
+        /// <summary>
+        /// ステージの終わりの大きな知らせ（マンガ調。JS版 showBang）。1.5 秒出してから then を呼ぶ。
+        /// 集中線＋ギザギザの吹き出し＋太い縁取りの字。タイムアップは青、クリアは黄、失敗は灰色
+        /// </summary>
+        public void Bang(bool cleared, bool timeUp, string sub, System.Action then)
         {
-            bangText.text = cleared ? "STAGE CLEAR!" : "FAILED…";
+            bool tu = cleared && timeUp;
+            if (bangSl != null) Object.Destroy(bangSl.gameObject);
+            if (bangBx != null) Object.Destroy(bangBx.gameObject);
+            bangSl = ComicUi.SpeedLines(bangRoot);
+            bangSl.transform.SetSiblingIndex(0);
+            bangSlA = cleared ? 0.45f : 0.25f;
+            bangBx = UiKit.Rect(bangBox, "Bx");
+            bangBx.anchorMin = bangBx.anchorMax = new Vector2(0.5f, 0.5f); bangBx.pivot = new Vector2(0.5f, 0.5f);
+            bangBx.sizeDelta = new Vector2(1060, 400); bangBx.anchoredPosition = new Vector2(0, 25);
+            bangCg = bangBx.gameObject.AddComponent<CanvasGroup>();
+            var cc = Mats.Hex(tu ? 0x1f5fd0 : cleared ? 0x13924a : 0xd0302a);
+            ComicUi.Burst(bangBx, 1060, 400, 22, Mats.Hex(tu ? 0x7fd0ff : cleared ? 0xffd400 : 0xa9b8cc), Mats.Hex(cleared ? 0xfffbe6 : 0xeef2f7));
+            var l1 = ComicUi.Label(bangBx, tu ? "TIME UP!!" : cleared ? "STAGE CLEAR!!" : "FAILED…", 84, Color.white, cc);
+            l1.rectTransform.anchoredPosition = new Vector2(0, 16);
+            var l3 = ComicUi.Label(bangBx, Lang.Tr(sub), 22, Color.white, new Color(0, 0, 0, 0), 3, Vector2.zero);
+            l3.rectTransform.anchoredPosition = new Vector2(0, -49);
+            bangRot = -4;                                             // CSS の --rot:-4deg（右回りが正）
             Game.SeUi(cleared ? "clear" : "fail");
-            bangSub.text = sub;
-            var top = cleared ? Mats.Hex(0x63d47f) : Mats.Hex(0xff8f7c);
-            var bot = cleared ? Mats.Hex(0x4cbf68) : Mats.Hex(0xe8604a);
-            var dark = cleared ? Mats.Hex(0x2f9448) : Mats.Hex(0xc33f2c);
-            float w = bangText.preferredWidth + 108 + 12, h = 78 * 1.25f + 12 + 12;
-            bangPill.sizeDelta = new Vector2(w, h);
-            bangPill.anchoredPosition = new Vector2(0, 19);           // 下の字と合わせて、まん中より少し上
-            bangBg.sprite = UiKit.PillGrad(Mathf.RoundToInt(w), Mathf.RoundToInt(h), top, bot, 6);
-            bangShadow.sprite = UiKit.Round; bangShadow.type = Image.Type.Sliced; bangShadow.pixelsPerUnitMultiplier = 15.5f / (h / 2);
-            bangShadow.color = dark;
-            bangText.GetComponent<Shadow>().effectColor = dark;
-            var sr = bangSub.rectTransform; sr.anchorMin = sr.anchorMax = new Vector2(0.5f, 0.5f);
-            sr.sizeDelta = new Vector2(800, 30); sr.anchoredPosition = new Vector2(0, bangPill.anchoredPosition.y - h / 2 - 10 - 15 - 6);
             bangThen = then; bangT = 0;
             bangRoot.gameObject.SetActive(true);
+            BangTick(0);
         }
 
         /// <summary>出している知らせを捨てる（やり直しや次の面が始まったとき）。</summary>
@@ -466,15 +482,22 @@ namespace Nekorobo
         {
             if (bangT < 0) return;
             bangT += dt;
-            // 大きく傾いた所から、行き過ぎて止まる（scale 2.4 → 1、-4° → 0、0.45 秒）。下の字は 0.12 秒遅れて
-            float k = Mathf.Clamp01(bangT / 0.45f), e = EaseBack(k, 1.5f);
-            bangPill.localScale = Vector3.one * Mathf.LerpUnclamped(2.4f, 1f, e);
-            bangPill.localRotation = Quaternion.Euler(0, 0, Mathf.LerpUnclamped(4f, 0f, e));
-            var cg = bangPill.GetComponent<CanvasGroup>(); if (cg == null) cg = bangPill.gameObject.AddComponent<CanvasGroup>();
-            cg.alpha = Mathf.Clamp01(k * 2);
-            float k2 = Mathf.Clamp01((bangT - 0.12f) / 0.45f), e2 = EaseBack(k2, 1.5f);
-            bangSub.rectTransform.localScale = Vector3.one * Mathf.LerpUnclamped(2.4f, 1f, e2);
-            var sc = bangSub.color; sc.a = Mathf.Clamp01(k2 * 2); bangSub.color = sc;
+            // 出てくる（0.5 秒。回りながら 0.15 → 1、少し行き過ぎて戻る）、そのあと 0.45 秒ごとに 1 ↔ 1.05 で脈打つ
+            float k = Mathf.Clamp01(bangT / 0.5f), e = ComicUi.Bezier(k, 0.2f, 1.7f, 0.4f, 1);
+            float rot = Mathf.LerpUnclamped(bangRot * 5, bangRot, e), sc = Mathf.LerpUnclamped(0.15f, 1, e);
+            if (bangT > 0.5f)
+            {
+                float u = (bangT - 0.5f) / 0.45f, ph = u - Mathf.Floor(u);
+                if (((int)Mathf.Floor(u)) % 2 == 1) ph = 1 - ph;
+                sc = 1 + 0.05f * (0.5f - 0.5f * Mathf.Cos(ph * Mathf.PI));
+            }
+            bangBx.localScale = Vector3.one * sc;
+            bangBx.localRotation = Quaternion.Euler(0, 0, -rot);
+            bangCg.alpha = Mathf.Clamp01(e);
+            // 集中線（0.3 秒で 1.35 → 1）
+            float ks = Mathf.Clamp01(bangT / 0.3f), es = 1 - Mathf.Pow(1 - ks, 3);
+            bangSl.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.35f, 1, es);
+            var c = bangSl.color; c.a = bangSlA * es; bangSl.color = c;
             if (bangT >= 1.5f)
             {
                 var then = bangThen;
