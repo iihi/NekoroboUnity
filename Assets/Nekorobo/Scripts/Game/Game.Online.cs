@@ -16,13 +16,14 @@ namespace Nekorobo
         public static string[] rnpc = { "off", "off", "off", "off" };
         public static int[] rteam = { 0, 1, 0, 1 };
         public static string mode = "versus";
+        public static int rounds;                               // ラウンドマッチのラウンド数（0 はフリープレイ）。ホストが決める
         public static JArray rooms = new JArray();             // 開いている部屋の一覧
         public static string code = "";                        // 番号で入るときの番号
         public static string ruleTo = "Local";                 // ルールを選んだあとの行き先（Local / Make）
 
         public static void SendPick() { if (Net.IsHost && rpick != null) Net.Send(new JObject { ["p"] = "pick", ["pick"] = rpick }); }
         public static void SendNpc() { if (Net.IsHost) Net.Send(new JObject { ["p"] = "npc", ["npc"] = new JArray(rnpc) }); }
-        public static void SendRule() { if (Net.IsHost) Net.Send(new JObject { ["p"] = "rule", ["mode"] = mode, ["team"] = new JArray(rteam) }); }
+        public static void SendRule() { if (Net.IsHost) Net.Send(new JObject { ["p"] = "rule", ["mode"] = mode, ["team"] = new JArray(rteam), ["rounds"] = rounds }); }
     }
 
     /// <summary>
@@ -127,6 +128,13 @@ namespace Nekorobo
             if (again && cfg["w"] is JArray wa)
                 for (int i = 0; i < wa.Count && i < wallets.Length; i++) WalletFromJson(wallets[i], wa[i] as JObject);
             if (!again && room != null) NpBegin(room["players"] as JArray ?? new JArray(), cfg != null ? cfg["npc"] as JArray : null, cfg);
+            // ラウンドマッチのラウンド数はホストが決めたもの（続きのときは持ち越し）
+            if (!again)
+            {
+                int rn = cfg != null && cfg["rounds"] != null && cfg["rounds"].Type == JTokenType.Integer ? (int)cfg["rounds"] : 0;
+                matchRounds = System.Array.IndexOf(MATCH_LENS, rn) >= 0 ? rn : 0;
+                Lobby.rounds = matchRounds;
+            }
             np.shopped.Clear(); np.rdy.Clear(); np.waitHost = false; np.waitShop = false;
             hud.NetWaitHide();                       // 次の面が来た。待ちの画面は畳む
             hud.NetWarn("", false);
@@ -170,7 +178,8 @@ namespace Nekorobo
         public string RoundLine()
         {
             int next = runDone + 1;
-            return "<b>" + next + "面目</b>";
+            return IsMatch ? Lang.Tr("<b>ROUND {0} / {1}</b>（ラウンドマッチ）", Mathf.Min(next, matchRounds), matchRounds)
+                           : Lang.Tr("<b>{0}面目</b>", next);
         }
     }
 }

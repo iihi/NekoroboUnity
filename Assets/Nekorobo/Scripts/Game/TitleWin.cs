@@ -112,6 +112,8 @@ namespace Nekorobo
                     if (md == "versus" || md == "coop" || md == "team") Lobby.mode = md;
                     if (d["team"] is Newtonsoft.Json.Linq.JArray ta)
                         for (int i = 0; i < 4 && i < ta.Count; i++) Lobby.rteam[i] = ((int?)ta[i] ?? 0) != 0 ? 1 : 0;
+                    if (d["rounds"] != null && d["rounds"].Type == Newtonsoft.Json.Linq.JTokenType.Integer)
+                        Lobby.rounds = System.Array.IndexOf(Game.MATCH_LENS, (int)d["rounds"]) >= 0 ? (int)d["rounds"] : 0;
                 }
                 else return;
                 if (Open && page == "Wait") GoLater("Wait");
@@ -176,6 +178,7 @@ namespace Nekorobo
                 case "Wait": PageWait(st); break;
                 case "Ask": def = PageAsk(st); break;
                 case "Settings": PageSettings(st); break;
+                case "Len": def = PageLen(st); break;
                 case "Ach": PageAch(st); break;
                 default: PageTop(st); break;
             }
@@ -209,10 +212,11 @@ namespace Nekorobo
 
         void PageSolo(Stack st)
         {
-            Head(st, "1人プレイ");
+            Head(st, Lang.Tr("1人プレイ"));
             Tiles(st,
                 Tile("ストーリー", "red", "story", () => Go("Story"), "屋台の店主に教わりながら進む12面。遊び方を覚えるほうです。", "story"),
-                Tile("フリープレイ", "blue", "free", () => { from = "Solo"; next = false; Go("Free"); }, "好きな面を選んで遊ぶほうです。", "free"));
+                Tile("フリープレイ", "blue", "free", () => { from = "Solo"; next = false; rounds = 0; Go("Free"); }, "好きな面を選んで、終わりなく続けます。", "free"),
+                Tile("ラウンドマッチ", "gold", "cup", () => { Lobby.ruleTo = "Solo"; Go("Len"); }, "3／5／10ラウンド遊んで、最後に最終結果を出して終わります。", "match"));
             Btn(st, "戻る", "sec", () => Go("Top"), null, true);
         }
 
@@ -232,6 +236,40 @@ namespace Nekorobo
             Btn(st, "戻る", "sec", () => Go("Solo"), null, true);
         }
 
+        // ---- 遊び方（JS版 TITLE_PAGE.Len）。0 はフリープレイ（とことん続ける）、ほかはラウンドマッチのラウンド数
+        int rounds;
+        string PageLen(Stack st)
+        {
+            bool solo = Lobby.ruleTo == "Solo";
+            System.Action<int> go = n =>
+            {
+                rounds = n;
+                if (solo) { from = "Solo"; next = false; Go("Free"); }
+                else if (Lobby.ruleTo == "Make")
+                {
+                    Lobby.rounds = n;
+                    for (int i = 0; i < 4; i++) { Lobby.rnpc[i] = "off"; Lobby.rteam[i] = i % 2; }
+                    Net.CreateRoom(Lobby.rname, Lobby.rpriv);
+                    Go("Make");
+                }
+                else Go("Local");
+            };
+            var col = new Dictionary<int, string> { { 3, "green" }, { 5, "red" }, { 10, "gold" } };
+            var ts = new List<TileSpec>();
+            if (!solo) ts.Add(Tile("フリープレイ", "blue", "free", () => go(0), "終わりなく続けます。面を選ぶ → 遊ぶ → ショップ、をくり返します。", "r0"));
+            foreach (var n in Game.MATCH_LENS)
+            {
+                int k = n;
+                ts.Add(Tile(Lang.Tr("{0}ラウンド", n), col[n], "cup", () => go(k),
+                            Lang.Tr(solo ? "{0}ラウンド遊んで、最後に最終結果を出して終わります（合計の利益）。"
+                                         : "{0}ラウンド遊んで、最後に最終結果を出して終わります（利益の合計で順位）。", n), "r" + n));
+            }
+            Head(st, Lang.Tr(solo ? "ラウンドマッチ" : "遊び方を選ぶ"));
+            Tiles(st, ts.ToArray());
+            Btn(st, Lang.Tr("戻る"), "sec", () => Go(solo ? "Solo" : "Rule"), null, true);
+            return "r" + (solo && rounds == 0 ? 3 : rounds);
+        }
+
         void PageMulti(Stack st)
         {
             Head(st, "マルチプレイ");
@@ -247,14 +285,9 @@ namespace Nekorobo
             bool toMake = Lobby.ruleTo == "Make";
             System.Action<string> pk = m =>
             {
-                if (toMake)
-                {
-                    Lobby.mode = m;
-                    for (int i = 0; i < 4; i++) { Lobby.rnpc[i] = "off"; Lobby.rteam[i] = i % 2; }
-                    Net.CreateRoom(Lobby.rname, Lobby.rpriv);
-                    Go("Make");
-                }
-                else { mode = m; Go("Local"); }
+                // ルールのあとは遊び方（フリープレイか、ラウンドマッチのラウンド数）
+                if (toMake) Lobby.mode = m; else mode = m;
+                Go("Len");
             };
             Head(st, "ルールを選ぶ");
             Tiles(st,
@@ -493,6 +526,7 @@ namespace Nekorobo
             bool keep = next;
             var sl = multi ? live : new List<PlayerSrc> { new PlayerSrc() };
             string md = multi ? mode : "versus";
+            if (!keep) g.matchRounds = rounds;                 // ラウンドマッチ（0 はフリープレイ）
             next = false;
             Start(() => g.StartFree(c, e.shop, sl, md, keep));
         }

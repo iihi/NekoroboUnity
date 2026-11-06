@@ -46,7 +46,8 @@ namespace Nekorobo
             bool forRoom = from == "Wait";
             bool goNext = forRoom && next, goOn = !forRoom && next;
             bool cont = goNext || goOn, multi = from == "Local";
-            int rn = g.matchRounds;
+            // ラウンドマッチ。部屋の面選びはホストの決めたラウンド数、続きは遊んでいる試合のもの
+            int rn = cont ? (g.IsMatch ? g.matchRounds : 0) : forRoom ? Lobby.rounds : rounds;
             string head = rn > 0 ? "ROUND " + (cont ? g.runDone + 1 : 1) + " / " + rn : cont ? Lang.Tr("次のステージ") : "";
             return new SsCtx { forRoom = forRoom, goNext = goNext, goOn = goOn, cont = cont, multi = multi, head = head };
         }

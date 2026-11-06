@@ -96,8 +96,14 @@ namespace Nekorobo
 
         // ================================================================ 面の送り
         /// <summary>結果の画面のあと（JS版 afterResult）。ふつうはショップへ。</summary>
-        // ---- ラウンドマッチ（3/5/10 ラウンド。0 はフリープレイ＝とことん続ける）。中身は段階4
+        // ---- ラウンドマッチ（3/5/10 ラウンド。0 はフリープレイ＝とことん続ける）。JS版 RUN.rounds / RUN.hist
+        public static readonly int[] MATCH_LENS = { 3, 5, 10 };
         [System.NonSerialized] public int matchRounds;
+        /// <summary>ラウンドごとの記録（面の名前・クリアのタイム・人ごとの差引・売上・配膳数・修理費）</summary>
+        public class MatchPer { public float tot, sales, cost; public int deliv; }
+        public class MatchRound { public string name; public int frames; public List<MatchPer> per = new List<MatchPer>(); }
+        [System.NonSerialized] public List<MatchRound> matchHist = new List<MatchRound>();
+        public static string LenName(int n) { return n > 0 ? Lang.Tr("ラウンドマッチ {0}ラウンド", n) : Lang.Tr("フリープレイ（とことん）"); }
         public bool IsMatch { get { return !IsStory && matchRounds > 0; } }
         public bool MatchOver { get { return IsMatch && runDone >= matchRounds; } }
         public bool StoryNoShop { get { return entry != null && entry.noShop; } }
@@ -107,6 +113,7 @@ namespace Nekorobo
         public void AfterResult()
         {
             if (result == null) return;
+            if (MatchOver) { hud.ShowFinal(); return; }          // ラウンドマッチの最後は最終結果へ
             if (entry != null && !NpOn)
             {
                 // ストーリー：失敗した面はもう一度（チュートリアルなので、できるまで）。ショップの無い面は次へ
@@ -210,7 +217,7 @@ namespace Nekorobo
         public void ResetRun()
         {
             hud.CloseShop();
-            shopped = false; runDone = 0; runTimes.Clear();
+            shopped = false; runDone = 0; runTimes.Clear(); matchHist.Clear();
             NewWallets();
             if (entry != null) LoadCourseStage(0); else Rebuild();
         }

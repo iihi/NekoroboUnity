@@ -30,16 +30,20 @@ namespace Nekorobo
         EndingWin ending;
         public bool EndingOpen { get { return ending != null && ending.Open; } }
         public void ShowEnding() { CloseShop(); resultWin.Close(); ending.Show(); }
+        FinalWin finalWin;
+        public bool FinalOpen { get { return finalWin != null && finalWin.Open; } }
+        /// <summary>ラウンドマッチの最終結果（JS版 showFinal）</summary>
+        public void ShowFinal() { CloseShop(); resultWin.Close(); finalWin.Show(); }
         public bool TitleOpen { get { return title != null && title.Open; } }
         /// <summary>ゲームを始めるので、タイトル・ショップ・結果・エンディングを畳む（オンラインの start）。</summary>
         public void CloseForGame()
         {
-            title.Close(); CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
+            title.Close(); CloseShop(); resultWin.Close(); ending.Close(); finalWin.Close(); if (MenuOpen) menuPanel.SetActive(false);
         }
         /// <summary>タイトルを開く（page は Top / Free など。next なら買い物のあとの「次の面選び」）。</summary>
         public void OpenTitle(string page, bool next = false, string from = null)
         {
-            CloseShop(); resultWin.Close(); ending.Close(); if (MenuOpen) menuPanel.SetActive(false);
+            CloseShop(); resultWin.Close(); ending.Close(); finalWin.Close(); if (MenuOpen) menuPanel.SetActive(false);
             Story.TalkClose(true); Story.HideBang(); Story.TutHide();
             title.next = next;
             if (from != null) title.from = from;
@@ -191,6 +195,7 @@ namespace Nekorobo
 
             // ---- エンディング（全ステージ終了。ショップと同じ地）
             ending = new EndingWin(root, GetComponent<Game>());
+            finalWin = new FinalWin(root, GetComponent<Game>());
 
             // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
             Story = new StoryUi(root, GetComponent<Game>());
@@ -424,6 +429,7 @@ namespace Nekorobo
             Story.Tick(Time.deltaTime);
             if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
             else if (ending.Open) ending.Tick(Time.unscaledDeltaTime);
+            else if (finalWin.Open) finalWin.Tick(Time.unscaledDeltaTime);
             else if (shopWin.Open) { shopWin.Tick(Time.deltaTime); Ptr.CursorOnly(); }    // ショップは自分の指を持っている
             else
             {

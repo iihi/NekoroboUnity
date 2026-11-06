@@ -262,7 +262,7 @@ namespace Nekorobo
         /// </summary>
         public void StartFree(StageCfg c, string shopN, List<PlayerSrc> sl, string md, bool keep)
         {
-            if (!keep) { NewWallets(); runDone = 0; }
+            if (!keep) { NewWallets(); runDone = 0; matchHist.Clear(); }
             shopped = false;
             entry = null;
             stage = c;
@@ -1495,6 +1495,17 @@ namespace Nekorobo
                 var W = WalletOf(P);
                 if (!paid.Add(W)) continue;
                 W.cash = Mathf.Round(W.cash + LedgerOf(P).total);
+            }
+            // ---- ラウンドマッチは、ラウンドごとの記録を残す（最終結果の表と順位）
+            if (IsMatch)
+            {
+                var mr = new MatchRound { name = stage != null ? stage.n ?? "" : "", frames = cleared && !timeUp ? frames : 0 };
+                foreach (var P in players)
+                {
+                    var Lp = LedgerOf(P);
+                    mr.per.Add(new MatchPer { tot = Mathf.Round(Lp.total), sales = Mathf.Round(Lp.sales), deliv = P.delivered, cost = Mathf.Round(Lp.repair + Lp.ambCost) });
+                }
+                matchHist.Add(mr);
             }
             // ---- ステージボーナス
             runDone++;

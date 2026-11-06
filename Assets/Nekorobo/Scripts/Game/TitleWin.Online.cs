@@ -123,7 +123,7 @@ namespace Nekorobo
             ct.font = Mono;
             UiKit.Stretch(ct.rectTransform);
             Note(st, host ? "あなたがホストです。全員そろったら始めてください。" : "ホストが始めるのを待っています…");
-            Note(st, g.RoundLine());
+            Note(st, g.InSession ? g.RoundLine() : Lang.Tr("遊び方：<b>{0}</b>", Game.LenName(Lobby.rounds)));
             var pk = Lobby.rpick;
             Note(st, "遊ぶ面：<b>" + (pk != null ? (string)pk["name"] : "<i>まだ選んでいません</i>") + "</b>"
                    + (pk != null && pk["shopName"] != null ? "　<i>" + (string)pk["shopName"] + "</i>" : ""));
@@ -138,6 +138,14 @@ namespace Nekorobo
                     new[] { "coop", "協力（売上も修理費も店舗ぜんぶ）", "coop" },
                 }, Lobby.mode, "Wait", x => { Lobby.mode = x; Lobby.SendRule(); }), null, false, "rule");
             else Note(st, "ルール：<b>" + Game.ModeName(Lobby.mode) + "</b>");
+            // 遊び方（フリープレイ／ラウンドマッチ）。続きの最中は変えられない
+            if (host && !g.InSession)
+            {
+                var opts = new List<string[]> { new[] { "0", Game.LenName(0), "free" } };
+                foreach (var n in Game.MATCH_LENS) opts.Add(new[] { n.ToString(), Game.LenName(n), "cup" });
+                Btn(st, Lang.Tr("遊び方：") + Game.LenName(Lobby.rounds) + "　▾", "sec", () => PickOpen(Lang.Tr("遊び方を選ぶ"), null, opts, Lobby.rounds.ToString(), "Wait",
+                    x => { int v; Lobby.rounds = int.TryParse(x, out v) ? v : 0; Lobby.SendRule(); }), null, false, "len");
+            }
             // 席。誰がどの色のロボになるかが、始める前に分かるように（並びはそのまま枠の順）。
             // 人が来ない席は、ホストがNPCで埋められる。人が入ってきたら、その席は人のもの（NPCは押し出される）
             var row = st.Row(92);
@@ -226,7 +234,7 @@ namespace Nekorobo
             {
                 ["pick"] = pk, ["cont"] = g.np.stage > 0, ["gn"] = g.np.stage,
                 ["npc"] = new JArray(Lobby.rnpc), ["mode"] = Lobby.mode, ["team"] = new JArray(Lobby.rteam),
-                ["w"] = g.WalletsJson(),
+                ["rounds"] = Lobby.rounds, ["w"] = g.WalletsJson(),
             });
         }
 

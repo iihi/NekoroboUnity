@@ -379,7 +379,7 @@ namespace Nekorobo
         /// <summary>ストーリーを始める（cont なら続きから）。JS版 titleStart("story")。</summary>
         public void StartStory(bool cont)
         {
-            runDone = 0; shopped = false; runTimes.Clear();
+            runDone = 0; shopped = false; runTimes.Clear(); matchRounds = 0; matchHist.Clear();
             int at = 0;
             var sv = cont ? LoadStory() : null;
             if (sv != null)

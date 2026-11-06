@@ -11,6 +11,7 @@ namespace Nekorobo
         void AchHurt(Player P) { }
         void AchDeliver(Player P, Order o, float integ) { }
         void AchStageEnd(bool cleared) { }
+        public void AchMatchEnd() { }
         /// <summary>取った数（例 3/40）。タイトルの「実績」の説明に出す</summary>
         public string AchCountText() { return "0"; }
     }
