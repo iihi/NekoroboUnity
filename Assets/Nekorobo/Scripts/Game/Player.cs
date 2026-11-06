@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
 
 namespace Nekorobo
 {
@@ -182,6 +183,59 @@ namespace Nekorobo
         public List<Color> modelBase;
         public Texture2D faceTex;
         public string faceNow = "";
+        // 届いたモデル（デザイナー製）の顔と胴の画面。顔は表情ごとの絵を差し替え、胴の画面にはセリフを出す
+        public Material faceMat;
+        public JObject faces;                    // models.json の robot.faces（表情 → 絵）
+        public Material msgMat;
+        public RenderTexture msgRT;
+        public string msgNow;
+        public float plateMaxH = 0.21f;          // 料理の高さの上限（棚の中の寸法）
+
+        /// <summary>モデルの顔（faceMat）と胴の画面（msgMat）をつなぐ（JS版 robotScreens）。</summary>
+        public void Screens(Transform model, JObject cfg)
+        {
+            if (model == null || cfg == null) return;
+            string fm = (string)cfg["faceMat"], mm = (string)cfg["msgMat"];
+            faces = cfg["faces"] as JObject;
+            foreach (var r in model.GetComponentsInChildren<Renderer>(true))
+            {
+                var ms = r.materials;          // この機体だけの素材にする（顔は人ごとに変わる）
+                bool ch = false;
+                for (int i = 0; i < ms.Length; i++)
+                {
+                    var nm = ModelStore.MatName(ms[i]);
+                    if (fm != null && nm.StartsWith(fm)) { faceMat = ms[i]; ch = true; }
+                    if (mm != null && nm.StartsWith(mm))
+                    {
+                        msgMat = ms[i]; ch = true;
+                        msgRT = new RenderTexture(256, 192, 16, RenderTextureFormat.ARGB32) { name = "RobotMsg" };
+                        SetTex(msgMat, msgRT, 1.8f);      // 画面なので自分で光らせる（暗い照明の店でも読めるように）
+                    }
+                }
+                if (ch) r.materials = ms;
+            }
+            if (faceMat != null) { foreach (Transform c in root.transform) { var ks = c.GetComponent<KeepSlot>(); if (ks != null && ks.slot == "face") c.gameObject.SetActive(false); } }
+            float sc = J.F(cfg, "plateScale", 0);
+            if (sc > 0 && plate != null) plate.localScale = Vector3.one * sc;
+            float mh = J.F(cfg, "plateMaxH", 0);
+            if (mh > 0) plateMaxH = mh;
+            faceNow = ""; msgNow = null;
+        }
+        static void SetTex(Material m, Texture t, float emit)
+        {
+            if (m.HasProperty("baseColorTexture")) m.SetTexture("baseColorTexture", t);
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", t);
+            if (m.HasProperty("emissiveTexture")) m.SetTexture("emissiveTexture", t);
+            if (m.HasProperty("emissiveFactor")) m.SetColor("emissiveFactor", new Color(emit, emit, emit));
+            m.mainTexture = t;
+        }
+        /// <summary>胴の画面に出すセリフ（空なら消す）。</summary>
+        public void DrawMsg(string text)
+        {
+            if (msgRT == null || msgNow == text) return;
+            msgNow = text;
+            MsgRender.Draw(msgRT, text);
+        }
 
         public static RobotLook Build(Transform parent, int col, float tint)
         {
@@ -265,7 +319,7 @@ namespace Nekorobo
             plate.gameObject.SetActive(d != null);
             if (d == null) return;
             // 頭の下（約0.23m）にぶつからない高さまで（JS版 dslot.userData.maxH）
-            dishVis = DishLook.Build(plate, d, 0.09f, plate.GetChild(0).gameObject, 0.21f);
+            dishVis = DishLook.Build(plate, d, 0.09f, plate.GetChild(0).gameObject, plateMaxH);
         }
 
         /// <summary>
@@ -274,6 +328,15 @@ namespace Nekorobo
         /// </summary>
         public void DrawFace(string f)
         {
+            if (faceMat != null)
+            {
+                if (faceNow == f) return;
+                faceNow = f;
+                string src = faces != null ? ((string)faces[f] ?? (string)faces["norm"]) : null;
+                var tx = src != null ? DataRoot.Texture(src) : null;
+                if (tx != null) SetTex(faceMat, tx, f == "dead" ? 0.25f : 1);     // リタイアは画面を暗く
+                return;
+            }
             if (faceNow == f) return;
             faceNow = f;
             var px = new Color32[192 * 96];

@@ -295,6 +295,7 @@ namespace Nekorobo
                     Slab(c, w, d, 0f, Designs.SurfMeter(kv.Key, floorBase, "floor"), "floor", 0.9f * fr, 0.05f, true);
                     floorRects.Add(r);
                 }
+            BuildFloorTop(fr);
             BuildPitLook();
             BuildFloorGrid(floorRects);
             BuildIceSkin();
@@ -400,7 +401,11 @@ namespace Nekorobo
                                     gu.vomit.transform.localPosition = new Vector3(vp.x, -1.04f / 2 * (1 - K.h) + vp.y * K.h, vp.z);
                                 }
                             }
-                            ApplyModel(gu, look, "guest", o.gm);    // gm … エディタで選んだ客のモデル
+                            if (ApplyModel(gu, look, "guest", o.gm) != null)    // gm … エディタで選んだ客のモデル
+                            {
+                                var GM = ModelStore.For("guest", shop.n); Vector3 va;
+                                if (GM != null && GM.attach.TryGetValue("vomit", out va)) gu.vomit.transform.localPosition = Coord.W(va.x, va.y, va.z);
+                            }
                             guests.Add(gu); objEnt[o] = gu;
                             break;
                         }
@@ -493,15 +498,60 @@ namespace Nekorobo
         }
 
         /// <summary>上面が topY に来る厚い板。側面がそのまま池や穴の壁になる。</summary>
+        // 床・橋・板の道・道路・線路は、見た目も高さも同じ（上面 0）なのに、当たり判定は種類ごと・長方形ごとに別の箱だった。
+        // 箱と箱の継ぎ目では、ロボの角が隣の箱の縁に当たって斜め上に押し上げられ、向きも変わっていた（担当の指摘。JS版と同じ直し）。
+        // なので上面だけ、1マス2枚の三角形を並べた1枚の面にまとめる（BuildFloorTop）。箱は SEAM_DROP だけ下げて、池や穴の側面と、
+        // すり抜けたときの受けとして残す。氷は摩擦が違うので別の面にする
+        const float SEAM_DROP = 0.04f;
         void Slab(Vector3 c, float w, float d, float topY, Material m, string kind, float fric, float rest, bool meterUV = false)
         {
-            var e = MakeBody(kind, new Vector3(c.x, topY - Tiles.FloorH, c.z), new Vector3(w / 2f, Tiles.FloorH, d / 2f),
+            float dr = kind == "floor" && topY == 0 ? SEAM_DROP : 0;
+            var e = MakeBody(kind, new Vector3(c.x, topY - Tiles.FloorH - dr, c.z), new Vector3(w / 2f, Tiles.FloorH, d / 2f),
                              Quaternion.identity, true, 0, fric, rest);
             // meterUV … UV を実寸（盤面の座標）で付ける。床の絵は長方形をまたいでも模様の位置がそろう
             var box = MeshGen.Box(w, Tiles.FloorH * 2, d);
             if (meterUV) box = MeterUV(box, new Vector3(c.x, topY - Tiles.FloorH, c.z));
-            var mr = Part.Add(e.transform, box, m, Vector3.zero, shadow: false);
+            var mr = Part.Add(e.transform, box, m, new Vector3(0, dr, 0), shadow: false);
             mr.name = "SlabVis";
+        }
+
+        // 歩く床の上面（当たり判定だけ）。1マス2枚の三角形を並べた1枚の面
+        void BuildFloorTop(float fr)
+        {
+            foreach (var grp in new[] { "floor", "ice" })
+            {
+                var v = new List<Vector3>(); var idx = new List<int>();
+                var vid = new Dictionary<Vector2Int, int>();
+                System.Func<int, int, int> vert = (x, z) =>
+                {
+                    var k = new Vector2Int(x, z); int n;
+                    if (!vid.TryGetValue(k, out n)) { n = v.Count; vid[k] = n; v.Add(new Vector3(x * Coord.Tile, 0, -z * Coord.Tile)); }
+                    return n;
+                };
+                foreach (var kv in map)
+                {
+                    char ch = kv.Value;
+                    bool ice = ch == 'i', walk = ch == '.' || ch == '=' || ch == 'r' || ch == 'l' || ch == 'b';
+                    if (grp == "ice" ? !ice : !walk) continue;
+                    int i = kv.Key.x, j = kv.Key.y;
+                    int a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1);
+                    // 上（+Y）向き（Unity は z を反転しているので、三角形の並びも逆）
+                    idx.AddRange(new[] { a, b, c, a, c, d });
+                }
+                if (idx.Count == 0) continue;
+                var mesh = new Mesh { name = "FloorTop_" + grp };
+                if (v.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                mesh.SetVertices(v); mesh.SetTriangles(idx, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+                var go = new GameObject("floor");
+                go.transform.SetParent(stageRoot, false);
+                var e = go.AddComponent<Ent>();
+                e.kind = "floor"; e.isFixed = true; e.infMass = true;
+                var mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = mesh;
+                mc.sharedMaterial = PMat(grp == "ice" ? 0.05f : 0.9f * fr, 0.05f);
+                ents.Add(e);
+                NidAdd(e);
+            }
         }
 
         /// <summary>水面（流れの筋の絵がゆっくり流れる）。溶岩は光の影響を受けない色で、海と水は少し透ける。</summary>
@@ -754,6 +804,7 @@ namespace Nekorobo
                 counterPlates.Add(pg);
                 counterPlateDish.Add(null);
             }
+            BuildChef();                                       // 受け渡し口の奥の厨房とシェフ（見た目だけ）
             // 受け取り位置を示す床のマーク
             var zone = Part.Add(kitchen, MeshGen.FlatUp(PickupW, PickupD), Mats.Basic(new Color(0.24f, 0.61f, 1f, 0.16f), true, false, false),
                                 Coord.W(PickupOffset, 0.008f, 0), shadow: false, name: "PickupZone");

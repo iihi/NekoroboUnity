@@ -384,7 +384,8 @@ namespace Nekorobo
                 var rf = RaftAt(b);
                 if (rf != null) holder.SetParent(rf.mesh, true);
                 // まわりの動き（Ambient）。通行人は dist マス先で引き返す。鳥は3羽で、置いた所の上を回る
-                else if (pr.walk) Ambient.Add("walk", holder, J.F(o.raw, "dist", 6) * Coord.Tile, o.speed > 0 ? o.speed.Value : 1.1f);
+                else if (pr.walk) Ambient.Add("walk", holder, J.F(o.raw, "dist", 6) * Coord.Tile, o.speed > 0 ? o.speed.Value : 1.1f,
+                                             pr.model != null && pr.model.Count > 0 && pr.model[0].StartsWith("oc/"));   // 作り直したキャラは正面が −Z
                 else if (pr.flock)
                 {
                     Ambient.Add("bird", holder);

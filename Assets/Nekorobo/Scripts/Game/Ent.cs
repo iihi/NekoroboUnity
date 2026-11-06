@@ -36,7 +36,9 @@ namespace Nekorobo
         public GameObject ring;         // 倒れた印
         public float modelH;
         public GameObject vomit;        // HP が減ると口から出る虹
-        public int vomitTier;            // モデルに差し替えたときの見た目の高さ（頭の上の札をそれに合わせる）
+        public int vomitTier;
+        public float gushT, ph, dripT, haloY;
+        public bool downSe;            // モデルに差し替えたときの見た目の高さ（頭の上の札をそれに合わせる）
 
         // 落ちた・浸かった
         public bool sunk;

@@ -308,7 +308,11 @@ namespace Nekorobo
                 q.Add(i, j, 0.004f, FloorSet.UV(K, n.Value));
             }
             if (q.Count == 0) return;
-            Part.Add(stageRoot, q.ToMesh("IceSkin"), Mats.Textured(K.tex, Color.white, 0.18f, Vector2.one), Vector3.zero, false, "IceSkin");
+            // 氷らしく見せる（担当「氷の床が分かりにくい」）：岸の雪は絵のまま、中の水色の所を盤面ぜんたいでつながる淡い氷の絵に、
+            // 空と明かりの映り込みを付ける（IceArt・Ice.shader）。作れなければ前の絵のまま
+            iceMat = IceArt.Material(K.tex, iceReflect);
+            var skin = Part.Add(stageRoot, q.ToMesh("IceSkin"), iceMat ?? Mats.Textured(K.tex, Color.white, 0.18f, Vector2.one), Vector3.zero, false, "IceSkin");
+            skin.GetComponent<MeshRenderer>().receiveShadows = true;
         }
 
         // ================================================================ 川・海・マグマ

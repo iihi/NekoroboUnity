@@ -16,6 +16,7 @@ namespace Nekorobo
         public Vector3 rotDeg, offset;
         public bool keepY, skinned;
         public Dictionary<string, Vector3> attach = new Dictionary<string, Vector3>();   // 残す部品（顔など）の置き場所（three.js の向き）
+        public JObject cfg;                                  // models.json の項目そのもの（faces・faceMat・viewDeg など、型ごとの設定）
     }
 
     /// <summary>モデルに差し替えても残す部品の印（JS版 userData.keep / slot）。attach にその名前があれば、そこへ置き直す。</summary>
@@ -116,7 +117,7 @@ namespace Nekorobo
             if (src is JArray) foreach (var s in (JArray)src) { var v = (string)s; if (!string.IsNullOrEmpty(v)) list.Add(v); }
             else if (src != null && src.Type == JTokenType.String && (string)src != "") list.Add((string)src);
             if (list.Count == 0) return null;
-            var M = new ModelEntry { key = key };
+            var M = new ModelEntry { key = key, cfg = o };
             var sc = o["scale"];
             if (sc != null && (sc.Type == JTokenType.Float || sc.Type == JTokenType.Integer)) M.scaleNum = sc.Value<float>();
             else M.scaleMode = sc != null ? (string)sc : "fit";
@@ -313,6 +314,8 @@ namespace Nekorobo
         }
 
         // ---- glTF の素材（glTFast のシェーダー）の色と絵
+        /// <summary>素材の名前（「 (Instance)」を外したもの）。</summary>
+        public static string MatName(Material m) { return m == null ? "" : BaseName(m); }
         public static Color MatColor(Material m) { return m.HasProperty("baseColorFactor") ? m.GetColor("baseColorFactor") : m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : m.color; }
         public static void SetMatColor(Material m, Color c)
         {

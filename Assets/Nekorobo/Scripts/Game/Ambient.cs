@@ -28,6 +28,7 @@ namespace Nekorobo
         class Fx
         {
             public string type; public Transform obj; public float ph;
+            public bool back;                // モデルの正面が −Z（歩く向きだけ半回転）
             // 部品の回し・羽
             public Quaternion r0;
             // 旗
@@ -146,10 +147,11 @@ namespace Nekorobo
 
         // ================================================================ 置き物ごとの動き
         /// <summary>walk：dist[m]・speed[m/秒]。bird：置いた所の上を回る。bob：ゆらゆら。</summary>
-        public static void Add(string type, Transform obj, float dist = 6, float speed = 1.1f)
+        /// <summary>back … モデルの正面が −Z（作り直したキャラ）。歩く向きの逆を向いているので、向きだけ半回転させる</summary>
+        public static void Add(string type, Transform obj, float dist = 6, float speed = 1.1f, bool back = false)
         {
             if (obj == null) return;
-            var e = new Fx { type = type, obj = obj, ph = Rnd() * 6.283f, r0 = obj.localRotation, p0 = obj.localPosition };
+            var e = new Fx { type = type, obj = obj, ph = Rnd() * 6.283f, r0 = obj.localRotation, p0 = obj.localPosition, back = back };
             if (type == "walk")
             {
                 // 向いている方（three.js の +z ＝ こちらの -z）へ歩く
@@ -275,6 +277,7 @@ namespace Nekorobo
             bool moving = e.pause <= 0;
             o.localPosition = e.p0 + e.fwd * e.s + new Vector3(0, moving ? Mathf.Abs(Mathf.Sin(e.step)) * 0.05f : 0, 0);
             o.localRotation = Quaternion.AngleAxis(-e.turn * Mathf.Rad2Deg, Vector3.up) * e.r0
+                            * Quaternion.Euler(0, e.back ? 180 : 0, 0)
                             * Quaternion.Euler(0, 0, (moving ? Mathf.Sin(e.step) * 0.06f : 0) * Mathf.Rad2Deg);
         }
 

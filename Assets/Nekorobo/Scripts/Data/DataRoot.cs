@@ -47,6 +47,13 @@ namespace Nekorobo
 
         public static string File_(string rel) { return System.IO.Path.Combine(Path, rel.Replace('/', System.IO.Path.DirectorySeparatorChar)); }
 
+        /// <summary>文字のファイルを読む（lights.js など）。無ければ null。</summary>
+        public static string ReadText(string rel)
+        {
+            var f = File_(rel);
+            return File.Exists(f) ? File.ReadAllText(f, System.Text.Encoding.UTF8) : null;
+        }
+
         public static JObject ReadJson(string rel)
         {
             var f = File_(rel);

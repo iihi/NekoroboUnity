@@ -19,10 +19,36 @@ namespace Nekorobo
         public void SpawnSplash(Vector3 pos, int col, int n)
         {
             NetEv("sp", R2(pos.x), R2(pos.y), R2(-pos.z), col, n);
+            SpawnSplashLocal(pos, col, n, false);
+        }
+        // 水滴の形（虹のしぶき。前は長方形だった）
+        static Texture2D dropTex;
+        static Texture2D DropTex()
+        {
+            if (dropTex != null) return dropTex;
+            const int W = 32, H = 48;
+            var px = new Color32[W * H];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    float u = (x + 0.5f) / W * 2 - 1, v = (y + 0.5f) / H;     // v=0 下、1 上
+                    // 下は丸く、上へとがる
+                    float r = v < 0.5f ? Mathf.Sqrt(Mathf.Max(0, 1 - Mathf.Pow((0.5f - v) / 0.5f, 2))) : (1 - v) * 2 * 0.95f + 0.05f * (1 - v);
+                    bool on = Mathf.Abs(u) <= r;
+                    px[y * W + x] = on ? new Color32(255, 255, 255, 255) : new Color32(255, 255, 255, 0);
+                }
+            dropTex = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            dropTex.SetPixels32(px); dropTex.Apply(false);
+            return dropTex;
+        }
+        void SpawnSplashLocal(Vector3 pos, int col, int n, bool drop)
+        {
             for (int i = 0; i < n && splash.Count < 140; i++)
             {
-                var m = Mats.NewBasic(Mats.Hex(col), true, true, false);
-                var go = Part.Add(fxRoot, MeshGen.Plane(0.05f, 0.09f), m, pos, false, "Splash");
+                Material m;
+                if (drop) { m = Mats.BasicTex(DropTex(), true, true); var cc = Mats.Hex(col); m.SetColor("_BaseColor", cc); }
+                else m = Mats.NewBasic(Mats.Hex(col), true, true, false);
+                var go = Part.Add(fxRoot, MeshGen.Plane(drop ? 0.07f : 0.05f, drop ? 0.1f : 0.09f), m, pos, false, "Splash");
                 float a = Random.value * Mathf.PI * 2, sp = 1.0f + Random.value * 2.2f;
                 splash.Add(new Splash
                 {
@@ -141,7 +167,8 @@ namespace Nekorobo
         {
             if (rainbowTex != null) return rainbowTex;
             // JS版の CanvasTexture は色の空間を指定していない（＝絵の色をリニアのまま使う）ので、画面では明るく出る。同じに見せるためリニアで作る
-            rainbowTex = new Texture2D(8, 70, TextureFormat.RGBA32, false, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Point };
+            // 口から流れ出て見えるよう、縦にくり返して流す（offset を動かす）
+            rainbowTex = new Texture2D(8, 70, TextureFormat.RGBA32, false, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
             var px = new Color[8 * 70];
             for (int y = 0; y < 70; y++)
                 for (int x = 0; x < 8; x++)
@@ -150,37 +177,163 @@ namespace Nekorobo
             return rainbowTex;
         }
 
-        /// <summary>客の口から出る虹（見た目の入れ物に付ける。モデルに差し替えても残す）。</summary>
+        static Material rainbowMat;
+        /// <summary>
+        /// 客の口から出る虹（見た目の入れ物に付ける。モデルに差し替えても残す）。
+        /// **とがった先（口）を原点にする。**真ん中が原点だと、大きくするほど先が上へずれて鼻や目から出て見えた（担当）
+        /// </summary>
         public GameObject Vomit(Transform guest, float hR, float headY)
         {
-            var m = Mats.BasicTex(RainbowTex(), true, true);
-            m.SetColor("_BaseColor", new Color(1, 1, 1, 0.94f));
-            var v = Part.Add(guest, MeshGen.Cone(hR * 0.80f, hR * 2.0f, 12, true), m,
-                             Coord.W(0, headY - hR * 1.15f, -hR * 1.30f), false, "Vomit");
-            var inner = v.transform;
-            inner.localRotation = Part.Euler3(0.55f, 0, 0);
-            inner.localScale = new Vector3(1, 1, 0.22f);         // 奥行きを潰して平面的な吐き方に
+            if (rainbowMat == null)
+            {
+                rainbowMat = Mats.BasicTex(RainbowTex(), true, true);
+                rainbowMat.SetColor("_BaseColor", new Color(1, 1, 1, 0.94f));
+            }
+            var v = new GameObject("Vomit");
+            v.transform.SetParent(guest, false);
+            v.transform.localPosition = Coord.W(0, headY - hR * 0.65f, -hR * 1.10f);
+            v.transform.localRotation = Part.Euler3(0.55f, 0, 0);
+            var cone = Part.Add(v.transform, MeshGen.Cone(hR * 0.80f, hR * 2.0f, 12, true), rainbowMat, new Vector3(0, -hR, 0), false, "Cone");
+            cone.transform.localScale = new Vector3(1, 1, 0.22f);         // 奥行きを潰して平面的な吐き方に
             v.SetActive(false);
             return v;
         }
 
+        // ---- 虹の水たまり。外から赤→紫の輪を、ふちを波打たせて重ねる（真上からでも「虹がこぼれた」と分かるように）
+        static Texture2D puddleTex;
+        static Texture2D PuddleTex()
+        {
+            if (puddleTex != null) return puddleTex;
+            const int S = 128;
+            var wob = new[] { 0.0f, 1.3f, 2.1f, 0.7f, 2.9f, 1.8f, 0.4f };
+            var px = new Color32[S * S];
+            for (int y = 0; y < S; y++)
+                for (int x = 0; x < S; x++)
+                {
+                    float dx = x + 0.5f - S / 2f, dy = y + 0.5f - S / 2f, r = Mathf.Sqrt(dx * dx + dy * dy), a = Mathf.Atan2(dy, dx);
+                    Color32 c = new Color32(0, 0, 0, 0);
+                    for (int i = 0; i < 7; i++)
+                    {
+                        float r0 = S * 0.48f * (1 - i / 7f * 0.86f);
+                        float rr = r0 * (1 + 0.10f * Mathf.Sin(a * 5 + wob[i]) + 0.06f * Mathf.Sin(a * 3 + wob[i] * 2));
+                        if (r <= rr) { var cc = Mats.Hex(RAINBOW_COLS[i]); cc.a = 0.92f; c = cc; }
+                    }
+                    px[y * S + x] = c;
+                }
+            puddleTex = new Texture2D(S, S, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            puddleTex.SetPixels32(px); puddleTex.Apply(false);
+            return puddleTex;
+        }
+        class Puddle { public Transform m; public Material mat; public float size, t, age; }
+        readonly List<Puddle> puddles = new List<Puddle>();
+        const float PUDDLE_LIFE = 10, PUDDLE_FADE = 2;
+        /// <summary>客の足もと（顔の向きの少し前）に虹の水たまりを置く。床（動かない物）の上だけ。広がりながら出る</summary>
+        void GuestPuddle(Ent gu, float r)
+        {
+            var p = gu.transform.position;
+            RaycastHit hit; bool found = false; float y = 0;
+            foreach (var h in Physics.RaycastAll(p, Vector3.down, 3, ~0, QueryTriggerInteraction.Ignore))
+            {
+                var e = h.collider.GetComponentInParent<Ent>();
+                if (e == gu) continue;
+                var rb = h.collider.attachedRigidbody;
+                if (rb != null && !rb.isKinematic) continue;
+                if (!found || h.point.y > y) { y = h.point.y; found = true; hit = h; }
+            }
+            if (!found) return;
+            var fw = gu.transform.rotation * Vector3.forward; fw.y = 0; if (fw.sqrMagnitude > 1e-4f) fw.Normalize();
+            var mat = Mats.BasicTex(PuddleTex(), true, false);
+            mat.renderQueue = 3001;
+            var m = Part.Add(fxRoot, MeshGen.FlatUp(1, 1), mat, new Vector3(p.x + fw.x * 0.3f, y + 0.014f + 0.002f * puddles.Count, p.z + fw.z * 0.3f), false, "Puddle").transform;
+            m.rotation = Quaternion.Euler(0, Random.value * 360, 0);
+            m.localScale = Vector3.one * 0.01f;
+            puddles.Add(new Puddle { m = m, mat = mat, size = r * 2 });
+            if (puddles.Count > 48) { var o = puddles[0]; puddles.RemoveAt(0); if (o.m != null) Destroy(o.m.gameObject); Destroy(o.mat); }
+        }
+        // 水たまりが広がる（0.35秒）。しばらく（10秒）したら薄くなって消える（担当）
+        void PuddleTick(float dt)
+        {
+            for (int i = puddles.Count - 1; i >= 0; i--)
+            {
+                var d = puddles[i];
+                if (d.m == null) { puddles.RemoveAt(i); continue; }
+                d.age += dt;
+                if (d.t < 1) { d.t = Mathf.Min(1, d.t + dt / 0.35f); float k = 1 - Mathf.Pow(1 - d.t, 3); d.m.localScale = new Vector3(d.size * k, 1, d.size * k); }
+                float left = PUDDLE_LIFE - d.age;
+                if (left <= 0) { Destroy(d.m.gameObject); Destroy(d.mat); puddles.RemoveAt(i); }
+                else if (left < PUDDLE_FADE) { var c = d.mat.GetColor("_BaseColor"); c.a = left / PUDDLE_FADE; d.mat.SetColor("_BaseColor", c); }
+            }
+        }
+
+        /// <summary>
+        /// 体力が尽きた：大きな虹の破裂と「昇天！」、頭の上に天使の輪（金の輪）。救急車が乗せていくまで付いている。
+        /// 輪は**体の向きに合わせて頭の先**に付ける（横に倒れていたら、倒れた頭の先）。
+        /// </summary>
+        void GuestHalo(Ent gu)
+        {
+            var p = gu.transform.position;
+            for (int k = 0; k < 21; k++) SpawnSplashLocal(p + Vector3.up * 0.3f, RAINBOW_COLS[k % RAINBOW_COLS.Length], 2, true);
+            if (state == "play") hud.Comic(p + Vector3.up * 1.1f, "昇天！", 34, 0xff5fae);
+            GuestPuddle(gu, 0.75f);
+            gu.ring = Part.Add(stageRoot, MeshGen.Torus(0.2f, 0.035f, 8, 20), Mats.Get(0xe8b400), p, shadow: false, name: "Halo");
+            // 高さは頭のてっぺんの少し上。立っている向きで測る
+            var q = gu.transform.rotation; gu.transform.rotation = Quaternion.identity;
+            float top = 0.55f; bool any = false; Bounds b = new Bounds();
+            foreach (var r in gu.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy || r.name == "Cone") continue;
+                if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+            }
+            if (any) top = b.max.y - gu.transform.position.y;
+            gu.transform.rotation = q;
+            gu.haloY = top + 0.1f;
+            HaloMove(gu);
+        }
+        void HaloMove(Ent gu)
+        {
+            var q = gu.transform.rotation;
+            gu.ring.transform.position = gu.transform.position + q * new Vector3(0, gu.haloY > 0 ? gu.haloY : 0.65f, 0);
+            gu.ring.transform.rotation = q * Quaternion.Euler(90, 0, 0);
+        }
+
+        // 客の傷み（虹）。体力の段階ごとに、口から吐く虹を太く・勢いよくし、足もとに虹の水たまりを残す。
+        // 傷んでいる間は虹のしぶきを少しずつ撒き続ける。体力が尽きたら頭に金の輪（GuestHalo）。
+        // 画面ごとに描く（体力はオンラインでも配られるので、参加者の画面でも同じになる）
         void TickGuestVomit()
         {
+            float now = Time.time;
+            if (rainbowMat != null) rainbowMat.SetTextureOffset("_BaseMap", new Vector2(0, -(now * 1.6f) % 1));
             foreach (var gu in guests)
             {
                 if (gu.vomit == null) continue;
                 float hp = gu.hp;
                 int tier = hp <= 0 ? 4 : hp >= 80 ? 0 : hp >= 55 ? 1 : hp >= 30 ? 2 : 3;
-                float s = (tier == 0 || tier == 4) ? 0 : new[] { 0f, 0.55f, 0.85f, 1.15f }[tier];
-                gu.vomit.SetActive(s > 0);
-                if (s > 0) gu.vomit.transform.localScale = new Vector3(s, s, s * 0.22f);
-                if (tier > gu.vomitTier && tier < 4 && state == "play")
+                float s = (tier == 0 || tier == 4) ? 0 : new[] { 0f, 0.9f, 1.3f, 1.75f }[tier];
+                gu.vomit.SetActive(s > 0 && !gu.taken && !gu.sunk);
+                // 吐く勢い。段階が上がった直後は大きく、そのあとも脈打つ
+                float gush = gu.gushT > 0 ? 1 + 0.6f * gu.gushT : 1;
+                if (gu.ph == 0) gu.ph = 0.01f + Random.value * 6.3f;
+                if (s > 0) gu.vomit.transform.localScale = new Vector3(s * gush, s * gush * (1 + 0.12f * Mathf.Sin(now * 14 + gu.ph)), s * gush);
+                if (gu.gushT > 0) gu.gushT = Mathf.Max(0, gu.gushT - Time.deltaTime);
+                bool live = state == "play" && !gu.taken && !gu.sunk;
+                var p = gu.transform.position;
+                if (tier > gu.vomitTier && tier < 4 && live)
                 {
-                    var p = gu.transform.position;
-                    for (int k = 0; k < 7; k++) SpawnSplash(p + Vector3.up * 0.34f, RAINBOW_COLS[k % RAINBOW_COLS.Length], 2);
+                    for (int k = 0; k < 12; k++) SpawnSplashLocal(p + Vector3.up * 0.34f, RAINBOW_COLS[k % RAINBOW_COLS.Length], 2, true);
+                    gu.gushT = 1;
+                    GuestPuddle(gu, new[] { 0f, 0.32f, 0.46f, 0.62f }[tier]);
                 }
+                // 傷んでいる間は、ときどき虹を吐く（段階が上なほど多く）
+                if (tier >= 1 && tier < 4 && live && (gu.dripT -= Time.deltaTime) <= 0)
+                {
+                    gu.dripT = new[] { 0f, 1.2f, 0.6f, 0.3f }[tier];
+                    SpawnSplashLocal(p + Vector3.up * 0.3f, RAINBOW_COLS[Random.Range(0, 7)], 1 + (tier >> 1), true);
+                }
+                if (tier == 4 && gu.ring == null && !gu.taken && !gu.sunk) GuestHalo(gu);
+                if (gu.ring != null) HaloMove(gu);
                 gu.vomitTier = tier;
             }
+            PuddleTick(Time.deltaTime);
         }
 
         // ================================================================ 毎フレーム（見た目だけ）
@@ -258,7 +411,7 @@ namespace Nekorobo
         void ClearFx()
         {
             splash.Clear(); puffs.Clear(); flashes.Clear(); marks.Clear(); arrows.Clear(); dropped.Clear();
-            bursts.Clear(); vipLook = null;
+            bursts.Clear(); vipLook = null; puddles.Clear();
         }
 
         // ================================================================ 落ちた料理

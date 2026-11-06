@@ -24,6 +24,8 @@ namespace Nekorobo
         public static bool bloom = true;
         public static float bloomStr = 0.6f, bloomTh = 0.85f;
         public static int bloomRad = 5;         // 広がり（段数 2〜6）
+        // 照明ごとの倍率（lights.js の expo・bloom。applyLight が入れる）
+        public static float lightExpo = 1, lightBloom = 1;
 
         static FinishPass pass;
         static bool hooked;
@@ -104,7 +106,7 @@ namespace Nekorobo
                         });
                     }
                     bright.SetVector("_Hp", new Vector4(0.5f / w, 0.5f / h));
-                    bright.SetFloat("_Th", bloomTh); bright.SetFloat("_Expo", expo);
+                    bright.SetFloat("_Th", bloomTh); bright.SetFloat("_Expo", expo * lightExpo);
                     Draw(rg, src, B[0], bright, 0, false);
                     for (int i = 1; i < n; i++)
                     {
@@ -117,13 +119,13 @@ namespace Nekorobo
                         Draw(rg, B[i], B[i - 1], up[i], 2, true);            // 1つ上の段に足す
                     }
                     bloomTex = B[0];
-                    bs = bloomStr / n;                                       // 段を重ねるほど明るくなるので、段の数で割る
+                    bs = bloomStr * lightBloom / n;                                       // 段を重ねるほど明るくなるので、段の数で割る
                 }
 
                 // ---- 露出・ブルーム・トーンマッピングを掛けて、新しい絵へ
                 desc.name = "NkFinish"; desc.clearBuffer = false;
                 var dst = rg.CreateTexture(desc);
-                fin.SetFloat("_Expo", expo); fin.SetFloat("_Tone", tone); fin.SetFloat("_BloomStr", bs);
+                fin.SetFloat("_Expo", expo * lightExpo); fin.SetFloat("_Tone", tone); fin.SetFloat("_BloomStr", bs);
                 using (var b = rg.AddRasterRenderPass<Data>("NkFinish", out var d))
                 {
                     d.src = src; d.bloom = bloomTex; d.mat = fin; d.pass = 3;

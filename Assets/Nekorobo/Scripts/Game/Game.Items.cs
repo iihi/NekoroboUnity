@@ -228,16 +228,77 @@ namespace Nekorobo
             var b = p - fwd;
             if (!Tiles.IsFloor(Tiles.At(map, b))) b = p;      // 床の無い所へは置かない
             var c = Coord.Cell(Coord.ToI(b.x), Coord.ToJ(b.z));
-            var m = BananaMesh(new Vector3(c.x, 0.07f, c.z));
+            var m = BananaMesh(new Vector3(c.x, 0.0f, c.z));          // 皮は床に立てる（前の玉の形は 0.07 浮かせていた）
             bananas.Add(new Banana { p = c, mesh = m, owner = P, nid = ++nidSeq });
             Say(P, "置いたにゃ！", 0.9f);
         }
 
+        // バナナの皮は、デザイナーのモデル（assets/oc/item/banana01.glb。models.json の "banana"）。
+        // 上から見下ろすカメラだと寝て見えるので、見本の絵（横から見た形）に近づくよう、カメラの向きに縦へ伸ばし
+        // 奥行きを縮めて置く（viewDeg＝[方位, 見上げる角]。床に着いたまま）。bright（色の倍率）と glow（自分で光る）で明るく。
+        // 読めないときだけ前の内蔵の形（縦に立った皮）
         Transform BananaMesh(Vector3 at)
         {
-            var m = Part.Add(fxRoot, MeshGen.Sphere(0.22f, 12, 8), Mats.Get(0xf5d020, 0.6f), at, true, "Banana").transform;
-            m.localScale = new Vector3(1, 0.34f, 1.25f);
-            return m;
+            var M = ModelStore.For("banana", shop.n);
+            if (M != null)
+            {
+                var c = M.cfg;
+                var g = new GameObject("Banana").transform; g.SetParent(fxRoot, false); g.localPosition = at;
+                var tg = new GameObject("View").transform; tg.SetParent(g, false);
+                var o = new GameObject("Model").transform;
+                var inst = Object.Instantiate(M.roots[0], o, false);
+                inst.transform.localPosition = Vector3.zero; inst.transform.localRotation = Quaternion.Euler(0, 180, 0);
+                inst.SetActive(true);
+                float bright = J.F(c, "bright", 0), glow = J.F(c, "glow", 0);
+                foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+                {
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On; r.receiveShadows = true;
+                    if (bright <= 0 && glow <= 0) continue;
+                    var ms = r.materials;
+                    foreach (var m in ms)
+                    {
+                        if (bright > 0) ModelStore.SetMatColor(m, new Color(bright, bright, bright, 1));
+                        if (glow > 0 && m.HasProperty("emissiveFactor"))
+                        {
+                            var tx = m.HasProperty("baseColorTexture") ? m.GetTexture("baseColorTexture") : null;
+                            if (tx != null && m.HasProperty("emissiveTexture")) m.SetTexture("emissiveTexture", tx);
+                            m.SetColor("emissiveFactor", new Color(glow, glow, glow));
+                        }
+                    }
+                    r.materials = ms;
+                }
+                float scl = M.scaleNum > 0 ? M.scaleNum : 1;
+                o.localScale = Vector3.one * scl;
+                o.localPosition = Coord.W(M.offset.x, M.offset.y, M.offset.z);
+                var vd = c != null ? c["viewDeg"] as Newtonsoft.Json.Linq.JArray : null;
+                float D = Mathf.Deg2Rad;
+                if (vd != null && vd.Count >= 2)
+                {
+                    float vAz = (float)vd[0], vEl = (float)vd[1], e = Mathf.Max(vEl, Mathf.Min(80, cam.elev)) * D;
+                    o.localRotation = Part.Euler3(M.rotDeg.x * D, M.rotDeg.y * D - vAz * D, M.rotDeg.z * D);
+                    // 傾けると床から浮くので、カメラの向きに**高さを伸ばし奥行きを縮める**
+                    var sG = new GameObject("Squash").transform; sG.SetParent(tg, false);
+                    sG.localScale = new Vector3(1, Mathf.Cos(vEl * D) / Mathf.Cos(e), Mathf.Sin(vEl * D) / Mathf.Sin(e));
+                    o.SetParent(sG, false);
+                    tg.localRotation = Part.Euler3(0, cam.azim * D, 0);
+                }
+                else { o.localRotation = Part.Euler3(M.rotDeg.x * D, M.rotDeg.y * D, M.rotDeg.z * D); o.SetParent(tg, false); }
+                return g;
+            }
+            // 内蔵の形：立っている皮（少し反らせる）と、根元から開いた皮3枚
+            var b = new GameObject("Banana").transform; b.SetParent(fxRoot, false); b.localPosition = at;
+            var peel = Mats.Get(0xf7d21e, 0.45f);
+            var body = new GameObject("Body").transform; body.SetParent(b, false); body.localRotation = Part.Euler3(0, 0, -0.12f);
+            var st = Part.Add(body, MeshGen.Capsule(0.085f, 0.28f, 10), peel, new Vector3(0, 0.22f, 0), true, "Peel");
+            Part.Add(body, MeshGen.Cylinder(0.03f, 0.038f, 0.07f, 10), Mats.Get(0x8cb83a, 0.6f), new Vector3(0, 0.46f, 0), true, "Stem");
+            foreach (var a2 in new[] { 0.2f, 2.25f, 4.2f })
+            {
+                var f = new GameObject("Flap").transform; f.SetParent(b, false); f.localRotation = Part.Euler3(0, a2, 0);
+                var fl = Part.Add(f, MeshGen.Capsule(0.062f, 0.17f, 8), peel, Coord.W(0.15f, 0.038f, 0), true, "Flap");
+                fl.transform.localRotation = Part.Euler3(0, 0, -Mathf.PI / 2 + 0.22f);
+                fl.transform.localScale = new Vector3(0.32f, 1, 1);
+            }
+            return b;
         }
 
         void UpdateBananas(float dt)

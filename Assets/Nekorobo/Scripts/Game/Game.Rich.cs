@@ -100,11 +100,11 @@ namespace Nekorobo
                                 new Vector2(PickupOffset + 1.0f, -(e - 1.0f)), new Vector2(PickupOffset + 1.5f, 0) };
             foreach (var t2 in tries)
             {
-                var w = counterPos + counterRot * new Vector3(t2.x, 0, t2.y);
+                var w = counterPos + counterRot * Coord.W(t2.x, 0, t2.y);
                 var td = Tiles.Def(Tiles.At(map, w));
                 if (td != null && td.floor && !propBlock.Contains(new Vector2Int(Coord.ToI(w.x), Coord.ToJ(w.z)))) return new Vector3(w.x, 0, w.z);
             }
-            var d = counterPos + counterRot * new Vector3(PickupOffset + 1.5f, 0, 0);
+            var d = counterPos + counterRot * Coord.W(PickupOffset + 1.5f, 0, 0);
             return new Vector3(d.x, 0, d.z);
         }
 

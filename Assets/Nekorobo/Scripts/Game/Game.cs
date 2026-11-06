@@ -307,7 +307,7 @@ namespace Nekorobo
             if (tuneBack != null) { T.CopyFrom(tuneBack); tuneBack = null; }
             if (stage.tune != null) { tuneBack = T.Clone(); T.Apply(stage.tune); }
             t = 0; frames = 0; shopDmg = 0; oi = 0; done = 0; result = null; shake = 0; timeUp = false; tickS = -1;
-            RichReset();
+            RichReset(); iceMat = null;
             state = "ready"; readyT = 3.999f;
             ModelStore.ResetSeq(stage.n);                  // 人違いのモデルを配る順番を、面ごとに数え直す
             nidSeq = 0; byNid.Clear();                     // 物の通し番号は面ごとに 1 から（JS版と同じ）
@@ -319,6 +319,8 @@ namespace Nekorobo
             foreach (var P in players) Say(P, "ガンバルにゃ！", 2.2f);
             SyncCounterPlates();
             FitCamera();
+            bg0 = null; carBeam.Clear(); glow0.Clear(); out0.Clear();
+            ApplyLight();                                  // 照明（店の中×時間帯。lights.js）
             hud.OnStage();
             NetAfterBuild();                               // オンライン：ゲストは物理を止める
             TutBegin();                                    // 遊んでいる間の案内（ステージの hints）
@@ -361,9 +363,19 @@ namespace Nekorobo
             P.look = RobotLook.Build(R.transform, P.col, TF.bodyTint);
             // オーバークック風のロボ（models.json の robot）。誰の機体か分かるように、素材にプレイヤーの色を混ぜる
             // （素材の名前が player… の所は色そのもの、screen… の所は混ぜない）。顔と料理の皿は残して attach の所へ置き直す
+            // デザイナー製の配膳ロボは1P〜4Pの色違いを持っている（tint:false）ので、その人の番号のモデルを使い、色は混ぜない。
+            // 顔（faceMat）は表情ごとの絵の差し替え、胴の画面（msgMat）にはセリフを出す（JS版 robotScreens）
             var tinted = new List<Material>();
-            if (ApplyModel(R, P.look.root, "robot", null, new ModelOpts { tint = Mats.Hex(P.col), tintAmt = TF.bodyTint, tinted = tinted }) != null)
+            var RMc = ModelStore.For("robot", shop.n);
+            bool tintOk = RMc == null || RMc.cfg == null || RMc.cfg["tint"] == null || (bool)RMc.cfg["tint"];
+            var rmT = ApplyModel(R, P.look.root, "robot", "robot_" + (P.idx + 1) + "p",
+                                 new ModelOpts { tint = tintOk ? Mats.Hex(P.col) : (Color?)null, tintAmt = TF.bodyTint, tinted = tinted });
+            if (rmT != null)
             {
+                P.look.Screens(rmT, RMc.cfg);
+                if (!tintOk) foreach (var r in rmT.GetComponentsInChildren<Renderer>(true)) foreach (var m in r.materials) if (!tinted.Contains(m)) tinted.Add(m);
+                if (P.look.faceMat != null) tinted.Remove(P.look.faceMat);
+                if (P.look.msgMat != null) tinted.Remove(P.look.msgMat);
                 P.look.modelMats = tinted;
                 P.look.modelBase = tinted.ConvertAll(m => ModelStore.MatColor(m));
             }
@@ -624,6 +636,8 @@ namespace Nekorobo
             CraneTick(Time.deltaTime);
             VipRender(Time.deltaTime);
             UpdateBursts(Time.deltaTime);
+            LightTick(Time.deltaTime);
+            ChefTick(Time.deltaTime);
         }
 
         // ================================================================ 1/60秒ごとの更新（JS版 step）
@@ -1161,11 +1175,10 @@ namespace Nekorobo
 
         void GuestDown(Ent e)
         {
-            if (e.ring != null) return;
-            hud.Pop(e.Pos + Vector3.up * 0.8f, "☆", 0xe8b400, true);
+            // 見た目（虹の破裂・「昇天！」・頭の金の輪）は TickGuestVomit（GuestHalo）が出す。ここは音だけ
+            if (e.downSe) return;
+            e.downSe = true;
             Se("faint", e.Pos);
-            e.ring = Part.Add(stageRoot, MeshGen.Torus(0.2f, 0.035f, 8, 20), Mats.Get(0xe8b400), e.Pos, shadow: false, name: "DownRing");
-            e.ring.transform.rotation = Part.Euler3(Mathf.PI / 2, 0, 0);
         }
 
         void DownPlayer(Player P, float rev)
@@ -1564,6 +1577,7 @@ namespace Nekorobo
                 P.look.SetDamaged(P.botDmg >= 100);
                 InvGlow(P);
                 P.look.DrawFace(P.face);
+                P.look.DrawMsg(P.msgT > 0 ? Lang.Tr(P.msg) : "");      // 胴の画面（メッセージエリア）
                 if (P.ring != null)
                 {
                     var rp = P.ent.transform.position;
@@ -1572,7 +1586,7 @@ namespace Nekorobo
                 }
             }
             foreach (var g in guests)
-                if (g.ring != null) { g.ring.transform.position = g.transform.position + Vector3.up * 0.55f; }
+                { }
         }
 
         public void Say(Player P, string text, float dur) { NetEv("say", P.idx, text, dur); P.msg = text; P.msgT = dur; }
