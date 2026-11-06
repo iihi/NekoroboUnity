@@ -46,6 +46,9 @@ namespace Nekorobo
         /// <summary>止める（エディタで再生を止める・コンパイルし直す前。EosHost を畳む前に呼ぶ）</summary>
         public static void Stop() { OnQuitting(); }
 
+        /// <summary>送る前の物を捨てる（端末の記録を消したとき）</summary>
+        public static void Forget() { queue.Clear(); }
+
         /// <summary>取った実績を送る（ログインする前なら貯めておく）</summary>
         public static void Unlock(string id)
         {
@@ -193,6 +196,7 @@ namespace Nekorobo
         public static void Unlock(string id) { }
         public static void Tick() { }
         public static void Stop() { }
+        public static void Forget() { }
     }
 }
 #endif

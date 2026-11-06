@@ -101,6 +101,14 @@ namespace Nekorobo
                 PlayerPrefs.SetString(ACH_KEY, v.ToString(Newtonsoft.Json.Formatting.None)); PlayerPrefs.Save();
             }
             public static bool Has(string id) { Load(); return got.ContainsKey(id); }
+            /// <summary>この端末の記録を消す（デバッグの「実績の記録を消す」）。EOS 側は消えない</summary>
+            public static void Clear()
+            {
+                Load();
+                got.Clear(); items.Clear(); stages.Clear();
+                PlayerPrefs.DeleteKey(ACH_KEY); PlayerPrefs.Save();
+                EosAch.Forget();
+            }
         }
 
         public static AchDef AchOf(string id) { foreach (var a in ACHS) if (a.id == id) return a; return null; }

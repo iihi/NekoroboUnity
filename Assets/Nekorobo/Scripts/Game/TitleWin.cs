@@ -405,7 +405,13 @@ namespace Nekorobo
                 Tile("ステージの並び", "green", "free", () => Application.OpenURL("http://localhost:8123/debug.html"),
                      "HTML版の「ステージの並び」をブラウザで開きます（コースとフリープレイの並び・説明）。", "order"),
                 Tile("ストーリーの記録を消す", "grey", "trash", () => { g.ClearStory(); g.Toast("ストーリーの記録を消しました"); Go("Debug"); },
-                     "途中まで進んだ記録を消します。", "clr"));
+                     "途中まで進んだ記録を消します。", "clr"),
+                // 実績を試し直す用。EOS 側はこの端末からは消せないので、Dev Portal でプレイヤーを検索してリセットする
+                // （端末の記録が残っていると、次のログインで EOS へ送り直されて元に戻るため、両方消す）
+                Tile("実績の記録を消す", "purple", "trash", () => ConfirmOpen("実績の記録を消しますか？",
+                         "この端末の実績（取った物・使ったアイテム・遊んだ面）を消します。<br><b>EOS 側の実績は消えません</b>。Dev Portal でプレイヤーを検索してリセットしてください。",
+                         "消す", "やめる", "Debug", () => { Game.AchStore.Clear(); g.Toast("実績の記録を消しました"); Go("Debug"); }),
+                     "この端末の実績の記録を消します（試し直す用）。", "achclr"));
             Btn(st, "最初からアイテムを持つ：" + (itemsOn ? "オン" : "オフ") + "　▾", "sec", () =>
             {
                 if (itemsOn) PlayerPrefs.DeleteKey(Game.ITEMS_KEY); else PlayerPrefs.SetString(Game.ITEMS_KEY, "all");
