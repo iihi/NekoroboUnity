@@ -1279,7 +1279,7 @@ namespace Nekorobo
                 e.wet += dt;
                 var v = e.rb.linearVelocity;
                 float k = Mathf.Min(1, T.waterDrag * dt);
-                e.rb.linearVelocity = new Vector3(v.x * (1 - k), Mathf.Max(v.y, -1.6f), v.z * (1 - k));
+                if (!e.rb.isKinematic) e.rb.linearVelocity = new Vector3(v.x * (1 - k), Mathf.Max(v.y, -1.6f), v.z * (1 - k));
                 if (td.burn)
                 {
                     float burn = Toughed(T.lavaBurn);

@@ -201,6 +201,8 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.NetSync.cs` | ゲーム中の同期（JS版 npPayload / npApply / npSendInput）と、結果・ショップの便り。物は面を組んだ順の通し番号（nid）で指す |
 | `Editor/NetReset.cs` | 再生を止めるとき・コンパイルし直す前に、通信を畳む |
 | `Scripts/Game/HudBar.cs` | 上の帯（清書 1020。JS版 #hud2）。絵は HTML版の `assets/ui/hud/`（面の札・人の札・HP・アイテム・順位・クロッシュ）、座標は PSD の 1280×720 のまま。人の札は 263px おきで前の人が上。字は変わる物だけ重ねる。金額は増えたときだけ数え上げて跳ねる |
+| `Scripts/Game/FinalWin.cs` | ラウンドマッチの最終結果（JS版 showFinal）。個人戦は表彰台、チーム戦は WIN／LOSE、1人・協力は合計の利益。右にラウンドごとの内訳 |
+| `Scripts/Game/Game.Emote.cs` | 煽り（JS版 emoTick など）。L2・Q／R2・E の板と右スティック・X / C で選び、頭の上にフキダシ。絵文字は `Resources/Ui/Emo` の PNG（Chrome で描いた物）。オンラインはホストが配る |
 | `Scripts/Game/ComicUi.cs` | マンガ調の大きな知らせの部品（ギザギザの吹き出し・網点・集中線・太い縁取りの字。JS版 comicBurstSvg / speedLinesSvg）。STAGE CLEAR!!／TIME UP!!／FAILED…（StoryUi.Bang）と、高額・VIP オーダー出現（HudVip）で使う |
 | `Scripts/Game/ShineText.cs` / `Thicken.cs` | 順位の数字の金・銀・銅のグラデーションと走る光 ／ 字を太らせる（CSS の font-weight:900 の代わり） |
 | `Scripts/Game/HudTop.cs` | 上の帯の前の並び（面の名前・店舗ダメージ・NEXT・コンボ・タイム・お金）と右の人ごとの札。JS版 #topbar / #pcards。設定パネルの「上の帯を新しい並び（試し）にする」を切るとこちら |

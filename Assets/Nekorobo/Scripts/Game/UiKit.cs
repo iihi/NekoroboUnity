@@ -114,7 +114,7 @@ namespace Nekorobo
         {
             var r = Rect(parent, name);
             var t = r.gameObject.AddComponent<Text>();
-            t.font = Fonts.UI; t.fontSize = Mathf.RoundToInt(size); t.color = c; t.text = s;
+            t.font = Fonts.UI; t.fontSize = Mathf.RoundToInt(size); t.color = c; t.text = Lang.Tr(s);     // 字は訳す（辞書に無ければそのまま）
             t.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
             t.alignment = al; t.raycastTarget = false; t.supportRichText = true;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;

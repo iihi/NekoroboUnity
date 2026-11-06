@@ -99,7 +99,7 @@ namespace Nekorobo
             var r = go.GetComponent<RectTransform>();
             r.SetParent(parent, false);
             var t = go.GetComponent<Text>();
-            t.font = Fonts.UI; t.fontSize = size; t.fontStyle = st; t.color = c; t.text = s;
+            t.font = Fonts.UI; t.fontSize = size; t.fontStyle = st; t.color = c; t.text = Lang.Tr(s);
             t.alignment = TextAnchor.MiddleCenter; t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
             return t;
@@ -190,7 +190,7 @@ namespace Nekorobo
                 float left = Mathf.Max(0, 100 - P.botDmg);
                 Project(rp + Vector3.up * 0.82f, m.r);
                 SetFill(m.hp, left / 100f, P.down ? Mats.Hex(0x5f6672) : left > 50 ? GREEN : (left > 25 ? ORANGE : RED));
-                m.nm.text = P.down ? (P.revT > 0 ? P.Label + " 復帰まで " + Mathf.CeilToInt(P.revT) : P.Label + " リタイア")
+                m.nm.text = P.down ? (P.revT > 0 ? P.Label + " " + Lang.Tr("復帰まで {0}", Mathf.CeilToInt(P.revT)) : P.Label + " " + Lang.Tr("リタイア"))
                                    : P.Label + " " + Mathf.RoundToInt(left) + "%";
                 FitPill(m.nm);
                 // 王冠は名前の左、故障は名前の右に、はみ出して付ける（担当）
@@ -240,7 +240,8 @@ namespace Nekorobo
                 if (P.msgT > 0 && !string.IsNullOrEmpty(P.msg))
                 {
                     Project(rp + Vector3.up * 1.28f, m.msg);
-                    if (m.msgText.text != P.msg) { m.msgText.text = P.msg; FitBubble(m); }
+                    var said = Lang.Tr(P.msg);
+                    if (m.msgText.text != said) { m.msgText.text = said; FitBubble(m); }
                 }
                 else m.msg.gameObject.SetActive(false);
                 // ---- 配膳先

@@ -212,8 +212,16 @@ namespace Nekorobo
                 ["oi"] = oi, ["sd"] = R1(shopDmg),
             };
             var ol = new JArray();
-            foreach (var o in orders) ol.Add(new JArray(Dishes.All.IndexOf(o.dish), guests.IndexOf(o.guest), o.done ? 1 : 0));
+            foreach (var o in orders) ol.Add(new JArray(Dishes.All.IndexOf(o.dish), guests.IndexOf(o.guest), o.done ? 1 : 0, o.rich ? 1 : 0, Mathf.RoundToInt(o.richAmt)));
             var v = NpSame("ol", ol, full); if (v != null) d["ol"] = v;
+            // VIP オーダー（一覧は変わったときだけ。いまの VIP は残り時間が動くので毎回）
+            var vp = new JArray();
+            foreach (var o in vips) vp.Add(new JArray(Dishes.All.IndexOf(o.dish), guests.IndexOf(o.guest), o.done ? 1 : 0, players.IndexOf(o.leader),
+                                                    o.res == "ok" ? 1 : o.res == "ng" ? 2 : 0));
+            v = NpSame("vp", vp, full); if (v != null) d["vp"] = v;
+            d["vc"] = vipCur != null && vipPos.HasValue
+                ? (JToken)new JArray(vips.IndexOf(vipCur), R1(vipCur.left), vipCur.at == "stand" ? 1 : 0, R2(vipPos.Value.x), R2(-vipPos.Value.z))
+                : JValue.CreateNull();
             var am = new JArray();
             foreach (var P in players) am.Add(P.aim.HasValue ? (JToken)new JArray(R2(P.aim.Value.x), R2(-P.aim.Value.z)) : JValue.CreateNull());
             v = NpSame("am", am, full); if (v != null) d["am"] = v;
@@ -230,7 +238,8 @@ namespace Nekorobo
             v = NpSame("it", it, full); if (v != null) d["it"] = v;
             var ca = new JArray();
             foreach (var P in players)
-                ca.Add(P.carried != null ? (JToken)new JArray(Dishes.All.IndexOf(P.carried.dish), Mathf.RoundToInt(P.carried.integ), orders.IndexOf(P.carried.order))
+                ca.Add(P.carried != null ? (JToken)new JArray(Dishes.All.IndexOf(P.carried.dish), Mathf.RoundToInt(P.carried.integ), OrdIdx(P.carried.order),
+                                                              Mathf.RoundToInt(RushMult(P.carried.order) * 100))
                                          : JValue.CreateNull());
             d["ca"] = ca;
             var pl = new JArray();
@@ -469,8 +478,31 @@ namespace Nekorobo
                     if (dish != o.dish) { o.dish = dish; ch = true; }
                     if (gi >= 0 && gi < guests.Count) o.guest = guests[gi];
                     o.done = (int)v[2] != 0;
+                    if (v.Count > 4) { o.rich = (int)v[3] != 0; o.richAmt = (float)v[4]; }
                 }
                 if (ch) SyncCounterPlates();
+            }
+            // ---- VIP オーダー。足りなければ器を足してから中身を写す
+            if (A["vp"] is JArray vpa)
+            {
+                while (vips.Count < vpa.Count) vips.Add(new Order { vip = true, dish = Dishes.All[0], guest = guests.Count > 0 ? guests[0] : null, at = "held" });
+                for (int i = 0; i < vpa.Count; i++)
+                {
+                    var v = (JArray)vpa[i]; var o = vips[i];
+                    int di = (int)v[0], gi = (int)v[1], li = (int)v[3], rs = (int)v[4];
+                    if (di >= 0 && di < Dishes.All.Count) o.dish = Dishes.All[di];
+                    if (gi >= 0 && gi < guests.Count) o.guest = guests[gi];
+                    o.done = (int)v[2] != 0;
+                    o.leader = li >= 0 && li < players.Count ? players[li] : null;
+                    o.res = rs == 1 ? "ok" : rs == 2 ? "ng" : null;
+                }
+            }
+            if (A["vc"] != null)
+            {
+                var vc = A["vc"] as JArray;
+                var o = vc != null && (int)vc[0] >= 0 && (int)vc[0] < vips.Count ? vips[(int)vc[0]] : null;
+                if (o != null) { vipCur = o; o.left = (float)vc[1]; o.at = (int)vc[2] != 0 ? "stand" : "held"; vipPos = FromJs((float)vc[3], 0, (float)vc[4]); }
+                else { vipCur = null; vipPos = null; }
             }
             if (A["oi"] != null) { int noi = (int)A["oi"]; if (noi != oi) { oi = noi; SyncCounterPlates(); } }
             if (A["sd"] != null) shopDmg = (float)A["sd"];
@@ -507,9 +539,9 @@ namespace Nekorobo
                     var dish = di >= 0 && di < Dishes.All.Count ? Dishes.All[di] : null;
                     if (dish == null) continue;
                     if (P.netDish != di) { P.netDish = di; P.look.ShowDish(dish); }
-                    int oix = (int)v[2];
-                    var od = oix >= 0 && oix < orders.Count ? orders[oix] : null;
-                    if (od != null) P.carried = new Carried { order = od, dish = dish, integ = (float)v[1] };
+                    var od = OrdAt((int)v[2]);
+                    // 速達の倍率はホストが数えている（受け取った時刻はゲストに届かないので、値をそのまま写す）
+                    if (od != null) P.carried = new Carried { order = od, dish = dish, integ = (float)v[1], rush = v.Count > 3 ? (float)v[3] / 100f : 1 };
                 }
             if (A["pl"] is JArray pl)
                 for (int i = 0; i < pl.Count && i < players.Count; i++)

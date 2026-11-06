@@ -302,9 +302,9 @@ namespace Nekorobo
         {
             bool team = mode == "team";
             int pads = Gamepad.all.Count;
-            Head(st, "ローカル　" + Game.ModeName(mode));
-            Note(st, "枠を押すと、キーボード・パッド・NPCを選べます。"
-                   + (pads > 0 ? "パッドは <b>" + pads + "台</b> つながっています。" : "パッドは未接続です（つないでボタンを1回押すと出ます）。"));
+            Head(st, Lang.Tr("ローカル　{0}", Lang.Tr(Game.ModeName(mode))));
+            Note(st, Lang.Tr("枠を押すと、キーボード・パッド・NPCを選べます。")
+                   + (pads > 0 ? Lang.Tr("パッドは <b>{0}台</b> つながっています。", pads) : Lang.Tr("パッドは未接続です（つないでボタンを1回押すと出ます）。")));
             // 1P〜4Pの札（色は足元のリングと同じ並び）
             var row = st.Row(92);
             float sw = (1098 - 3 * 10) / 4f;
@@ -314,9 +314,9 @@ namespace Nekorobo
                 string col = v == "off" ? "grey" : team ? (teams[i] == 1 ? "red" : "blue") : SEAT_COL[i];
                 Seat(row, i * (sw + 10), sw, (i + 1) + "P" + (team && v != "off" ? "・" + Game.TEAM_NAME[teams[i]] : ""),
                      SlotIc(v), SlotLabel(v) + PadHint(v), col,
-                     () => PickOpen((ii + 1) + "P を選ぶ", "同じパッドを2人に割り当てたときは、あとの枠が外れます。",
+                     () => PickOpen(Lang.Tr("{0}P を選ぶ", ii + 1), "同じパッドを2人に割り当てたときは、あとの枠が外れます。",
                                     SlotOptsWithHint(), v, "Local", x => slots[ii] = x),
-                     (i + 1) + "P は「" + SlotLabel(v) + "」です。押すと、キーボード・パッド・NPCから選べます。", "s" + i);
+                     Lang.Tr("{0}P は「{1}」です。押すと、キーボード・パッド・NPCから選べます。", i + 1, Lang.Tr(SlotLabel(v))), "s" + i);
             }
             var live = Live();
             int n0 = live.FindAll(s => s.team == 0).Count, n1 = live.FindAll(s => s.team == 1).Count;
@@ -339,7 +339,7 @@ namespace Nekorobo
                     }
                 }
             }
-            Btn(st, "ルール：" + Game.ModeName(mode) + "　▾", "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
+            Btn(st, Lang.Tr("ルール：{0}　▾", Lang.Tr(Game.ModeName(mode))), "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
             {
                 new[] { "versus", "個人戦（売上も修理費も個人ごと）", "versus" },
                 new[] { "team", "チーム戦（青と赤。売上も修理費もチームごと）", "team" },
@@ -347,8 +347,9 @@ namespace Nekorobo
             }, mode, "Local", x => mode = x), null, false, "mode");
             Note(st, live.Count == 0 ? "枠が全部「なし」です。1つ以上選んでください。"
                    : oneSide ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（上の 1P：青 などを押すと入れ替わります）。"
-                   : "<b>" + live.Count + "人</b>（" + string.Join("・", live.ConvertAll(s => s.Name).ToArray()) + "）"
-                     + (team ? "　青 <b>" + n0 + "人</b> 対 赤 <b>" + n1 + "人</b>" : "") + "で遊びます。次の画面で面を選びます。");
+                   : team ? Lang.Tr("<b>{0}人</b>（{1}）　青 <b>{2}人</b> 対 赤 <b>{3}人</b>で遊びます。次の画面で面を選びます。",
+                                    live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), n0, n1)
+                   : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray())));
             BtnRow(st, new[] { "面を選ぶ ▶", "戻る" }, new[] { "go", "sec" },
                    new System.Action[] { () => { from = "Local"; next = false; Go("Free"); }, () => Go("Rule") },
                    new[] { live.Count == 0 || oneSide, false });
@@ -482,8 +483,8 @@ namespace Nekorobo
             FreeDescSet(pick, false);
             Note(st, forRoom ? "この面を<b>部屋の全員</b>で遊びます。決めると待機画面へ戻ります。"
                    : next ? "買い物はここまでです。<b>次に遊ぶ面</b>を選んでください。お金・アイテム・強化はそのまま持ち越します。"
-                         + (multi ? "\n<b>" + live.Count + "人</b>（" + string.Join("・", live.ConvertAll(s => s.Name).ToArray()) + "）／" + Game.ModeName(mode) : "")
-                   : multi ? "<b>" + live.Count + "人</b>（" + string.Join("・", live.ConvertAll(s => s.Name).ToArray()) + "）／" + Game.ModeName(mode)
+                         + (multi ? "\n" + Lang.Tr("<b>{0}人</b>（{1}）／{2}", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), Lang.Tr(Game.ModeName(mode))) : "")
+                   : multi ? Lang.Tr("<b>{0}人</b>（{1}）／{2}", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), Lang.Tr(Game.ModeName(mode)))
                            : "1人で遊びます。");
             var pickE = pick == FREE_SLOTS ? null : FreePick(pick);
             BtnRow(st, new[] { forRoom ? "この面にする" : next ? "この面で続ける ▶" : "スタート", next && !forRoom ? "やめてタイトルへ" : "戻る" }, new[] { "go", "sec" },
@@ -727,7 +728,7 @@ namespace Nekorobo
             if (i != idx && items.Count > 0) Game.SeUi("cur");    // 開いたとき（同じ所に立てるだけ）は鳴らさない
             idx = i;
             for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx);
-            if (cap != null) cap.text = items[idx].desc ?? "";
+            if (cap != null) cap.text = Lang.Tr(items[idx].desc ?? "");
             // 面選びの説明。一覧から外れたら、いま選んである面に戻す
             if (page == "Free")
             {
@@ -974,6 +975,7 @@ namespace Nekorobo
 
         void Note(Stack st, string s)
         {
+            s = Lang.Tr(s);
             var t = UiKit.Label(box, s.Replace("<b>", "<b><size=13>").Replace("</b>", "</size></b>"), 12.5f, Color.white, true, TextAnchor.UpperLeft);
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.lineSpacing = 1.15f;

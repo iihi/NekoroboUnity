@@ -131,13 +131,13 @@ namespace Nekorobo
             // ルール。決めるのはホスト（面と同じ）。決めたそばから全員へ配る
             bool team = Lobby.mode == "team";
             if (host)
-                Btn(st, "ルール：" + Game.ModeName(Lobby.mode) + "　▾", "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
+                Btn(st, Lang.Tr("ルール：{0}　▾", Lang.Tr(Game.ModeName(Lobby.mode))), "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
                 {
                     new[] { "versus", "個人戦（売上も修理費も個人ごと）", "versus" },
                     new[] { "team", "チーム戦（青と赤。売上も修理費もチームごと）", "team" },
                     new[] { "coop", "協力（売上も修理費も店舗ぜんぶ）", "coop" },
                 }, Lobby.mode, "Wait", x => { Lobby.mode = x; Lobby.SendRule(); }), null, false, "rule");
-            else Note(st, "ルール：<b>" + Game.ModeName(Lobby.mode) + "</b>");
+            else Note(st, Lang.Tr("ルール：<b>{0}</b>", Lang.Tr(Game.ModeName(Lobby.mode))));
             // 遊び方（フリープレイ／ラウンドマッチ）。続きの最中は変えられない
             if (host && !g.InSession)
             {

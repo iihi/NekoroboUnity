@@ -241,7 +241,7 @@ namespace Nekorobo
             toast = Txt(root, "", 22, TextAnchor.MiddleCenter, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -110), new Vector2(0, -70));
         }
 
-        public void Toast(string s) { toast.text = s; toastT = 2.2f; }
+        public void Toast(string s) { toast.text = Lang.Tr(s); toastT = 2.2f; }
 
         // ---- オンラインの知らせ（JS版 #netwarn と #netwait）
         Image netWarnBg; Text netWarnT;
@@ -449,7 +449,7 @@ namespace Nekorobo
             if (label != readyShown)
             {
                 readyShown = label; readyAnim = 0;
-                center.text = label;
+                center.text = Lang.Tr(label);
                 bool go = label == "スタート！";
                 if (label != "") Game.SeUi(go ? "go" : "count");
                 center.fontSize = go ? 74 : 110;

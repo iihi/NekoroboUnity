@@ -127,7 +127,7 @@ namespace Nekorobo
             r.anchoredPosition = new Vector2(x, -y + size * 0.12f);
             r.sizeDelta = new Vector2(0, size * 1.2f);
             var t = go.GetComponent<Text>();
-            t.font = Font; t.fontSize = Mathf.RoundToInt(size); t.color = col; t.text = s;
+            t.font = Font; t.fontSize = Mathf.RoundToInt(size); t.color = col; t.text = Lang.Tr(s);
             t.alignment = al == 1 ? TextAnchor.UpperRight : al == 2 ? TextAnchor.UpperCenter : TextAnchor.UpperLeft;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
             t.supportRichText = true; t.raycastTarget = false;
