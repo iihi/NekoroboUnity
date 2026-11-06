@@ -412,6 +412,14 @@ namespace Nekorobo
                          "この端末の実績（取った物・使ったアイテム・遊んだ面）を消します。<br><b>EOS 側の実績は消えません</b>。Dev Portal でプレイヤーを検索してリセットしてください。",
                          "消す", "やめる", "Debug", () => { Game.AchStore.Clear(); g.Toast("実績の記録を消しました"); Go("Debug"); }),
                      "この端末の実績の記録を消します（試し直す用）。", "achclr"));
+            // EOS のプレイヤーID（Dev Portal でこの人の実績をリセットするときに検索する ID）。EXE ではコンソールが見えないのでここに出す
+            {
+                string id = EosAch.UserId;
+                Note(st, id != "" ? "EOS のプレイヤーID：<b>" + id + "</b>" : "EOS のプレイヤーID：<i>" + (EosAch.Status != "" ? EosAch.Status : "まだログインしていません") + "</i>");
+                if (id != "")
+                    Btn(st, "EOS のプレイヤーIDをコピー", "sec", () => { GUIUtility.systemCopyBuffer = id; g.Toast("プレイヤーIDをコピーしました"); },
+                        "Dev Portal の「プレイヤーの検索」に貼り付けると、この端末の EOS の実績をリセットできます。", false, "eosid");
+            }
             Btn(st, "最初からアイテムを持つ：" + (itemsOn ? "オン" : "オフ") + "　▾", "sec", () =>
             {
                 if (itemsOn) PlayerPrefs.DeleteKey(Game.ITEMS_KEY); else PlayerPrefs.SetString(Game.ITEMS_KEY, "all");

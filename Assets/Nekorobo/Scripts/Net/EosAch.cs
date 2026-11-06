@@ -46,6 +46,9 @@ namespace Nekorobo
         /// <summary>止める（エディタで再生を止める・コンパイルし直す前。EosHost を畳む前に呼ぶ）</summary>
         public static void Stop() { OnQuitting(); }
 
+        /// <summary>EOS のプレイヤーID（ProductUserId。Dev Portal の「プレイヤーの検索」に入れる物）。ログインしていなければ空</summary>
+        public static string UserId { get { return me != null && state == 2 ? me.ToString() : ""; } }
+
         /// <summary>送る前の物を捨てる（端末の記録を消したとき）</summary>
         public static void Forget() { queue.Clear(); }
 
@@ -197,6 +200,7 @@ namespace Nekorobo
         public static void Tick() { }
         public static void Stop() { }
         public static void Forget() { }
+        public static string UserId { get { return ""; } }
     }
 }
 #endif
