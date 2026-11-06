@@ -1,4 +1,4 @@
-# 実績の仮のアイコン（1024x1024 の PNG）を Chrome で描く。本番の絵が来たら差し替える。
+# 実績の仮のアイコンを Chrome で描く（1024x1024 で描いて、Dev Portal の決まり 256x256・256KB 以下に縮める）。本番の絵が来たら差し替える。
 # python make_icons.py  … icons/ に star1〜3.png（取った）と locked.png（まだ）を作る
 import os, subprocess, re
 here = os.path.dirname(os.path.abspath(__file__))
@@ -26,4 +26,6 @@ for name, stars, locked in [("star1", 1, False), ("star2", 2, False), ("star3", 
     subprocess.run([chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--default-background-color=00000000",
                     "--window-size=1024,1024", "--screenshot=" + png, "file:///" + h.replace("\\", "/")], capture_output=True)
     os.remove(h)
+    from PIL import Image
+    Image.open(png).convert("RGBA").resize((256, 256), Image.LANCZOS).save(png, optimize=True)
     print(name, os.path.exists(png))
