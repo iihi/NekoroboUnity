@@ -116,7 +116,9 @@ namespace Nekorobo
         static void OnQuit() { Net.Close(); Shutdown(); }
 
         /// <summary>毎フレーム回す（Net.Pump から）。</summary>
-        public static void Tick() { if (P != null) P.Tick(); }
+        static int tickFrame = -1;
+        /// <summary>1フレームに1回だけ（通信の NetEos と実績の EosAch の両方から呼ぶ）</summary>
+        public static void Tick() { if (P == null || tickFrame == Time.frameCount) return; tickFrame = Time.frameCount; P.Tick(); }
 
         /// <summary>
         /// 畳む。EXE では終わるとき、エディタでは再生を止めるときとコンパイルし直す前に呼ぶ。

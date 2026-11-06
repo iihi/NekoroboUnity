@@ -574,6 +574,7 @@ namespace Nekorobo
             msg = "";
             Game.SeUi("buy", sv);
             if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
+            g.AchBuy(c.P, W);                                // 実績（お買い物デビュー・能力を最大まで）
             if (IsViewer(c.P)) cards[c.idx].flash = 0.2f;
         }
 

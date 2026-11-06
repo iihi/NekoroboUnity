@@ -32,6 +32,9 @@ namespace Nekorobo
         public bool EndingOpen { get { return ending != null && ending.Open; } }
         public void ShowEnding() { CloseShop(); resultWin.Close(); ending.Show(); }
         FinalWin finalWin;
+        AchToast achToast;
+        /// <summary>実績を取ったときの知らせ（いくつも取ったら1つずつ順に）</summary>
+        public void ShowAch(AchDef a) { if (achToast != null) achToast.Push(a); }
         public bool FinalOpen { get { return finalWin != null && finalWin.Open; } }
         /// <summary>ラウンドマッチの最終結果（JS版 showFinal）</summary>
         public void ShowFinal() { CloseShop(); resultWin.Close(); finalWin.Show(); }
@@ -197,6 +200,7 @@ namespace Nekorobo
             // ---- エンディング（全ステージ終了。ショップと同じ地）
             ending = new EndingWin(root, GetComponent<Game>());
             finalWin = new FinalWin(root, GetComponent<Game>());
+            achToast = new AchToast(root, GetComponent<Game>());
 
             // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
             Story = new StoryUi(root, GetComponent<Game>());
@@ -413,6 +417,8 @@ namespace Nekorobo
         void Update()
         {
             Net.Pump();                                    // 部屋サーバーから届いた便りを配る（タイトルの間も）
+            EosAch.Tick();                                 // 実績を EOS へ（鍵が無ければ何もしない）
+            if (achToast != null) achToast.Tick(Time.unscaledDeltaTime);
             NetWaitTick();
             if (wipe != null) wipe.Tick(Time.unscaledDeltaTime);
             if (title != null) title.SsTick(Time.unscaledDeltaTime);      // ステージ選択（投票）。参加者はタイトルが閉じていても出る

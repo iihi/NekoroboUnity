@@ -198,6 +198,7 @@ namespace Nekorobo
                 if (courseIndex + 1 < course.stages.Count) { LoadCourseStage(courseIndex + 1); return; }
                 // 最後の面のあとはエンディング。通したので途中経過の記録は消す
                 ClearStory();
+                if (!NpOn) AchStoryEnd();
                 hud.ShowEnding();
                 return;
             }

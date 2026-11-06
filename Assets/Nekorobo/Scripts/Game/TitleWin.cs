@@ -420,7 +420,16 @@ namespace Nekorobo
         class FreeE { public StageCfg c; public string n, desc, shop, refKey; public bool missing; }
         List<FreeE> flist;
 
-        List<FreeE> FreeList()
+        /// <summary>フリープレイの一覧に並んでいる面の記号（実績「全ステージ制覇」。JS版 freeList().slice(0, FREE_SLOTS)）</summary>
+        public static List<string> FreeKeys()
+        {
+            var o = new List<string>();
+            var l = FreeList();
+            for (int i = 0; i < l.Count && i < FREE_SLOTS; i++) if (!l[i].missing) { var k = Game.AchStageKey(l[i].c); if (k != null) o.Add(k); }
+            return o;
+        }
+
+        static List<FreeE> FreeList()
         {
             var o = new List<FreeE>();
             var fr = Course.Load("free");
@@ -949,7 +958,76 @@ namespace Nekorobo
         }
 
         /// <summary>実績の一覧（段階5で中身を入れる）</summary>
-        void AchList(Stack st) { Note(st, Lang.Tr("準備中です。")); }
+        // ---- 実績の一覧（JS版 TITLE_PAGE.Ach）。仕分けの札で切り替える。★1 は取る前から中身が見え、★2・★3 は取るまで「？？？」
+        static int achTab;
+        void AchList(Stack st)
+        {
+            Game.AchStore.Load();
+            var got = Game.AchStore.got;
+            int n = 0, all = 0; foreach (var a in Game.ACHS) { if (a.tbd) continue; all++; if (got.ContainsKey(a.id)) n++; }
+            {
+                var t = st.Text("<size=28><color=#ffd34a>" + n + "</color></size> / " + all + "<size=13>　" + Lang.Tr("★が多いほど難しい。★2・★3 は取るまで中身が伏せてあります") + "</size>",
+                                19, Color.white, TextAnchor.MiddleCenter, 30);
+                Shade(t, 0.5f);
+            }
+            // 仕分けの札
+            {
+                var r = st.Row(36);
+                int nc = Game.ACH_CATS.Length; float gap = 8, w = (st.w - gap * (nc - 1)) / nc;
+                for (int i = 0; i < nc; i++)
+                {
+                    int ci = i, cn = 0, cg = 0;
+                    foreach (var a in Game.ACHS) if (a.c == i && !a.tbd) { cn++; if (got.ContainsKey(a.id)) cg++; }
+                    BtnAt(r, i * (w + gap), 0, w, 32, Lang.Tr(Game.ACH_CATS[i]) + " " + cg + "/" + cn, achTab == i ? "pk" : null,
+                          () => { achTab = ci; Go("Ach"); }, null, false, "at" + i, 13);
+                }
+            }
+            // カード（3列）
+            {
+                var list = new List<AchDef>(); foreach (var a in Game.ACHS) if (a.c == achTab) list.Add(a);
+                const float pad = 12, gap = 8, ch = 66;
+                int rows = Mathf.Max(3, (list.Count + 2) / 3);
+                float W = 1000, cw = (W - pad * 2 - gap * 2) / 3, H = pad * 2 + rows * ch + (rows - 1) * gap;
+                var r = st.Row(H, 8);
+                var bg = UiKit.Img(r, new Color(22 / 255f, 28 / 255f, 42 / 255f, 0.82f), 14, "AchGrid");
+                var br = bg.rectTransform; br.anchorMin = br.anchorMax = new Vector2(0.5f, 1); br.pivot = new Vector2(0.5f, 1);
+                br.sizeDelta = new Vector2(W, H); br.anchoredPosition = Vector2.zero;
+                Ring(bg.transform, new Color(1, 1, 1, 0.85f), 3, 14);
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var a = list[i];
+                    bool has = got.ContainsKey(a.id), open = has || a.s <= 1;
+                    float x = pad + (i % 3) * (cw + gap), y = pad + (i / 3) * (ch + gap);
+                    var cd = UiKit.Img(bg.transform, has ? new Color(1, 211 / 255f, 74 / 255f, 0.2f) : new Color(0, 0, 0, 0.35f), 10, "Card");
+                    var cr = cd.rectTransform; cr.anchorMin = cr.anchorMax = new Vector2(0, 1); cr.pivot = new Vector2(0, 1);
+                    cr.sizeDelta = new Vector2(cw, ch); cr.anchoredPosition = new Vector2(x, -y);
+                    Ring(cd.transform, has ? Mats.Hex(0xffd34a) : new Color(1, 1, 1, 0.22f), 2, 10);
+                    System.Func<string, float, float, Color, Text> L = (txt, yy, size, c) =>
+                    {
+                        var t = UiKit.Label(cd.transform, txt, size, c, true, TextAnchor.UpperLeft);
+                        var tr = t.rectTransform; tr.anchorMin = new Vector2(0, 1); tr.anchorMax = new Vector2(1, 1); tr.pivot = new Vector2(0, 1);
+                        tr.offsetMin = new Vector2(12, -(yy + size + 4)); tr.offsetMax = new Vector2(-12, -yy);
+                        t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Overflow;
+                        return t;
+                    };
+                    if (a.tbd) { L("？？", 22, 16, Color.white); L(Lang.Tr("準備中"), 42, 12, new Color(1, 1, 1, 0.75f)); continue; }
+                    L("<color=#ffd34a>" + new string('★', a.s) + "</color><color=#ffffff33>" + new string('★', 3 - a.s) + "</color>", 6, 13, Color.white);
+                    var nm = L(open ? Lang.Tr(a.n) : "？？？", 22, 16, new Color(1, 1, 1, has ? 1 : 0.55f));
+                    var ds = L(open ? Lang.Tr(a.d) : "？？？", 42, 11, new Color(1, 1, 1, has ? 0.75f : 0.42f));
+                    ds.resizeTextForBestFit = true; ds.resizeTextMinSize = 8; ds.resizeTextMaxSize = 11;
+                    ds.rectTransform.offsetMin = new Vector2(12, -(ch - 4));
+                    ds.verticalOverflow = VerticalWrapMode.Truncate;
+                    if (has)
+                    {
+                        var ok = UiKit.Img(cd.transform, Mats.Hex(0xffd34a), 9, "Ok");
+                        var orr = ok.rectTransform; orr.anchorMin = orr.anchorMax = new Vector2(1, 1); orr.pivot = new Vector2(1, 1);
+                        var ot = UiKit.Label(ok.transform, Lang.Tr("達成"), 11, Mats.Hex(0x3a2300), true, TextAnchor.MiddleCenter);
+                        UiKit.Stretch(ot.rectTransform);
+                        orr.sizeDelta = new Vector2(ot.preferredWidth + 16, 18); orr.anchoredPosition = new Vector2(-10, -7);
+                    }
+                }
+            }
+        }
 
         // 実績の一覧（中身は実績のところで作る）
         void PageAch(Stack st)

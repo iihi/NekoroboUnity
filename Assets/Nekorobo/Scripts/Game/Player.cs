@@ -135,7 +135,7 @@ namespace Nekorobo
         // 攻撃で奪った・奪われたお金（この面）と、上の帯へ飛んでいる途中の額
         public float lootIn, lootOut, lootFly;
         // 実績用（この面）
-        public float achDmg; public bool achWet;
+        public float achDmg; public bool achWet, achFlaw;     // 実績：面の中の最大ダメージ・水から跳んだ・崩れた料理を届けた
         public bool emoOpen;                  // 煽りの板を開いている（その間は X / C で持ち替えない）
         public float emoCd;                   // 煽りを次に出せるまでの秒数（連打で嫌がらせにならないように）
         public int emoQs = -1, emoQi;         // 待ちの間に離した煽り（明けたら出す）

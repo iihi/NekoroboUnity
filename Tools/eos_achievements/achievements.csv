@@ -1,0 +1,40 @@
+﻿id,category,stars,hidden,name_ja,description_ja,name_en,description_en
+deliver,はじめて,1,no,はじめての配膳,料理を1つ届ける,First Delivery,Deliver a dish
+clear,はじめて,1,no,ラウンドクリア,面を1つクリアする,Round Clear,Clear a stage
+buy,はじめて,1,no,お買い物デビュー,ショップで何か買う,First Purchase,Buy something at the shop
+item,はじめて,1,no,アイテムを使ってみた,アイテムを1回使う,Item Rookie,Use an item
+jumpout,はじめて,1,no,ジャンプ！,池や川からジャンプして岸へ上がる,Jump!,Jump out of a pond or river onto the shore
+vip,はじめて,1,no,VIPのおもてなし,VIPに料理を届ける,VIP Treatment,Deliver a dish to a VIP
+perfect,配膳の腕,1,no,崩さず運ぶ,料理を崩さずに届ける,Steady Hands,Deliver a dish without messing it up
+pickup,配膳の腕,1,no,拾ってセーフ,床に落ちた料理を拾う,Saved It!,Pick up a dish from the floor
+rush,配膳の腕,1,no,速達便,速達ボーナスを付けて届ける,Express Delivery,Deliver with an express bonus
+combo5,配膳の腕,2,yes,5連続,続けて届けて、5連続にする,5 in a Row,Reach a 5-delivery streak
+combo10,配膳の腕,3,yes,10連続,続けて届けて、10連続にする,10 in a Row,Reach a 10-delivery streak
+rich,配膳の腕,2,yes,高級店の信頼,高額オーダーを届ける,Fine Dining Trust,Deliver a premium order
+nodmg,配膳の腕,2,yes,ノーダメージ,機体のダメージ 0% のまま面をクリアする（注文6品以上の面）,No Damage,Clear a stage with 0% robot damage (stages with 6+ orders)
+noshop,配膳の腕,2,yes,お店を守った,店舗損壊率 0% で面をクリアする（注文6品以上の面）,Shop Guardian,Clear a stage with 0% shop damage (stages with 6+ orders)
+flawless,配膳の腕,3,yes,完璧な仕事,届けた料理を1つも崩さずに、面を配りきる（注文6品以上の面）,Flawless Work,Serve every order without messing up a single dish (stages with 6+ orders)
+net10k,お金,2,yes,1面で1万円,"1面の差引を ¥10,000 以上にする","¥10,000 Stage","Make a net of ¥10,000 or more in one stage"
+net30k,お金,3,yes,1面で3万円,"1面の差引を ¥30,000 以上にする","¥30,000 Stage","Make a net of ¥30,000 or more in one stage"
+cash50k,お金,2,yes,小金持ち,"所持金を ¥50,000 以上にする",Well Off,"Have ¥50,000 or more"
+upmax,お金,2,yes,能力を最大まで,能力強化のどれか1つを最大Lvにする,Maxed Out,Raise any upgrade to its max level
+upall,お金,3,yes,フル強化,能力強化を4つとも最大Lvにする,Fully Upgraded,Raise all four upgrades to their max level
+banana,アイテム,1,no,バナナの皮,置いたバナナで相手を転ばせる,Banana Peel,Make a rival slip on your banana
+steal,アイテム,2,yes,横取り成功,ブーメランで相手の料理を奪う,Snatched!,Steal a rival's dish with the boomerang
+hit,アイテム,2,yes,命中！,レーザーかミサイルを相手に当てる,Direct Hit!,Hit a rival with a laser or missile
+star,アイテム,2,yes,無敵モード,無敵の間に体当たりする,Invincible,Ram something while invincible
+allitems,アイテム,3,yes,アイテム全種,8種類のアイテムをすべて使う（通算）,Item Collector,Use all 8 kinds of items (in total)
+sea,ドタバタ,1,no,おぼれるにゃ～,海に落ちる,Overboard,Fall into the sea
+lava,ドタバタ,1,no,あつい！,溶岩に入る,Too Hot!,Go into lava
+amb,ドタバタ,1,no,救急車,お客さんを昇天させる,Ambulance,Knock out a customer
+traffic,ドタバタ,1,no,交通事故,車か電車にぶつかる,Traffic Accident,Get hit by a car or train
+wreck,ドタバタ,2,yes,大暴れ,大暴れボーナスをもらう,Rampage,Earn the rampage bonus
+allamb,ドタバタ,3,yes,全員昇天,1つの面で、店内のお客さんを全員昇天させる,Total Knockout,Knock out every customer in the shop in one stage
+ice,ステージ,1,no,氷上の配膳,凍りの床がある面をクリアする,Serving on Ice,Clear a stage with an icy floor
+raft,ステージ,2,yes,船出,いかだに乗ったまま料理を届ける,Set Sail,Deliver a dish while riding a raft
+air,ステージ,2,yes,空中配達,跳んでいる間に料理を届ける,Air Delivery,Deliver a dish in midair
+kaikin,やり込み,1,no,皆勤,10ラウンドのラウンドマッチを最後まで遊ぶ,Perfect Attendance,Play a 10-round Round Match to the end
+story,やり込み,2,yes,研修修了,ストーリーを最後までクリアする,Training Complete,Clear the whole story
+storyblack,やり込み,2,yes,黒字で修了,ストーリーを黒字で終える,In the Black,Finish the story in the black
+podium,やり込み,2,yes,表彰台のてっぺん,2人以上のラウンドマッチで1位になる,Top of the Podium,Win a Round Match with 2 or more players
+allstage,やり込み,3,yes,全ステージ制覇,フリープレイの面をすべて遊ぶ,Stage Master,Play every Free Play stage

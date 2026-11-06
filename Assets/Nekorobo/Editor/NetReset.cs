@@ -14,12 +14,13 @@ namespace Nekorobo.EditorTools
     {
         static NetReset()
         {
-            AssemblyReloadEvents.beforeAssemblyReload += () => { Net.Reset(); EosHost.Shutdown(); };
+            AssemblyReloadEvents.beforeAssemblyReload += () => { Net.Reset(); EosAch.Stop(); EosHost.Shutdown(); };
             EditorApplication.playModeStateChanged += s =>
             {
                 if (s == PlayModeStateChange.ExitingPlayMode)
                 {
                     Net.Reset();
+                    EosAch.Stop();                       // 実績の側が EOS を立ち上げ直さないように
                     EosHost.Shutdown();                  // EOS は DLL ごと外す（次の再生でまた始められるように）
                     // 指カーソルのまま・消したままで止めると、エディタのカーソルもそのまま残る
                     UnityEngine.Cursor.SetCursor(null, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto);
