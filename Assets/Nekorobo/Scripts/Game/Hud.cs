@@ -29,6 +29,11 @@ namespace Nekorobo
         public StoryUi Story;
         TitleWin title;
         EndingWin ending;
+        PauseWin pauseWin;
+        /// <summary>ポーズメニュー（Esc・P・≡）</summary>
+        public PauseWin Pause { get { return pauseWin; } }
+        /// <summary>オンラインで人を待っている画面が出ているか</summary>
+        public bool NetWaitShown { get { return netWait != null && netWait.gameObject.activeSelf; } }
         public bool EndingOpen { get { return ending != null && ending.Open; } }
         public void ShowEnding() { CloseShop(); resultWin.Close(); ending.Show(); }
         FinalWin finalWin;
@@ -39,6 +44,10 @@ namespace Nekorobo
         /// <summary>ラウンドマッチの最終結果（JS版 showFinal）</summary>
         public void ShowFinal() { CloseShop(); resultWin.Close(); finalWin.Show(); }
         public bool TitleOpen { get { return title != null && title.Open; } }
+        /// <summary>タイトルのいまのページ（BGM の場面分けに使う）</summary>
+        public string TitlePage { get { return title != null ? title.page : ""; } }
+        /// <summary>面選び（STAGE SELECT）が開いているか</summary>
+        public bool StageSelOpen { get { return title != null && title.Open && title.SsOpenNow; } }
         /// <summary>ゲームを始めるので、タイトル・ショップ・結果・エンディングを畳む（オンラインの start）。</summary>
         public void CloseForGame()
         {
@@ -171,7 +180,7 @@ namespace Nekorobo
             wipe = new Wipe(root, GetComponent<Game>());
 
             // ---- 右下：操作
-            help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　R やり直し　F2 調子　Esc 面を選ぶ", 14, TextAnchor.LowerRight,
+            help = Txt(root, "←→ 旋回　↑ 前進　↓ バック　Space ジャンプ　Shift ダッシュ　V 落とす　R やり直し　F2 調子　Esc ポーズ　F1 面を選ぶ", 14, TextAnchor.LowerRight,
                        new Vector2(0.4f, 0), new Vector2(1, 0), new Vector2(0, 8), new Vector2(-12, 30));
             help.color = new Color(0.15f, 0.17f, 0.2f, 0.9f);
             Object.Destroy(help.GetComponent<Outline>());
@@ -200,6 +209,7 @@ namespace Nekorobo
             // ---- エンディング（全ステージ終了。ショップと同じ地）
             ending = new EndingWin(root, GetComponent<Game>());
             finalWin = new FinalWin(root, GetComponent<Game>());
+            pauseWin = new PauseWin(root, GetComponent<Game>());
             achToast = new AchToast(root, GetComponent<Game>());
 
             // ---- 会話・案内・バン（ショップの上に重ねる。店主がショップの使い方を話すため）
@@ -438,6 +448,7 @@ namespace Nekorobo
             else if (ending.Open) ending.Tick(Time.unscaledDeltaTime);
             else if (finalWin.Open) finalWin.Tick(Time.unscaledDeltaTime);
             else if (shopWin.Open) { shopWin.Tick(Time.deltaTime); Ptr.CursorOnly(); }    // ショップは自分の指を持っている
+            else if (pauseWin.Open) pauseWin.Tick(Time.unscaledDeltaTime);                  // ポーズメニュー（1人のときは止めてあるので unscaled）
             else
             {
                 if (resultWin.Open) { resultWin.Tick(Time.deltaTime); if (resultWin.Open && !g.MultiLocal()) Ptr.Tick(Time.unscaledDeltaTime, null); }   // JS版も1台で1人のときだけ
@@ -556,7 +567,8 @@ namespace Nekorobo
         {
             var kb = Keyboard.current;
             if (kb == null) return;
-            if (kb.escapeKey.wasPressedThisFrame || kb.f1Key.wasPressedThisFrame)
+            // 開発用の面の一覧は F1 だけ（Esc はポーズメニューに使う。開いている間の Esc は閉じる）
+            if (kb.f1Key.wasPressedThisFrame || (MenuOpen && kb.escapeKey.wasPressedThisFrame))
             {
                 if (MenuOpen) menuPanel.SetActive(false); else MenuOpenNow();
             }

@@ -431,6 +431,21 @@ namespace Nekorobo
             return d;
         }
 
+        /// <summary>
+        /// 自分で落とす（ドロップ。R3 / V。JS版 dropByHand）。後ろへそっと置く（前へ転がすと、進む先をふさぐ）。
+        /// ぶつかって落としたときと同じく、崩れ（dropDmg）は付き、落とした本人は dropArm 秒のあいだ拾えない。
+        /// </summary>
+        Dropped DropByHand(Player P, Vector3 fwd)
+        {
+            if (P.carried == null) return null;
+            var c = P.carried;
+            var p = P.ent.rb.position; var v = P.ent.rb.linearVelocity;
+            P.carried = null; P.look.ShowDish(null);
+            var d = SpillDish(c, p, v, new Vector3(-fwd.x * 1.2f, 0, -fwd.z * 1.2f), P);
+            Say(P, "置いていくにゃ！", 1.0f);
+            return d;
+        }
+
         Dropped SpillDish(Carried c, Vector3 p, Vector3 v, Vector3 kick, Player P)
         {
             var e = MakeBody("dish", p + Vector3.up * 0.22f, new Vector3(0.19f, 0.06f, 0.19f), Quaternion.identity, false, 1.4f, 0.6f, 0.2f, 1.4f);

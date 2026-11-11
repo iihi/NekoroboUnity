@@ -616,20 +616,78 @@ namespace Nekorobo
             bool canZ = d <= 1.01f, canX = w <= 1.01f;
             bool useZ = canZ && (!canX || (pz + mz) >= (px + mx));
             const float THIN = 0.5f;
+            // 両側が床の壁（部屋の仕切り）は薄くしない。仕切りでも、端が外壁の外へ飛び出さないように縮めるのは同じ
             if (useZ)
             {
-                if (mz > 0 && pz > 0) return;
-                vd = d * THIN;
-                // three.js の -z（奥＝j が小さい側）は Unity の +z
-                if (mz > 0) vc.z = c.z + (d - vd) / 2;
-                else if (pz > 0) vc.z = c.z - (d - vd) / 2;
+                if (!(mz > 0 && pz > 0))
+                {
+                    vd = d * THIN;
+                    // three.js の -z（奥＝j が小さい側）は Unity の +z
+                    if (mz > 0) vc.z = c.z + (d - vd) / 2;
+                    else if (pz > 0) vc.z = c.z - (d - vd) / 2;
+                }
             }
             else if (canX)
             {
-                if (mx > 0 && px > 0) return;
-                vw = w * THIN;
-                if (mx > 0) vc.x = c.x - (w - vw) / 2;
-                else if (px > 0) vc.x = c.x + (w - vw) / 2;
+                if (!(mx > 0 && px > 0))
+                {
+                    vw = w * THIN;
+                    if (mx > 0) vc.x = c.x - (w - vw) / 2;
+                    else if (px > 0) vc.x = c.x + (w - vw) / 2;
+                }
+            }
+            TrimWallEnds(r, canZ, canX, THIN, ref vc, ref vw, ref vd);
+        }
+
+        /// <summary>
+        /// 角で壁が外へ飛び出さないように、壁の端を縮める（JS版 trimWallEnds。担当の指摘：エディタで角をそろえても3Dでは角から半マス飛び出していた）。
+        /// L字の角のマスは、横の壁か縦の壁のどちらか一方の矩形に入る。もう一方の壁は薄くして床側へ寄せるので、
+        /// 角のマスの外側の半分は、もう一方の壁の外の面より外になる。
+        /// 端のマス C の先（e の向き）に壁が無く、C のとなりの直交する壁 Q が「e と反対側が床・e 側は床でない」なら、その外の面まで端を縮める。
+        /// 逆に、端の先が直交する壁で、それが向こう側へ寄せてあるとき（L字の内側の角）は、すき間が空くので伸ばす。見た目だけ（当たり判定は1マスのまま）。
+        /// ここはマス目（i, j）で数える。j が増える向きは Unity の −z
+        /// </summary>
+        void TrimWallEnds(Tiles.Rect r, bool alongX, bool alongZ, float thin, ref Vector3 vc, ref float vw, ref float vd)
+        {
+            System.Func<int, int, bool> vis = (i, j) => { var t = Tiles.Def(Get(i, j)); return t != null && t.wall && !t.hidden; };
+            System.Func<int, int, bool> fl = (i, j) => Tiles.IsFloor(Get(i, j));
+            float cut = 1f - thin;
+            // ax … 端を縮める向きが i（横）か。e … 端の向き（-1 / +1）
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool ax = pass == 0;
+                if (ax ? !alongX : !alongZ) continue;
+                foreach (int e in new[] { -1, 1 })
+                {
+                    int ci = ax ? (e < 0 ? r.i0 : r.i1) : r.i0;
+                    int cj = ax ? r.j0 : (e < 0 ? r.j0 : r.j1);
+                    int ei = ax ? e : 0, ej = ax ? 0 : e;            // 端の先へ1マス
+                    int bi = ci + ei, bj = cj + ej;                  // 端の先のマス B
+                    if (vis(bi, bj))
+                    {
+                        bool side = ax ? (vis(bi, bj - 1) || vis(bi, bj + 1)) : (vis(bi - 1, bj) || vis(bi + 1, bj));
+                        if (side && fl(bi + ei, bj + ej))
+                        {
+                            if (ax) { vw += cut; vc.x += e * cut / 2; }
+                            else { vd += cut; vc.z -= e * cut / 2; }
+                        }
+                        continue;
+                    }
+                    foreach (int n in new[] { -1, 1 })
+                    {
+                        int qi = ci + (ax ? 0 : n), qj = cj + (ax ? n : 0);
+                        if (!vis(qi, qj)) continue;
+                        if (fl(qi - ei, qj - ej) && !fl(qi + ei, qj + ej) && !vis(qi + ei, qj + ej))
+                        {
+                            if ((ax ? vw : vd) > cut + 0.01f)          // 縮めると無くなるほど短ければ、そのまま
+                            {
+                                if (ax) { vw -= cut; vc.x -= e * cut / 2; }
+                                else { vd -= cut; vc.z += e * cut / 2; }
+                            }
+                            break;
+                        }
+                    }
+                }
             }
         }
 

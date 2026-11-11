@@ -46,7 +46,9 @@ namespace Nekorobo
             return i >= 0 ? RES_COLS[i] : "blue";
         }
         string Tag(Player P) { return P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P"; }
-        string DownOf(Player P) { return !P.down ? "" : P.revT > 0 ? Lang.Tr("復帰 {0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア"); }
+        string DownOf(Player P) { return !P.down ? "" : P.quit ? Lang.Tr("途中で抜けた") : P.revT > 0 ? Lang.Tr("復帰 {0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア"); }
+        /// <summary>OK か、もう部屋に居ない人（抜けた人は待たない。JS版 resOkOrGone）</summary>
+        bool OkOrGone(int i) { return ok[i] || g.SeatGone(i); }
         static string Plus(float v) { return (v < 0 ? "−¥" : "＋¥") + Mathf.Abs(Mathf.Round(v)).ToString("#,0"); }
 
         class Band { public int rank; public string col, tag, sub = "", outS = ""; public float cash, bonus, bot = -1; public int deliv, combo = -1; public Game.Ledger L; }
@@ -247,7 +249,7 @@ namespace Nekorobo
             for (int i = 0; i < g.players.Count; i++) if (OwnSlot(i) && g.players[i].src.kind != "npc") mine.Add(i);
             bool on = mine.Count > 0 && mine.TrueForAll(i => ok[i]);
             if (btnOn != null) btnOn.color = new Color(1, 1, 1, on || pressT > 0 ? 1 : 0);
-            int left = 0; foreach (var o in ok) if (!o) left++;
+            int left = 0; for (int i = 0; i < ok.Count; i++) if (!OkOrGone(i)) left++;   // 抜けた人は数えない
             okNote.text = g.players.Count < 2 ? "" : left > 0 ? Lang.Tr("全員が OK になると、みんなで進みます（あと {0} 人）", left) : "";
         }
 
@@ -334,7 +336,8 @@ namespace Nekorobo
             if (redraw) Refresh();
             RokSend();
             // ---- ショップへ。**みんなそろって同時に入る。**押した絵が見えるよう、そろってから少しだけ待つ
-            if (!ok.TrueForAll(x => x)) { goT = 0; return; }
+            bool all = true; for (int i = 0; i < ok.Count; i++) if (!OkOrGone(i)) all = false;
+            if (!all) { goT = 0; return; }
             if ((goT += dt) < Game.PRESS_SHOW) return;
             if (g.NpOn && !g.NetHost) return;                               // 進める合図はホストが出す
             went = true;

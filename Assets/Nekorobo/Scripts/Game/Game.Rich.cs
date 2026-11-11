@@ -116,7 +116,7 @@ namespace Nekorobo
             if (L == null || gs.Count == 0 || menu.Count == 0) return;
             var pick = menu[Mathf.Min(menu.Count - 1, (int)(Rnd() * menu.Count))];   // 乱数の並びを変えないよう、引くだけは引く
             var o = new Order { dish = Dishes.Find("vip_cloche") ?? pick, guest = gs[Mathf.Min(gs.Count - 1, (int)(Rnd() * gs.Count))],
-                                vip = true, leader = L, left = T.vipTime, at = "stand" };
+                                vip = true, leader = L, left = T.vipTakeTime, at = "stand" };   // 台から取るまでの制限（担当）
             vips.Add(o); vipCur = o;
             vipPos = VipSpot();
             NetEv("vip", 0, players.IndexOf(L), 0);
@@ -130,6 +130,7 @@ namespace Nekorobo
             var o = vipCur;
             if (o == null || o.at != "stand") return;
             o.at = "held";
+            o.left = T.vipTime;                               // 取ったら、届けるまでの時間を数え直す（担当）
             P.carried = new Carried { dish = o.dish, integ = 100, order = o };
             o.taker = P;
             P.look.ShowDish(o.dish);

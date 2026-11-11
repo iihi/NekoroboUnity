@@ -46,6 +46,11 @@ namespace Nekorobo
                      ballRange = 12.0f, ballAimSpeed = 9.0f, ballFlight = 1.6f, ballHeight = 9.0f,
                      ballRadius = 6.4f, blastRadius = 3.4f, blastForce = 26, blastBotDmg = 22,
                      blastGuestDmg = 70, blastShopDmg = 6, carRespawn = 4.0f;
+        [Header("ダッシュ")]
+        // L3（左スティックの押し込み）／Shift で、向いている方向へ一瞬ぐっと速く（JS版と同じ数値。担当の案）。
+        // ダッシュ中（と、そのあと dashHitExtra 秒）にロボ・家具・客にぶつかると、相手のダメージと吹っ飛びが dashHit 倍、自分は dashSelf 倍
+        public float dashSpeed = 8.5f, dashTime = 0.3f, dashHitExtra = 0.25f, dashCd = 5.0f, dashHit = 3.0f, dashSelf = 2.0f,
+                     dashGuestKnock = 1.5f, dashKnock = 10.0f, dashKnockUp = 5.0f, dashFurni = 1.5f;
         [Header("凍りの床")]
         public float iceGrip = 0.10f, iceDrag = 0.35f, icePush = 0.50f;
         [Header("落とした料理")]
@@ -82,7 +87,9 @@ namespace Nekorobo
         [Header("高額・VIP オーダー")]
         public float richRate = 0.30f, richMin = 30000, richMax = 30000;
         public bool vipOn = true;
-        public float vipEvery = 60, vipTime = 30, vipPrice = 60000;
+        // 制限は2段（担当）：台に出てから vipTakeTime 秒以内に取る。取ったら数え直して vipTime 秒以内に届ける。
+        // 受取口の範囲にいて、VIP 台が vipPrefR[m] 以内なら、受取口の料理より VIP を先に取る
+        public float vipEvery = 60, vipTakeTime = 30, vipTime = 30, vipPrice = 60000, vipPrefR = 1.8f;
 
         public Tune Clone() { return (Tune)MemberwiseClone(); }
 

@@ -265,19 +265,7 @@ namespace Nekorobo
         /// </summary>
         Dictionary<Player, int> Ranks()
         {
-            var PL = g.players;
-            var val = new Dictionary<Player, float>();
-            foreach (var P in PL) val[P] = g.mode == "coop" ? P.sales + P.wreck : g.LedgerOf(P).total;
-            var pool = new List<float>();
-            if (g.mode == "team") foreach (var t in g.TeamsInPlay()) pool.Add(g.LedgerOf(g.TeamLead(t)).total);
-            else foreach (var P in PL) pool.Add(val[P]);
-            var r = new Dictionary<Player, int>();
-            foreach (var P in PL)
-            {
-                int k = 1; foreach (var v in pool) if (v > val[P] + 1e-4f) k++;
-                r[P] = k;
-            }
-            return r;
+            return g.H2Ranks();
         }
 
         void TickCard(PCard c, Dictionary<Player, int> RK, int n)

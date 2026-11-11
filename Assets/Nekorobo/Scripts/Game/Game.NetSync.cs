@@ -32,7 +32,7 @@ namespace Nekorobo
         const float NP_LAG = 2f / NP_HZ;             // 過去を描く分は「配る間隔の2つぶん」
         const float NP_IN_STALE = 0.7f;              // 参加者の入力が届かなくなったら捨てる[秒]
         static readonly string[] NP_KEYS = { "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "use", "cycle", "cycleBack", "ok",
-                                             "navUp", "navDown", "navLeft", "navRight" };
+                                             "navUp", "navDown", "navLeft", "navRight", "rescue", "dash", "drop" };
 
         class NetIn { public JObject k; public Vector2? am; public float at; }
         class Snap { public JObject d; public float at; public Dictionary<int, float[]> e; public JArray ev; public bool evDone; }
@@ -128,6 +128,7 @@ namespace Nekorobo
             i.up = k("ArrowUp"); i.down = k("ArrowDown"); i.left = k("ArrowLeft"); i.right = k("ArrowRight");
             i.jump = k(" "); i.use = k("use"); i.cycle = k("cycle"); i.cycleBack = k("cycleBack"); i.ok = k("ok");
             i.navUp = k("navUp"); i.navDown = k("navDown"); i.navLeft = k("navLeft"); i.navRight = k("navRight");
+            i.rescue = k("rescue"); i.dash = k("dash"); i.drop = k("drop");
             // 参加者が出している狙いの位置。向こうで出した値をそのまま使う（ホストで積み直すと食い違ってカクつく）
             P.netAim = v.am.HasValue ? (Vector3?)FromJs(v.am.Value.x, 0.06f, v.am.Value.y) : null;
             return i;
@@ -144,6 +145,7 @@ namespace Nekorobo
             Put("ArrowUp", inp.up); Put("ArrowDown", inp.down); Put("ArrowLeft", inp.left); Put("ArrowRight", inp.right);
             Put(" ", inp.jump); Put("use", inp.use); Put("cycle", inp.cycle); Put("cycleBack", inp.cycleBack); Put("ok", inp.ok);
             Put("navUp", inp.navUp); Put("navDown", inp.navDown); Put("navLeft", inp.navLeft); Put("navRight", inp.navRight);
+            Put("rescue", inp.rescue); Put("dash", inp.dash); Put("drop", inp.drop);
             JToken am = P.aim.HasValue ? new JArray(R2(P.aim.Value.x), R2(-P.aim.Value.z)) : (JToken)JValue.CreateNull();
             string now = k.ToString(Newtonsoft.Json.Formatting.None) + "|" + am.ToString(Newtonsoft.Json.Formatting.None);
             bool changed = now != npLastIn;
@@ -244,8 +246,10 @@ namespace Nekorobo
             d["ca"] = ca;
             var pl = new JArray();
             foreach (var P in players)
-                pl.Add(new JArray(Mathf.RoundToInt(P.sales), R1(P.botDmg), R1(P.shopDmg), P.down ? 1 : 0, P.carried != null ? 1 : 0,
-                                  P.delivered, P.hurt, Mathf.RoundToInt(P.wreck), P.bestCombo, P.slot ?? "", R1(P.revT), R1(P.invT)));
+                // 並びは JS版と同じ（12〜14 は奪った・奪われた額とクレーン代、15 はダッシュのクールタイム。3 は 1＝止まった・2＝途中で抜けた）
+                pl.Add(new JArray(Mathf.RoundToInt(P.sales), R1(P.botDmg), R1(P.shopDmg), P.down ? (P.quit ? 2 : 1) : 0, P.carried != null ? 1 : 0,
+                                  P.delivered, P.hurt, Mathf.RoundToInt(P.wreck), P.bestCombo, P.slot ?? "", R1(P.revT), R1(P.invT),
+                                  Mathf.RoundToInt(P.lootIn), Mathf.RoundToInt(P.lootOut), Mathf.RoundToInt(P.crCost), R1(P.dashCd)));
             d["pl"] = pl;
             d["e"] = NpSnap();
             return d;
@@ -348,6 +352,7 @@ namespace Nekorobo
                 string p = (string)d["p"];
                 // ホストから届いたものなら、何であれ「生きている」印にする
                 if (NetGuest && Net.Room != null && id == (int?)Net.Room["host"]) npLastRecv = Time.realtimeSinceStartup;
+                if (p == "quit") { NpQuit(id); return; }          // ポーズメニューの「ゲームから抜ける」
                 if (p == "hb")
                 {
                     if (!NetGuest) return;
@@ -552,6 +557,9 @@ namespace Nekorobo
                     P.wreck = v.Count > 7 ? (float)v[7] : 0; P.bestCombo = v.Count > 8 ? (int)v[8] : 0;
                     P.slot = v.Count > 9 && (string)v[9] != "" ? (string)v[9] : null;
                     P.revT = v.Count > 10 ? (float)v[10] : 0; P.invT = v.Count > 11 ? (float)v[11] : 0;
+                    P.quit = (int)v[3] == 2;
+                    if (v.Count > 14) { P.lootIn = (float)v[12]; P.lootOut = (float)v[13]; P.crCost = (float)v[14]; }
+                    P.dashCd = v.Count > 15 ? (float)v[15] : 0;
                 }
             // ---- 照準の輪。自分のぶんは手元で描く（ホストの値へは、手を止めている間だけ寄せる）。ほかの人のぶんはここで作って動かす
             if (A["am"] is JArray ama)

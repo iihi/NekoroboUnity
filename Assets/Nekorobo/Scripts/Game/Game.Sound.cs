@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -34,17 +35,24 @@ namespace Nekorobo
         public static void SeUi(string name, float vol = 1, float pitch = 1) { Sound.Play(name, pitch, vol, 0); }
 
         // ---- BGM。assets/bgm/ に置いたファイルを、場面ごとにくり返し鳴らす。**ファイルが無ければ鳴らさない。**
-        // 場面は毎フレーム、画面の様子から決める（あちこちで切り替えると、戻し忘れが出るため）。
-        //   title … タイトルと、その先の選ぶ画面すべて（エンディングもここ）
-        //   game  … 遊んでいる間（3・2・1、会話、結果の画面も含む）
-        //   shop  … ショップ
+        // 場面は毎フレーム、画面の様子から決める（あちこちで切り替えると、戻し忘れが出るため）。JS版 bgmTick と同じ5曲（担当）
+        //   title  … タイトル（そこから開く設定・遊び方・実績・デバッグも）
+        //   lobby  … タイトルの先の選ぶ画面（1人・ローカル・オンライン・部屋・ルールなど）
+        //   shop   … 面選択とショップ（StageShop）
+        //   game   … 遊んでいる間（3・2・1、会話も含む）
+        //   result … 結果の画面（面ごとの結果・ラウンドマッチの最終結果・エンディング）
+        static readonly HashSet<string> BGM_TITLE_PAGES = new HashSet<string> { "Top", "Settings", "Len", "Ach", "Debug" };
         void SoundTick()
         {
             if (hud == null) return;
-            string scene = hud.TitleOpen || hud.EndingOpen ? "title" : hud.ShopOpen ? "shop" : "game";
-            Sound.Bgm("assets/bgm/" + (scene == "title" ? "BGM01.mp3" : scene == "shop" ? "BGM03.mp3" : "BGM02.mp3"));
+            string scene = hud.StageSelOpen || hud.ShopOpen ? "shop"
+                : hud.Result.Open || hud.FinalOpen || hud.EndingOpen ? "result"
+                : hud.TitleOpen ? (BGM_TITLE_PAGES.Contains(hud.TitlePage) ? "title" : "lobby")
+                : "game";
+            Sound.Bgm("assets/bgm/" + (scene == "title" ? "Title.ogg" : scene == "lobby" ? "Lobby.ogg" : scene == "shop" ? "StageShop.ogg"
+                                      : scene == "result" ? "Result.ogg" : "InGame.ogg"));
             // 止めている間は少し下げる（タイトルの裏で止めているのは除く）
-            Sound.BgmLevel(hud.MenuOpen && !hud.TitleOpen ? 0.4f : 1);
+            Sound.BgmLevel((hud.MenuOpen || (PauseOn && !NpOn)) && !hud.TitleOpen ? 0.4f : 1);
             // M キーで音の ON/OFF（BGM も効果音もまとめて止める）
             var kb = Keyboard.current;
             if (kb != null && kb.mKey.wasPressedThisFrame && !kb.ctrlKey.isPressed && !kb.altKey.isPressed) hud.FlipSound();

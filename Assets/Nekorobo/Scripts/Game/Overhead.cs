@@ -27,6 +27,7 @@ namespace Nekorobo
             public RectTransform itp; public RawImage itpIc; public string itpK; public float itpT;
             public RectTransform msg; public Text msgText;
             public RectTransform tgt; public Text tgtText;
+            public RectTransform ds; public Image dsFill;      // ダッシュのクールタイムの輪
         }
 
         static readonly Color GREEN = Mats.Hex(0x4caf50), ORANGE = Mats.Hex(0xffa726), RED = Mats.Hex(0xe53935);
@@ -49,6 +50,7 @@ namespace Nekorobo
             foreach (var m in robots.Values)
             {
                 Object.Destroy(m.r.gameObject); Object.Destroy(m.msg.gameObject); Object.Destroy(m.tgt.gameObject); Object.Destroy(m.itp.gameObject);
+                if (m.ds != null) Object.Destroy(m.ds.gameObject);
             }
             guestBars.Clear(); robots.Clear();
             foreach (var t in drops.Values) Object.Destroy(t.gameObject);
@@ -56,6 +58,52 @@ namespace Nekorobo
         }
 
         // ------------------------------------------------------------ 部品
+        static Sprite disc, ring;
+        /// <summary>丸（ring なら輪）。ダッシュのクールタイムに使う。</summary>
+        static Sprite Circle(bool isRing)
+        {
+            if (isRing ? ring != null : disc != null) return isRing ? ring : disc;
+            const int N = 64; const float R = 31.5f, W = 9f;      // 輪の太さは JS版（直径30に線4）と同じ割合
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[N * N];
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    float d = Mathf.Sqrt((x + 0.5f - N / 2f) * (x + 0.5f - N / 2f) + (y + 0.5f - N / 2f) * (y + 0.5f - N / 2f));
+                    float a = Mathf.Clamp01(R - d + 0.5f);
+                    if (isRing) a *= Mathf.Clamp01(d - (R - W) + 0.5f);
+                    px[y * N + x] = new Color32(255, 255, 255, (byte)(a * 255));
+                }
+            tex.SetPixels32(px); tex.Apply(false);
+            var s = Sprite.Create(tex, new Rect(0, 0, N, N), new Vector2(0.5f, 0.5f), 100);
+            if (isRing) ring = s; else disc = s;
+            return s;
+        }
+        /// <summary>ダッシュのクールタイムの輪（JS版 .dsG）。暗い丸に白い縁、水色の輪が溜まっていく。中に » 。</summary>
+        void MakeDashRing(RobotMark m)
+        {
+            var go = new GameObject("Dash", typeof(RectTransform));
+            m.ds = go.GetComponent<RectTransform>();
+            m.ds.SetParent(layer, false);
+            m.ds.sizeDelta = new Vector2(26, 26);
+            m.ds.pivot = new Vector2(0.5f, 0);
+            System.Func<Sprite, Color, float, Image> add = (sp, c, sz) =>
+            {
+                var o = new GameObject("I", typeof(RectTransform), typeof(Image));
+                var r = o.GetComponent<RectTransform>(); r.SetParent(m.ds, false); r.sizeDelta = new Vector2(sz, sz);
+                var im = o.GetComponent<Image>(); im.sprite = sp; im.color = c; im.raycastTarget = false;
+                return im;
+            };
+            add(Circle(false), Color.white, 26);                                       // 白い縁
+            add(Circle(false), new Color(14 / 255f, 18 / 255f, 26 / 255f, 0.92f), 21);  // 暗い地
+            m.dsFill = add(Circle(true), Mats.Hex(0x4fd2ff), 21);
+            m.dsFill.type = Image.Type.Filled; m.dsFill.fillMethod = Image.FillMethod.Radial360;
+            m.dsFill.fillOrigin = (int)Image.Origin360.Top; m.dsFill.fillClockwise = true;
+            var t = Label(m.ds, "»", 13, Color.white);
+            t.rectTransform.sizeDelta = new Vector2(26, 26);
+            go.SetActive(false);
+        }
+
         static Sprite round;
         /// <summary>角の丸い板（9分割）。CSS の border-radius:999px の代わり。</summary>
         public static Sprite Round
@@ -236,6 +284,20 @@ namespace Nekorobo
                         cg.alpha = Mathf.Min(1, (P.itemPopUntil - g.t) / 0.25f);
                     }
                 }
+                // ---- ダッシュのクールタイム（人が操作している機体だけ。使ったあと、次に使えるまで）
+                {
+                    bool on = P.dashCd > 0 && P.src.kind != "npc" && !P.down && P.cr == null && g.state == "play";
+                    if (m.ds == null && on) MakeDashRing(m);
+                    if (m.ds != null)
+                    {
+                        if (!on) m.ds.gameObject.SetActive(false);
+                        else if (Project(rp + Vector3.up * 1.0f, m.ds))
+                        {
+                            m.ds.position += new Vector3(30, 0, 0) * layer.lossyScale.x;   // 頭の上の右寄り
+                            m.dsFill.fillAmount = 1 - P.dashCd / Mathf.Max(0.01f, g.T.dashCd);
+                        }
+                    }
+                }
                 // ---- セリフ
                 if (P.msgT > 0 && !string.IsNullOrEmpty(P.msg))
                 {
@@ -255,18 +317,7 @@ namespace Nekorobo
             }
         }
 
-        Dictionary<Player, int> Ranks()
-        {
-            var PL = g.players;
-            var val = new Dictionary<Player, float>();
-            foreach (var P in PL) val[P] = g.mode == "coop" ? P.sales + P.wreck : g.LedgerOf(P).total;
-            var pool = new List<float>();
-            if (g.mode == "team") foreach (var t in g.TeamsInPlay()) pool.Add(g.LedgerOf(g.TeamLead(t)).total);
-            else foreach (var P in PL) pool.Add(val[P]);
-            var r = new Dictionary<Player, int>();
-            foreach (var P in PL) { int k = 1; foreach (var v in pool) if (v > val[P] + 1e-4f) k++; r[P] = k; }
-            return r;
-        }
+        Dictionary<Player, int> Ranks() { return g.H2Ranks(); }
 
         RobotMark MakeRobotMark(Player P, bool many)
         {

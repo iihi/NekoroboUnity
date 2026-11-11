@@ -20,6 +20,8 @@ namespace Nekorobo
         public float axRX, axRY;
         // 救済のクレーン：L1・R1・L2・R2 を4つとも（キーボードは Q・E・X・C）
         public bool rescue;
+        // ダッシュ（L3＝左スティックの押し込み／Shift）・ドロップ＝料理を落とす（R3＝右スティックの押し込み／V）
+        public bool dash, drop;
     }
 
     /// <summary>運んでいる料理。</summary>
@@ -126,6 +128,11 @@ namespace Nekorobo
         public bool airborne;
         public float invT, slipT, slipSpin;
         public float knockT;                  // 無敵の相手に吹っ飛ばされた直後（地面の減速を掛けない）
+        // ダッシュ（JS版 dashT …）：ダッシュの残り・ぶつかり扱いの残り・クールタイム・向き
+        public float dashT, dashHitT, dashCd;
+        public Vector3 dashDir;
+        public bool prevDash, prevDrop;        // 前のフレームに押していたか（押した瞬間だけ拾う）
+        public bool quit;                     // オンラインで途中で抜けた（その回は最下位）
         public bool slotEmpty;                // 選んだアイテムを使い切った（先頭へは戻さない）
         public float itemPopUntil;            // 持ち替えたアイテムを頭の上に出す時刻
         // 救済のクレーン

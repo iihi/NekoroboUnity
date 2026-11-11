@@ -71,6 +71,8 @@ namespace Nekorobo
                 if (np.waitShop) HostAfterShop();
                 // ホストが抜けた。サーバは次の人をホストにするので、自分がホストになっていたら、もう計算してくれる人が居ない
                 if (NetGuest && (Net.Room == null || Net.IsHost)) NpLostHost("ホストが部屋から抜けました。");
+                // 遊んでいる最中に部屋から居なくなった人（タブを閉じた・ポーズの「抜ける」）は、抜けたあつかい
+                NpQuitGone();
             };
         }
 

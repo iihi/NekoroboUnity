@@ -431,11 +431,15 @@ namespace Nekorobo
                 i.emL = kb.qKey.isPressed;
                 i.emR = kb.eKey.isPressed;
                 i.rescue = kb.qKey.isPressed && kb.eKey.isPressed && kb.xKey.isPressed && kb.cKey.isPressed;
+                i.dash = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;   // ダッシュ
+                i.drop = kb.vKey.isPressed;                                          // 持っている料理を落とす
                 i.navUp = i.up; i.navDown = i.down; i.navLeft = i.left; i.navRight = i.right;
                 i.dpUp = i.up; i.dpDown = i.down; i.dpLeft = i.left; i.dpRight = i.right;
                 i.ok = kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed;
             }
             if (debugUp) i.up = true;                   // 確かめる用（外から「↑を押している」ことにする）
+            if (debugDash) i.dash = true;               // 確かめる用（ダッシュ・ドロップのボタン）
+            if (debugDrop) i.drop = true;
             // パッドを枠に割り当てているときは、キーボードの枠にパッドを流し込まない
             // （流すと1台目のパッドが2人ぶん動かしてしまう）。1人で遊ぶときはどのパッドでも動く
             if (!slots.Exists(s => s.kind == "pad"))
@@ -484,6 +488,8 @@ namespace Nekorobo
                 if (gp.buttonNorth.isPressed) i.use = true;
                 if (gp.rightShoulder.isPressed) i.cycle = true;
                 if (gp.leftShoulder.isPressed) i.cycleBack = true;
+                if (gp.leftStickButton.isPressed) i.dash = true;      // L3（左スティックの押し込み）でダッシュ
+                if (gp.rightStickButton.isPressed) i.drop = true;     // R3（右スティックの押し込み）で料理を落とす
                 if (gp.buttonSouth.isPressed) i.ok = true;            // A は決定（ショップの指）
                 if (gp.buttonEast.isPressed) i.back = true;
             }
@@ -493,6 +499,7 @@ namespace Nekorobo
         {
             NetTick(Time.deltaTime);                        // オンライン：ホストは配り、ゲストは当てて入力を送る
             SoundTick();                                    // BGM の場面と、M キーの音の ON/OFF
+            PauseTick();                                    // ポーズメニュー（Esc・P・≡）
             if (stage == null || players.Count == 0) return;
             // 入力は毎フレーム拾う（FixedUpdate だと押した瞬間を取りこぼす）
             var keyIn = ReadInput();
@@ -502,11 +509,14 @@ namespace Nekorobo
                 P.input = P.src.kind == "pad" ? ReadPadInput(P.src.index)
                         : P.src.kind == "net" ? NetInputOf(P)               // オンラインの相手は届いた入力
                         : keyIn;
+                // ポーズメニューを開いている間（と、閉じたあとボタンを離すまで）は、この画面の人の入力を通さない
+                if ((PauseOn || pauseBlock) && P.src.kind != "net") P.input = new BotInput();
             }
+            if (PauseOn) return;
 
             var kb = Keyboard.current;
             if (hud.ShopOpen || TalkOn || hud.TitleOpen || hud.EndingOpen) return;   // ショップ・会話・タイトル・エンディングの間は、そちらが入力を見る
-            if (kb != null && !hud.MenuOpen && !NpOn)          // オンラインの最中は、やり直しと調子の切り替えをしない（食い違う）
+            if (kb != null && !hud.MenuOpen && !NpOn && !pauseBlock)   // オンラインの最中は、やり直しと調子の切り替えをしない（食い違う）
             {
                 if (kb.rKey.wasPressedThisFrame) Rebuild();
                 if (kb.f2Key.wasPressedThisFrame)
@@ -523,6 +533,8 @@ namespace Nekorobo
         [System.NonSerialized] public bool autoPlay;
         /// <summary>確かめる用。↑を押していることにする（オンラインのゲストの入力を外から試すため）。</summary>
         [System.NonSerialized] public bool debugUp;
+        /// <summary>確かめる用。ダッシュ（L3 / Shift）・ドロップ（R3 / V）を押していることにする。</summary>
+        [System.NonSerialized] public bool debugDash, debugDrop;
 
         /// <summary>受取位置（カウンターの正面）。</summary>
         public Vector3 PickupPoint() { return counterPos + counterRot * new Vector3(PickupOffset, 0, 0); }
@@ -841,6 +853,22 @@ namespace Nekorobo
                     for (int k = 0; k < 4; k++) SpawnSplash(new Vector3(lp.x, 0.06f, lp.z), 0xd8d2c4, 1);   // 着地の土ぼこり
                 }
             }
+            // ---- ダッシュ（L3 / Shift。JS版と同じ）。押した瞬間に、いま向いている方向へ。クールタイムの間と照準中は出ない
+            if (P.dashCd > 0) P.dashCd = Mathf.Max(0, P.dashCd - dt);
+            if (P.dashHitT > 0) P.dashHitT = Mathf.Max(0, P.dashHitT - dt);
+            if (inp.dash && !P.prevDash && !(P.dashCd > 0) && !aiming)
+            {
+                P.dashT = T.dashTime; P.dashHitT = T.dashTime + T.dashHitExtra; P.dashCd = T.dashCd;
+                P.dashDir = fwd;
+                SetFace(P, "fast", 0.6f);
+                var dp = rb.position;
+                Se("jump", dp, P, 0.6f);
+                for (int k = 0; k < 3; k++) SpawnSplash(new Vector3(dp.x - fwd.x * 0.4f, 0.06f, dp.z - fwd.z * 0.4f), 0xd8d2c4, 1);
+            }
+            P.prevDash = inp.dash;
+            // ---- ドロップ（R3 / V）。持っている料理をその場に落とす。持っている間に VIP が出たら、落として取りに行けるように（担当の案）
+            if (inp.drop && !P.prevDrop && P.carried != null) DropByHand(P, fwd);
+            P.prevDrop = inp.drop;
             var tp = rb.position;
             bool onIce = grounded && Tiles.IsSlippery(Tiles.At(map, tp));
 
@@ -885,7 +913,13 @@ namespace Nekorobo
             }
             float ovx = fwd.x * vf + right.x * vl, ovz = fwd.z * vf + right.z * vl;
             rb.linearVelocity = new Vector3(ovx, v.y, ovz);
-            P.prevVy = v.y;
+            // ダッシュ中は、踏み切ったときの向きへ決まった速さで進む（床の減速も横滑りも効かない）。空中は今の高さのまま横へまっすぐ
+            if (P.dashT > 0)
+            {
+                P.dashT -= dt;
+                rb.linearVelocity = new Vector3(P.dashDir.x * T.dashSpeed, grounded ? v.y : 0, P.dashDir.z * T.dashSpeed);
+            }
+            P.prevVy = rb.linearVelocity.y;
             ItemInput(P);
         }
 
@@ -893,14 +927,18 @@ namespace Nekorobo
         void CheckPickupDelivery(Player P)
         {
             var p = P.ent.rb.position;
-            // VIP 台（誰でも取れる）
-            if (P.carried == null && vipCur != null && vipCur.at == "stand" && vipPos != null
-                && new Vector2(vipPos.Value.x - p.x, vipPos.Value.z - p.z).magnitude < T.pickupR + 0.25f) VipTake(P);
+            var lp = Quaternion.Inverse(counterRot) * (p - counterPos);
+            bool atPick = Mathf.Abs(lp.x - PickupOffset) < PickupW / 2 + 0.7f && Mathf.Abs(lp.z) < PickupD / 2 + 0.7f;   // 受取口の範囲
+            // VIP 台（誰でも取れる）。受取口の範囲にいるときは、少し離れていても VIP を先に取る（vipPrefR。担当）
+            if (P.carried == null && vipCur != null && vipCur.at == "stand" && vipPos != null)
+            {
+                float dv = new Vector2(vipPos.Value.x - p.x, vipPos.Value.z - p.z).magnitude;
+                if (dv < T.pickupR + 0.25f || (atPick && dv < T.vipPrefR)) VipTake(P);
+            }
             PickDropped(P);                       // 落ちている料理を拾う（カウンターへ戻らずに済む）
             if (P.carried == null && oi < orders.Count)
             {
-                var lp = Quaternion.Inverse(counterRot) * (p - counterPos);
-                if (Mathf.Abs(lp.x - PickupOffset) < PickupW / 2 + 0.7f && Mathf.Abs(lp.z) < PickupD / 2 + 0.7f)
+                if (atPick)
                 {
                     // 受取口に高額オーダーが並んでいたら、列の先頭でなくてもそれを先に取る（担当の案）
                     int nVis = Mathf.Min(counterPlates.Count > 0 ? counterPlates.Count : 3, orders.Count - oi);
@@ -998,12 +1036,16 @@ namespace Nekorobo
             bool noisy = false, furniHit = false;
             float lw = isRobot ? EffLight(hitP[0]) : 1;
             bool harmless = InvOn(blame);
+            // ダッシュでぶつかった（ロボが直に当たったときだけ。家具どうしの連鎖には乗せない）。
+            // 相手（ロボ・家具・客）のダメージと吹っ飛びは dashHit 倍、自分のダメージは dashSelf 倍（JS版と同じ）
+            System.Func<Player, bool> dashOf = q => q != null && q.dashHitT > 0;
+            float dashK = hitP.Exists(q => dashOf(q)) ? T.dashHit : 1;
 
             foreach (var P in hitP)
             {
                 var pp = P.ent.rb.position;
                 if (InvOn(P)) continue;
-                float d = j * EffBotDmg(P);
+                float d = j * EffBotDmg(P) * (dashOf(P) ? T.dashSelf : 1) * (hitP.Exists(o => o != P && dashOf(o)) ? T.dashHit : 1);
                 if (d > 0.15f)
                 {
                     P.botDmg = Mathf.Min(100, P.botDmg + d);
@@ -1048,11 +1090,12 @@ namespace Nekorobo
                     float dx = gp.x - rp.x, dz = gp.z - rp.z;
                     float len = Mathf.Sqrt(dx * dx + dz * dz); if (len < 1e-6f) len = 1;
                     dx /= len; dz /= len;
-                    guest.rb.AddForce(new Vector3(dx * j * T.knockback * lw, j * T.knockUp * lw, dz * j * T.knockback * lw), ForceMode.Impulse);
+                    float kk0 = lw * (dashK > 1 ? T.dashGuestKnock : 1);
+                    guest.rb.AddForce(new Vector3(dx * j * T.knockback * kk0, j * T.knockUp * kk0, dz * j * T.knockback * kk0), ForceMode.Impulse);
                     guest.rb.AddTorque(new Vector3((Random.value - 0.5f) * j * 0.5f, (Random.value - 0.5f) * j * 0.3f,
                                                    (Random.value - 0.5f) * j * 0.5f), ForceMode.Impulse);
                 }
-                float d = harmless ? 0 : GuestHurt(j * T.guestDmg) * lw;
+                float d = harmless ? 0 : GuestHurt(j * T.guestDmg) * lw * dashK;
                 if (d > 0.5f)
                 {
                     float before = guest.hp;
@@ -1067,7 +1110,18 @@ namespace Nekorobo
             {
                 float wKind = fur.kind == "chair" ? T.chairWeight : 1.0f;
                 float wChain = isRobot ? 1.0f : T.chainWeight;
-                float d = harmless ? 0 : j * T.shopDmg * wKind * wChain * lw;
+                float d = harmless ? 0 : j * T.shopDmg * wKind * wChain * lw * dashK;
+                // ダッシュで当てた家具は、派手に吹っ飛ばす（物理まかせだと少し動くだけ）
+                if (isRobot && dashK > 1 && fur.rb != null && !fur.rb.isKinematic)
+                {
+                    var fp = fur.rb.position;
+                    float fx = fp.x - rp.x, fz = fp.z - rp.z;
+                    float fl = Mathf.Sqrt(fx * fx + fz * fz); if (fl < 1e-6f) fl = 1;
+                    fx /= fl; fz /= fl;
+                    float f = j * T.dashFurni * lw;
+                    fur.rb.AddForce(new Vector3(fx * f, f * 0.6f, fz * f), ForceMode.Impulse);
+                    fur.rb.AddTorque(new Vector3((Random.value - 0.5f) * f * 0.4f, (Random.value - 0.5f) * f * 0.3f, (Random.value - 0.5f) * f * 0.4f), ForceMode.Impulse);
+                }
                 if (d > 0.05f)
                 {
                     float gGain = Mathf.Min(100, shopDmg + d) - shopDmg;
@@ -1105,7 +1159,14 @@ namespace Nekorobo
                 if (kind != null) Se(kind, rp, hitP.Count > 0 ? hitP[0] : null, 1, Mathf.Clamp(j / (T.hitThreshold * 4), 0.25f, 1) * (isRobot ? 1 : 0.5f));
                 // マンガの効果。ロボが絡んだ、ある程度強い衝突だけ（無敵で相手を吹っ飛ばすときは、下でそちらの効果を出す）
                 bool invHit = hitP.Count == 2 && InvOn(hitP[0]) != InvOn(hitP[1]);
-                if (kind != null && isRobot && j >= T.hitThreshold * 1.5f && !invHit)
+                // ダッシュで当てたときは、無敵の体当たりと同じ大きな効果
+                if (kind != null && isRobot && dashK > 1 && !invHit && kind != "bump")
+                {
+                    var pa = a.Pos; var pb = b.Pos;
+                    HitFx("inv", new Vector3((pa.x + pb.x) / 2, Mathf.Max(pa.y, pb.y) + 0.4f, (pa.z + pb.z) / 2), 1);
+                    if (hitP.Contains(me)) shake = Mathf.Min(12, shake + 7);
+                }
+                else if (kind != null && isRobot && j >= T.hitThreshold * 1.5f && !invHit)
                 {
                     var pa = a.Pos; var pb = b.Pos;          // 壁など動かない物は rb が無い
                     float kk = Mathf.Clamp01((j - T.hitThreshold * 1.5f) / (T.hitThreshold * 5));
@@ -1116,9 +1177,14 @@ namespace Nekorobo
             }
             // **無敵のロボが、無敵でない相手のロボにぶつかったら、相手を吹っ飛ばす**（担当の案。JS版と同じ）。
             // 衝撃の大きさによらず決まった速さで飛ばす。相手が運んでいる料理はその場に落とす
-            if (hitP.Count == 2 && InvOn(hitP[0]) != InvOn(hitP[1]))
+            // **ダッシュで相手のロボに当てたときも、同じように吹っ飛ばす**（担当の案）。片方だけがダッシュ中で、相手が無敵でないとき
+            Player dashS = hitP.Count == 2 && dashOf(hitP[0]) != dashOf(hitP[1]) ? (dashOf(hitP[0]) ? hitP[0] : hitP[1]) : null;
+            Player dashV = dashS != null ? (dashS == hitP[0] ? hitP[1] : hitP[0]) : null;
+            bool invPair = hitP.Count == 2 && InvOn(hitP[0]) != InvOn(hitP[1]);
+            if (invPair || (dashS != null && !InvOn(dashV)))
             {
-                var S = InvOn(hitP[0]) ? hitP[0] : hitP[1]; var V = S == hitP[0] ? hitP[1] : hitP[0];
+                var S = invPair ? (InvOn(hitP[0]) ? hitP[0] : hitP[1]) : dashS; var V = S == hitP[0] ? hitP[1] : hitP[0];
+                float kn = invPair ? T.invKnock : T.dashKnock, ku = invPair ? T.invKnockUp : T.dashKnockUp;
                 var ps = S.ent.rb.position; var pv = V.ent.rb.position;
                 float kx = pv.x - ps.x, kz = pv.z - ps.z;
                 var sv = S.ent.rb.linearVelocity;
@@ -1127,7 +1193,7 @@ namespace Nekorobo
                 if (V.carried != null) DropDish(V, new Vector3(kx / kl * 2.5f, 0, kz / kl * 2.5f));
                 V.airborne = true;
                 V.knockT = 0.4f;                                // しばらく地面の減速を掛けない
-                V.ent.rb.linearVelocity = new Vector3(kx / kl * T.invKnock, T.invKnockUp, kz / kl * T.invKnock);
+                V.ent.rb.linearVelocity = new Vector3(kx / kl * kn, ku, kz / kl * kn);
                 // 回すのは縦の軸だけ（傾きの軸に入れると倒れたまま走り回っていた）。JS版は左回りが＋なので符号に注意
                 V.ent.rb.angularVelocity = new Vector3(0, (Random.value < 0.5f ? -1 : 1) * 9, 0);
                 SetFace(V, "hit", 1.2f);
@@ -1457,6 +1523,34 @@ namespace Nekorobo
         ///   協力  ：お店ひとつぶん（全員の売上と、店全体の損壊）
         ///   チーム戦：チームの全員ぶんを足したもの
         /// </summary>
+        /// <summary>
+        /// いまの順位（同じ値なら同じ順位）。JS版 h2Ranks。上の帯と頭の上の王冠で使う。
+        ///   個人戦 … 差引 ／ チーム戦 … チームの差引でチームの順位 ／ 協力 … 自分が売ったぶん（売上＋大暴れ）
+        /// 個人戦で途中で抜けた人（オンライン）は最下位。ほかの人の順位は、抜けた人を除いて数える
+        /// </summary>
+        public Dictionary<Player, int> H2Ranks()
+        {
+            var PL = players;
+            var val = new Dictionary<Player, float>();
+            foreach (var P in PL) val[P] = mode == "coop" ? P.sales + P.wreck : LedgerOf(P).total;
+            var r = new Dictionary<Player, int>();
+            if (mode == "versus" && PL.Exists(P => P.quit))
+            {
+                var stay = PL.FindAll(P => !P.quit);
+                foreach (var P in PL)
+                {
+                    int k = 1; foreach (var q in stay) if (val[q] > val[P] + 1e-4f) k++;
+                    r[P] = P.quit ? stay.Count + 1 : k;
+                }
+                return r;
+            }
+            var pool = new List<float>();
+            if (mode == "team") foreach (var t in TeamsInPlay()) pool.Add(LedgerOf(TeamLead(t)).total);
+            else foreach (var P in PL) pool.Add(val[P]);
+            foreach (var P in PL) { int k = 1; foreach (var v in pool) if (v > val[P] + 1e-4f) k++; r[P] = k; }
+            return r;
+        }
+
         public Ledger LedgerOf(Player P)
         {
             if (P == null) P = me;
@@ -1564,7 +1658,9 @@ namespace Nekorobo
             var order = new List<Player>(players);
             var tot = new Dictionary<Player, float>();
             foreach (var P in players) tot[P] = LedgerOf(P).total;
-            order.Sort((a, b) => { int c = tot[b].CompareTo(tot[a]); return c != 0 ? c : a.idx.CompareTo(b.idx); });
+            // 途中で抜けた人（オンライン）は最下位
+            order.Sort((a, b) => { int q = a.quit.CompareTo(b.quit); if (q != 0) return q;
+                                   int c = tot[b].CompareTo(tot[a]); return c != 0 ? c : a.idx.CompareTo(b.idx); });
             return order;
         }
         public List<int> TeamsInPlay()

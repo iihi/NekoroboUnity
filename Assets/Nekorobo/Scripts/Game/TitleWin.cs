@@ -208,6 +208,18 @@ namespace Nekorobo
                 Tile("設定", "green", "settings", () => { setLic = false; Go("Settings"); }, "操作説明・音の大きさ・著作権表示。", "settings"),
                 Tile("実績", "purple", "medal", () => Go("Ach"), Lang.Tr("取った実績の一覧（{0}）。", g.AchCountText()), "ach"),
                 Tile("デバッグ", "grey", "debug", () => Go("Debug"), "ステージを作る・コースの並びを変える（開発用）。", "debug"));
+            // 終了（担当の案。ゲームを終わらせる）
+            Btn(st, "終了", "sec", () => ConfirmOpen("ゲームを終了しますか？", "", "終了する", "やめない", "Top", Quit),
+                "ゲームを終わらせます。", false, "quit");
+        }
+
+        static void Quit()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;     // エディタでは再生を止める
+#else
+            Application.Quit();
+#endif
         }
 
         void PageSolo(Stack st)
@@ -832,19 +844,20 @@ namespace Nekorobo
         {
             new[] { "L2", "煽り（応援）", "e0569a" }, new[] { "R2", "煽り（挑発）", "e0569a" },
             new[] { "L1", "前のアイテム", "f08a24" }, new[] { "R1", "次のアイテム", "f08a24" },
-            new[] { "左スティック", "曲がる", "2f8fe0" }, new[] { "Y", "アイテムを使う", "f5c518" },
+            new[] { "左スティック", "曲がる／押し込みでダッシュ", "2f8fe0" }, new[] { "Y", "アイテムを使う", "f5c518" },
             new[] { "十字キー", "↑加速 ↓バック ←→曲がる", "2f8fe0" }, new[] { "X", "ジャンプ", "2f8fe0" },
-            new[] { "右スティック", "煽りを選ぶ", "e0569a" }, new[] { "B", "バック／戻る", "e8453c" },
-            new[] { "", "", "" }, new[] { "A", "加速／決定", "3fbf5a" },
+            new[] { "右スティック", "煽りを選ぶ／押し込みで料理を落とす", "e0569a" }, new[] { "B", "バック／戻る", "e8453c" },
+            new[] { "≡（START）", "ポーズメニュー", "8f8fa8" }, new[] { "A", "加速／決定", "3fbf5a" },
         };
         static readonly string[][] CTRL_KEY =
         {
-            new[] { "↑", "加速（前へ進む）", "2f8fe0" }, new[] { "P", "一時停止", "8f8fa8" },
+            new[] { "↑", "加速（前へ進む）", "2f8fe0" }, new[] { "Esc ／ P", "ポーズメニュー", "8f8fa8" },
             new[] { "↓", "バック", "2f8fe0" }, new[] { "R", "やり直し", "8f8fa8" },
             new[] { "← →", "曲がる", "2f8fe0" }, new[] { "M", "音の ON/OFF", "8f8fa8" },
             new[] { "スペース", "ジャンプ", "3fbf5a" }, new[] { "Enter ／ Esc", "決定／戻る", "8f8fa8" },
             new[] { "Z", "アイテムを使う", "f08a24" }, new[] { "Q ／ E", "煽り（押している間）", "e0569a" },
             new[] { "X ／ C", "次／前のアイテム", "f08a24" }, new[] { "Q/E ＋ X ／ C", "煽りを選ぶ（次／前）", "f08a24" },
+            new[] { "Shift", "ダッシュ（5秒に1回）", "3fbf5a" }, new[] { "V", "持っている料理を落とす", "3fbf5a" },
         };
 
         void PageSettings(Stack st)
