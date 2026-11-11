@@ -17,14 +17,14 @@ namespace Nekorobo
         public readonly RectTransform root, box;
         readonly RawImage bgImg;
 
-        public UiBoard(Transform parent, string name, bool bg = true)
+        public UiBoard(Transform parent, string name, bool bg = true, string bgSrc = "ui/res/bg.jpg")
         {
             root = UiKit.Rect(parent, name);
             UiKit.Stretch(root);
             if (bg)
             {
                 bgImg = root.gameObject.AddComponent<RawImage>();
-                bgImg.texture = DataRoot.Texture("ui/res/bg.jpg");
+                bgImg.texture = DataRoot.Texture(bgSrc);
                 bgImg.color = bgImg.texture != null ? Color.white : Color.black;
                 bgImg.raycastTarget = true;
             }
@@ -100,6 +100,27 @@ namespace Nekorobo
             o = new Texture2D(t2.width, t2.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
             o.SetPixels(px); o.Apply(false);
             bright[src] = o;
+            return o;
+        }
+
+        static readonly System.Collections.Generic.Dictionary<Texture, Texture2D> dull = new System.Collections.Generic.Dictionary<Texture, Texture2D>();
+        /// <summary>灰色がかって暗くした絵（CSS の filter:grayscale(g) brightness(k)。面選びの、まだ押せない「スタート」）</summary>
+        public static Texture Dull(Texture src, float gray = 0.85f, float k = 0.75f)
+        {
+            var t2 = src as Texture2D;
+            if (t2 == null || !t2.isReadable) return src;
+            Texture2D o;
+            if (dull.TryGetValue(src, out o) && o != null) return o;
+            var px = t2.GetPixels();
+            for (int i = 0; i < px.Length; i++)
+            {
+                var c = px[i];
+                float l = c.r * 0.2126f + c.g * 0.7152f + c.b * 0.0722f;
+                px[i] = new Color(Mathf.Lerp(c.r, l, gray) * k, Mathf.Lerp(c.g, l, gray) * k, Mathf.Lerp(c.b, l, gray) * k, c.a);
+            }
+            o = new Texture2D(t2.width, t2.height, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            o.SetPixels(px); o.Apply(false);
+            dull[src] = o;
             return o;
         }
 
@@ -212,13 +233,21 @@ namespace Nekorobo
     public class UiPoly : UnityEngine.UI.MaskableGraphic
     {
         public UnityEngine.Vector2[] pts = new UnityEngine.Vector2[0];
+        // 絵を貼るとき（面選びの見取り図を平行四辺形に切る）。uv は箱の中の位置から、uvRect の範囲で取る
+        public UnityEngine.Texture tex; public UnityEngine.Rect uvRect = new UnityEngine.Rect(0, 0, 1, 1);
+        public override UnityEngine.Texture mainTexture { get { return tex != null ? tex : base.mainTexture; } }
         public void Set(params UnityEngine.Vector2[] p) { pts = p; SetVerticesDirty(); }
         protected override void OnPopulateMesh(UnityEngine.UI.VertexHelper vh)
         {
             vh.Clear();
             if (pts == null || pts.Length < 3) return;
             var r = rectTransform.rect;
-            foreach (var p in pts) vh.AddVert(new UnityEngine.Vector3(r.xMin + p.x, r.yMax - p.y), color, UnityEngine.Vector2.zero);
+            foreach (var p in pts)
+            {
+                var uv = new UnityEngine.Vector2(uvRect.x + p.x / UnityEngine.Mathf.Max(1, r.width) * uvRect.width,
+                                                 uvRect.y + (1 - p.y / UnityEngine.Mathf.Max(1, r.height)) * uvRect.height);
+                vh.AddVert(new UnityEngine.Vector3(r.xMin + p.x, r.yMax - p.y), color, uv);
+            }
             for (int i = 1; i + 1 < pts.Length; i++) vh.AddTriangle(0, i, i + 1);
         }
         public static UiPoly Add(UnityEngine.RectTransform parent, UnityEngine.Color c, float x, float y, float w, float h, params UnityEngine.Vector2[] p)
@@ -251,15 +280,15 @@ namespace Nekorobo
     {
         public static UnityEngine.RectTransform Add(UnityEngine.RectTransform parent, int col)
         {
-            int i = System.Array.IndexOf(Player.PCOL, col); if (i < 0) i = 0;
+            // 清書1109 の人の指（HTML版 assets/ui/ptr/p1〜p4.png。1P 青・2P 赤・3P 緑・4P 橙）。色に合う絵が無ければノーマル。
+            // 絵は PSD の大きさなので半分の 62×69 で置く。指先（絵の 24.5, 4）を合わせる点にする（傾けない・影は絵に入っている）
+            int i = System.Array.IndexOf(Player.PCOL, col);
             var holder = UiBoard.Box(parent, 0, 0, 0, 0, "Hand");
-            var r = UiBoard.Box(holder, 0, 0, 51.75f, 63.25f, "Img");
-            r.pivot = new UnityEngine.Vector2(23f / 51.75f, 1 - 8.6f / 63.25f);       // 指先
+            var r = UiBoard.Box(holder, 0, 0, 62, 69, "Img");
+            r.pivot = new UnityEngine.Vector2(24.5f / 62f, 1 - 4f / 69f);
             r.anchoredPosition = UnityEngine.Vector2.zero;
-            r.localRotation = UnityEngine.Quaternion.Euler(0, 0, 16);                 // 少し傾ける（CSS rotate(-16deg)）
             var im = r.gameObject.AddComponent<UnityEngine.UI.RawImage>();
-            im.texture = UnityEngine.Resources.Load<UnityEngine.Texture2D>("Ui/hand_" + i); im.raycastTarget = false;
-            var sh = r.gameObject.AddComponent<UnityEngine.UI.Shadow>(); sh.effectColor = new UnityEngine.Color(0, 0, 0, 0.6f); sh.effectDistance = new UnityEngine.Vector2(0, -3);
+            im.texture = DataRoot.Texture("ui/ptr/" + (i < 0 ? "normal" : "p" + (i % 4 + 1)) + ".png"); im.raycastTarget = false;
             return holder;
         }
     }

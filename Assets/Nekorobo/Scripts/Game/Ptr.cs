@@ -145,11 +145,11 @@ namespace Nekorobo
             var h = new GameObject("Finger", typeof(RectTransform));
             h.transform.SetParent(go.transform, false);
             var ri = h.AddComponent<RawImage>();
-            ri.texture = Resources.Load<Texture2D>("Ui/ptr"); ri.raycastTarget = false;
+            ri.texture = DataRoot.Texture("ui/ptr/normal.png"); ri.raycastTarget = false;
             img = ri.rectTransform;
-            // 絵は 2倍で 88×104。指先は (13, 5)（ptr_icon.mjs）。そこを合わせる点にする
-            img.sizeDelta = new Vector2(44, 52);
-            img.pivot = new Vector2(13f / 44f, 1f - 5f / 52f);
+            // 清書1109 の「ノーマル」の指（HTML版 assets/ui/ptr/normal.png。PSD の大きさなので半分の 62×69 で置く）。指先は (24.5, 4)
+            img.sizeDelta = new Vector2(62, 69);
+            img.pivot = new Vector2(24.5f / 62f, 1f - 4f / 69f);
             img.anchorMin = img.anchorMax = Vector2.zero;
             h.SetActive(false);
         }
@@ -161,8 +161,18 @@ namespace Nekorobo
             curSet = on;
             if (on)
             {
-                if (curTex == null) curTex = Resources.Load<Texture2D>("Ui/ptr_cur");
-                if (curTex != null) Cursor.SetCursor(curTex, new Vector2(7, 2), CursorMode.Auto);
+                // マウスのカーソルの絵（HTML版 assets/ui/ptr/normal_cur.png、62×69。指先 24, 4）。
+                // カーソルにする絵は読み書きできて縮小版の無い RGBA32 にしておく
+                if (curTex == null)
+                {
+                    var src = DataRoot.Texture("ui/ptr/normal_cur.png");
+                    if (src != null)
+                    {
+                        curTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false);
+                        curTex.SetPixels32(src.GetPixels32(0)); curTex.Apply(false);
+                    }
+                }
+                if (curTex != null) Cursor.SetCursor(curTex, new Vector2(24, 4), CursorMode.Auto);
             }
             else Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
         }

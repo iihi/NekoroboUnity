@@ -24,7 +24,7 @@ namespace Nekorobo
 
         RectTransform annc, anncBx; Graphic anncSl; CanvasGroup anncCg; float anncT, anncAge, anncRot, anncTop, anncSc;
         readonly Queue<KeyValuePair<string, float>> anncQ = new Queue<KeyValuePair<string, float>>();
-        RectTransform bar; Text barT; Image barBg;
+        RectTransform bar, barSt; Text barT; RawImage barBg, barTag, barStImg; string barKey; float barStT, barHurryT;
         int nKind; float nT, nAmt; Player nP;
 
         class Sale { public RectTransform r; public Text f, a; public Vector3 w; public float age; }
@@ -46,14 +46,26 @@ namespace Nekorobo
             // マンガ調（JS版 #annc。集中線と網点のギザギザの吹き出し）。中身は出すたびに作る
             annc = UiKit.Rect(layer, "Annc"); UiKit.Stretch(annc);
             annc.gameObject.SetActive(false);
-            // VIP の残り秒数の帯
+            // VIP の帯（清書1109）。帯・人の札・成功/失敗の判子は絵（HTML版 assets/ui/play/vipbar・vipok・vipng・vtag1〜4・*_st）、
+            // 残り秒数だけ字で重ねる。位置はまん中上（JS版 #vipBar：top 136px・455×50）
             bar = UiKit.Rect(layer, "VipBar");
             bar.anchorMin = bar.anchorMax = new Vector2(0.5f, 1); bar.pivot = new Vector2(0.5f, 1);
-            bar.anchoredPosition = new Vector2(0, -92); bar.sizeDelta = new Vector2(520, 46);
-            barBg = bar.gameObject.AddComponent<Image>(); barBg.color = new Color(0.12f, 0.08f, 0.02f, 0.88f); barBg.raycastTarget = false;
-            bar.gameObject.AddComponent<Outline>().effectColor = GOLD;
-            barT = Lbl(bar, "", 22, Color.white, Vector2.zero);
-            barT.supportRichText = true;
+            bar.anchoredPosition = new Vector2(0, -136); bar.sizeDelta = new Vector2(455, 50);
+            System.Func<string, float, float, float, float, RawImage> pic = (nm, x, y, w, h) =>
+            {
+                var im = new GameObject(nm, typeof(RectTransform)).AddComponent<RawImage>();
+                var r = im.rectTransform; r.SetParent(bar, false);
+                r.anchorMin = r.anchorMax = new Vector2(0, 1); r.pivot = new Vector2(0, 1);
+                r.anchoredPosition = new Vector2(x, -y); r.sizeDelta = new Vector2(w, h);
+                im.raycastTarget = false;
+                return im;
+            };
+            barBg = pic("Bg", 0, 0, 455, 50);
+            barTag = pic("Tag", 20.5f, 10.5f, 60, 21);
+            barT = UiBoard.T(bar, "", 341 + 38.5f / 2, 5 + (26.5f - 30) / 2, 30, Mats.Hex(0xe60012), 2, "Sec");
+            barStImg = pic("St", 240, -23, 175.5f, 86.5f);
+            barSt = barStImg.rectTransform; barSt.pivot = new Vector2(0.5f, 0.5f);
+            barSt.anchoredPosition = new Vector2(240 + 175.5f / 2, 23 - 86.5f / 2);
             bar.gameObject.SetActive(false);
         }
 
@@ -105,16 +117,36 @@ namespace Nekorobo
             var cc = Mats.Hex(vip ? 0xc0006a : 0xe05a00);
             anncBx = UiKit.Rect(annc, "Bx");
             anncBx.anchorMin = anncBx.anchorMax = new Vector2(0.5f, 1); anncBx.pivot = new Vector2(0.5f, 0.5f);
-            anncBx.sizeDelta = new Vector2(600, 132);
             anncSc = vip ? 1 : 0.72f; anncTop = vip ? 112 : 92;
-            anncBx.anchoredPosition = new Vector2(0, -(anncTop + 66 * anncSc));
             anncCg = anncBx.gameObject.AddComponent<CanvasGroup>();
-            ComicUi.Burst(anncBx, 600, 270, 18, Mats.Hex(0xffd400), Color.white,
-                          new ComicUi.Dots { bg = Color.white, dot = Mats.Hex(0xff4d6d), r = 3.1f, gap = 10 });
-            var l1 = ComicUi.Label(anncBx, Lang.Tr(vip ? "♛ VIP オーダー出現！" : "高額オーダー出現！"), 44, Color.white, cc);
-            l1.rectTransform.anchoredPosition = new Vector2(0, 42);
-            var l2 = ComicUi.Label(anncBx, Game.Yen(a.Value) + (Lang.IsJa ? "！" : "!"), 74, Mats.Hex(0xffe14a), cc);
-            l2.rectTransform.anchoredPosition = new Vector2(0, -25);
+            var bstT = DataRoot.Texture("ui/play/" + (vip ? "vip" : "rich") + "_bst.png");
+            if (bstT != null)
+            {
+                // 清書1109：トゲトゲと見出しは絵、金額は字（黄色・黒い太い縁取り）。大きさは 494×237.5（VIP は 494×256）
+                float H = vip ? 256 : 237.5f;
+                anncBx.sizeDelta = new Vector2(494, H);
+                anncBx.anchoredPosition = new Vector2(0, -(anncTop + H / 2 * anncSc));
+                foreach (var nm in new[] { "_bst", "_head" })
+                {
+                    var im = new GameObject(nm, typeof(RectTransform)).AddComponent<RawImage>();
+                    im.rectTransform.SetParent(anncBx, false); UiKit.Stretch(im.rectTransform); im.raycastTarget = false;
+                    im.texture = DataRoot.Texture("ui/play/" + (vip ? "vip" : "rich") + nm + ".png");
+                }
+                var amt = ComicUi.Label(anncBx, Game.Yen(a.Value), 66, Mats.Hex(0xffe45a), new Color(0, 0, 0, 0), 5.5f, Vector2.zero);
+                var ar = amt.rectTransform; ar.anchorMin = ar.anchorMax = new Vector2(0, 1); ar.pivot = new Vector2(0.5f, 0.5f);
+                ar.anchoredPosition = new Vector2(86.5f + 322 / 2f, -((vip ? 101 : 82.5f) + 84.5f / 2));
+            }
+            else
+            {
+                anncBx.sizeDelta = new Vector2(600, 132);
+                anncBx.anchoredPosition = new Vector2(0, -(anncTop + 66 * anncSc));
+                ComicUi.Burst(anncBx, 600, 270, 18, Mats.Hex(0xffd400), Color.white,
+                              new ComicUi.Dots { bg = Color.white, dot = Mats.Hex(0xff4d6d), r = 3.1f, gap = 10 });
+                var l1 = ComicUi.Label(anncBx, Lang.Tr(vip ? "♛ VIP オーダー出現！" : "高額オーダー出現！"), 44, Color.white, cc);
+                l1.rectTransform.anchoredPosition = new Vector2(0, 42);
+                var l2 = ComicUi.Label(anncBx, Game.Yen(a.Value) + (Lang.IsJa ? "！" : "!"), 74, Mats.Hex(0xffe14a), cc);
+                l2.rectTransform.anchoredPosition = new Vector2(0, -25);
+            }
             anncRot = (Random.value < 0.5f ? -1 : 1) * (3 + Random.value * 4);
             annc.gameObject.SetActive(true); annc.SetAsLastSibling();     // 料理の上の印より手前
             anncT = vip ? 2.2f : 1.7f; anncAge = 0;
@@ -276,24 +308,41 @@ namespace Nekorobo
                 AnncAnim();
                 if (anncT <= 0) AnncNext();
             }
-            // VIP の帯
+            // VIP の帯（清書1109 の絵）。出ている間は限定の人の札と残り秒数、終わったら成功（届けた人）／失敗（限定の人）の判子
             if (nT > 0) nT -= dt;
-            string html = null; Color bc = new Color(0.12f, 0.08f, 0.02f, 0.88f);
+            string key = null; Player tagP = null; int sec = 0;
             if (anncT > 0) { }
-            else if (o != null && g.state == "play")
+            else if (o != null && g.state == "play") { key = "vipbar"; tagP = o.leader; sec = Mathf.Max(0, Mathf.CeilToInt(o.left)); }
+            else if (nT > 0 && nKind != 0) { key = nKind == 1 ? "vipok" : "vipng"; tagP = nP; }
+            bar.gameObject.SetActive(key != null);
+            if (key != null)
             {
-                html = "♛ <b>" + Lang.Tr("VIP オーダー") + "</b>  " + Lang.Tr("{0} 限定", Who(o.leader))
-                     + "   " + Lang.Tr("あと <b>{0}</b> 秒", Mathf.Max(0, Mathf.CeilToInt(o.left)));
-                if (o.left <= 5) bc = new Color(0.55f, 0.05f, 0.1f, 0.92f);
+                if (key != barKey)
+                {
+                    barKey = key; barStT = 0;
+                    barBg.texture = DataRoot.Texture("ui/play/" + key + ".png");
+                    barStImg.gameObject.SetActive(key != "vipbar");
+                    if (key != "vipbar") barStImg.texture = DataRoot.Texture("ui/play/" + key + "_st.png");
+                }
+                barTag.gameObject.SetActive(tagP != null);
+                if (tagP != null) barTag.texture = DataRoot.Texture("ui/play/vtag" + (Mathf.Max(0, System.Array.IndexOf(Player.PCOL, tagP.col)) % 4 + 1) + ".png");
+                barT.gameObject.SetActive(key == "vipbar");
+                barT.text = sec.ToString();
+                // 残り5秒からは秒数が脈打つ（1 ↔ 1.3、0.5 秒）
+                barHurryT = key == "vipbar" && sec <= 5 ? barHurryT + dt : 0;
+                float hp = barHurryT / 0.5f, ph = hp - Mathf.Floor(hp); if (((int)Mathf.Floor(hp)) % 2 == 1) ph = 1 - ph;
+                barT.rectTransform.localScale = Vector3.one * (1 + 0.3f * (0.5f - 0.5f * Mathf.Cos(ph * Mathf.PI)));
+                // 判子は押される（2.2 倍・−12° から、0.4 秒で弾んで止まる）
+                if (key != "vipbar")
+                {
+                    barStT += dt;
+                    float ks = Mathf.Clamp01(barStT / 0.4f), es = ComicUi.Bezier(ks, 0.2f, 1.8f, 0.4f, 1);
+                    barSt.localScale = Vector3.one * Mathf.LerpUnclamped(2.2f, 1, es);
+                    barSt.localRotation = Quaternion.Euler(0, 0, Mathf.LerpUnclamped(12, 0, es));
+                    var sc = barStImg.color; sc.a = Mathf.Clamp01(es); barStImg.color = sc;
+                }
             }
-            else if (nT > 0 && nKind != 0)
-            {
-                html = nKind == 1 ? "♛ <b>" + Lang.Tr("VIP 成功！") + "</b>  " + Who(nP) + " ＋" + Game.Yen(nAmt)
-                                  : "<b>" + Lang.Tr("VIP 失敗…") + "</b>  " + Lang.Tr("{0} 以外で {1} を山分け", nP != null ? Who(nP) : Lang.Tr("1位"), Game.Yen(nAmt));
-                bc = nKind == 1 ? new Color(0.1f, 0.4f, 0.15f, 0.9f) : new Color(0.3f, 0.3f, 0.33f, 0.9f);
-            }
-            bar.gameObject.SetActive(html != null);
-            if (html != null) { barT.text = html; barBg.color = bc; bar.sizeDelta = new Vector2(barT.preferredWidth + 40, 46); }
+            else barKey = null;
 
             // 売上の式：1.6秒で上へ流れて消える
             for (int i = sales.Count - 1; i >= 0; i--)

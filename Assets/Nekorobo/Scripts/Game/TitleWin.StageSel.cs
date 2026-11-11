@@ -38,7 +38,8 @@ namespace Nekorobo
         UiBoard ssB;
         Text ssSec; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
         const int SS_START = FREE_SLOTS + 1, SS_BACK = FREE_SLOTS + 2;
-        static Vector2 SsPos(int i) { return new Vector2(59 + (i % 8) * 145, 138 + (i / 8) * 112); }
+        // カードの左上（板の px）。清書1109：横 146・縦 109 おき（PSD の 292・218 の半分）。カードの絵は 177.5×100
+        static Vector2 SsPos(int i) { return new Vector2(40 + (i % 8) * 146, 148 + (i / 8) * 109); }
         public bool SsOpenNow { get { return SS.open; } }
 
         SsCtx SsMakeCtx()
@@ -113,7 +114,7 @@ namespace Nekorobo
             SS.win = -1; SS.winT = 0; SS.went = false; SS.go = null; SS.why = ""; SS.lockT = g.T.menuLock;
             SS.sig = ""; SS.sendT = 0; SS.mine = ""; SS.gapT = 0;
             SS.open = true;
-            if (ssB == null) ssB = new UiBoard(root.parent, "StageSel");
+            if (ssB == null) ssB = new UiBoard(root.parent, "StageSel", true, "ui/ss/bg.jpg");   // 背景は清書1109 の面選びの絵
             ssB.Active = true;
             SsDraw(true);
         }
@@ -130,8 +131,8 @@ namespace Nekorobo
         {
             ssB.Clear();
             var bx = ssB.box;
-            var title = UiBoard.T(bx, "STAGE SELECT", 46, 36, 76, Color.white);
-            ssB.In(title, "slam", 0);
+            var title = UiBoard.Img(bx, "ui/ss/title.png", 49, 45.5f, 549.5f, 56.5f, "Title");   // STAGE SELECT（絵）
+            ssB.In(title.rectTransform, "slam", 0);
             if (!string.IsNullOrEmpty(SS.ctx.head)) ssB.In(UiBoard.T(bx, SS.ctx.head, 50, 116, 17, Mats.Hex(0xffd400)), "left", 1);
             ssSec = null; ssBar = null;
             if (SS.timed)
@@ -150,35 +151,40 @@ namespace Nekorobo
                 var p = SsPos(i); bool rnd = i == FREE_SLOTS; var e = rnd ? null : FreePick(i);
                 var gone = !rnd && flist != null && i < flist.Count && flist[i].missing ? flist[i] : null;
                 var votes = SS.cur.FindAll(c => c.vote == i);
-                var card = UiBoard.Box(bx, p.x, p.y, 137, 96, "Card" + i);
+                // 清書1109：カードの絵（見取り図の所は平行四辺形に切って重ねる）・名前・投票した人の色の枠（何人もなら黄色の枠）と人の札
+                var card = UiBoard.Box(bx, p.x, p.y, 177.5f, 100, "Card" + i);
                 bool win = i == SS.win;
                 float dim = SS.win >= 0 && !win ? 0.35f : 1;
-                var bgc = rnd ? Mats.Hex(0x0d0d0d) : Mats.Hex(0x1c1c1c); bgc *= dim; bgc.a = 1;
-                UiPoly.Skew(card, bgc, 0, 0, 137, 96, -13);
+                var dc = new Color(dim, dim, dim);
+                UiBoard.Img(card, "ui/ss/" + (rnd ? "card_rnd" : "card") + ".png", 0, 0, 177.5f, 100, "Cb").color = dc;
                 if (!rnd)
                 {
-                    // 見取り図（使い回しの絵）。斜めには切らず、少し内側に置く
+                    // 見取り図。カードの暗い所（平行四辺形）に切って重ねる（object-fit:cover）
                     if (e != null && e.c != null)
                     {
-                        var th = UiBoard.Box(card, 14, 3, 109, 72, "Th");
-                        var ri = th.gameObject.AddComponent<RawImage>(); ri.texture = Thumb.Of(e.refKey, e.c); ri.raycastTarget = false; ri.color = new Color(dim, dim, dim);
+                        var tt = Thumb.Of(e.refKey, e.c);
+                        var th = UiPoly.Add(card, dc, 15.5f, 8, 144.5f, 48, new Vector2(16.5f, 0), new Vector2(144.5f, 0), new Vector2(128, 48), new Vector2(0, 48));
+                        th.tex = tt;
+                        if (tt != null)
+                        {
+                            float ta = tt.width / (float)tt.height, ba = 144.5f / 48;
+                            th.uvRect = ta > ba ? new Rect((1 - ba / ta) / 2, 0, ba / ta, 1) : new Rect(0, (1 - ta / ba) / 2, 1, ta / ba);
+                        }
+                        th.SetAllDirty();                      // 絵を変えたので、描き方も作り直す
                     }
-                    UiPoly.Skew(card, Mats.Hex(0x2a2a2a) * dim, 0, 75, 137, 21, -13);
-                    var nm = UiBoard.T(card, e != null ? Lang.Tr(e.n) : gone != null ? "× " + Lang.Tr(gone.n) : Lang.Tr("準備中"), 68.5f, 79, 12, new Color(dim, dim, dim), 2);
+                    var nm = UiBoard.T(card, e != null ? Lang.Tr(e.n) : gone != null ? "× " + Lang.Tr(gone.n) : Lang.Tr("準備中"), 8 + 70, 66, 12, dc, 2);
                     if (e == null) card.gameObject.AddComponent<CanvasGroup>().alpha = 0.35f;
                 }
-                else UiBoard.T(card, "?", 68.5f, 22, 50, new Color(dim, dim, dim), 2);
-                UiPoly.SkewRing(card, win ? Mats.Hex(0xffd400) : Mats.Hex(0xd2d2d2) * dim, 0, 0, 137, 96, -13, 3);
                 if (votes.Count > 0)
                 {
-                    // 投票した人の色の枠と、上に人の札（何人も入れたら札を並べる。枠は最初に入れた人の色）
-                    UiPoly.SkewRing(card, Mats.Hex(votes[0].col), -8, -8, 153, 112, -13, 5);
-                    float tx = 0;
+                    int vi = System.Array.IndexOf(Player.PCOL, votes[0].col);
+                    UiBoard.Img(card, "ui/ss/" + (votes.Count > 1 ? "f_multi" : "f" + (Mathf.Max(0, vi) % 4 + 1)) + ".png", 3, 0, 168.5f, 91, "Vf");
+                    float tx = 34.5f;
                     foreach (var v in votes)
                     {
-                        var tg = UiBoard.Fill(card, Mats.Hex(v.col), tx, -26, 32, 18, 0, "Vt");
-                        UiBoard.T(tg.rectTransform, v.lb, 16, 2.5f, 13, Color.white, 2);
-                        tx += 35;
+                        int ti = System.Array.IndexOf(Player.PCOL, v.col);
+                        UiBoard.Img(card, "ui/ss/t" + (Mathf.Max(0, ti) % 4 + 1) + ".png", tx, -14, 36.5f, 14.5f, "Vt");
+                        tx += 38.5f;
                     }
                 }
                 if (win) card.gameObject.AddComponent<SsBlink>();
@@ -186,10 +192,11 @@ namespace Nekorobo
             }
             // スタート（まだ票を入れていない人が居る間は暗くする）と、もどる
             var wait = SS.win >= 0 ? new List<SsVoter>() : SS.cur.FindAll(c => c.vote == null);
-            ssGoBtn = UiBoard.Box(bx, 474, 591, 439, 73, "Go");
-            UiPoly.Skew(ssGoBtn, wait.Count > 0 ? Mats.Hex(0x30332f) : Mats.Hex(0x225520), 0, 0, 439, 73, -13);
-            UiPoly.SkewRing(ssGoBtn, wait.Count > 0 ? Mats.Hex(0x7b8478) : Mats.Hex(0x6cf04f), 0, 0, 439, 73, -13, 4);
-            UiBoard.T(ssGoBtn, Lang.Tr("スタート"), 219.5f, 20, 30, wait.Count > 0 ? Mats.Hex(0xa9b0a6) : Color.white, 2);
+            // ボタンは絵（清書1109。go・back）。まだの人が居る間の「スタート」は灰色がかって暗く
+            ssGoBtn = UiBoard.Box(bx, 462, 591, 466.5f, 83, "Go");
+            var goImg = UiBoard.Img(ssGoBtn, "ui/ss/go.png", 0, 0, 466.5f, 83, "B0");
+            if (wait.Count > 0 && goImg.texture != null) goImg.texture = UiBoard.Dull(goImg.texture);
+            UiBoard.T(ssGoBtn, Lang.Tr("スタート"), 231.75f, 37 - 15, 30, wait.Count > 0 ? Mats.Hex(0xc9cec6) : Color.white, 2);
             ssB.In(ssGoBtn, "fade", 5);
             if (wait.Count > 0)
             {
@@ -201,10 +208,9 @@ namespace Nekorobo
             else { ssWait = null; ssWaitT = null; }
             if (SS.net != "guest")
             {
-                var back = UiBoard.Box(bx, 950, 591, 229, 73, "Back");
-                UiPoly.Skew(back, Mats.Hex(0x2e2e2e), 0, 0, 229, 73, -13);
-                UiPoly.SkewRing(back, Mats.Hex(0xe8e8e8), 0, 0, 229, 73, -13, 4);
-                UiBoard.T(back, Lang.Tr(SS.ctx.cont ? "やめる" : "もどる"), 114.5f, 20, 30, Color.white, 2);
+                var back = UiBoard.Box(bx, 937, 591, 260, 83, "Back");
+                UiBoard.Img(back, "ui/ss/back.png", 0, 0, 260, 83, "B0");
+                UiBoard.T(back, Lang.Tr(SS.ctx.cont ? "やめる" : "もどる"), 128.25f, 37 - 15, 30, Color.white, 2);
                 ssB.In(back, "fade", 5.5f);
             }
             if (SS.why != "") UiBoard.T(bx, SS.why, 52, 618, 19, Mats.Hex(0xffd400));
@@ -216,7 +222,7 @@ namespace Nekorobo
                 Hand.Add(c.el, c.col);
                 if (SS.cur.Count > 1)
                 {
-                    var tg = UiBoard.Fill(c.el, Mats.Hex(c.col), 14, 53, 30, 20, 4, "Tg");
+                    var tg = UiBoard.Fill(c.el, Mats.Hex(c.col), 14, 64, 30, 20, 4, "Tg");
                     UiBoard.T(tg.rectTransform, c.lb, 15, 3, 13, Color.white, 2);
                 }
                 if (SS.win >= 0) c.el.gameObject.SetActive(false);
@@ -228,11 +234,12 @@ namespace Nekorobo
         // カード・ボタンの枠（斜めにする前の箱）。参加者の画面には「もどる」が無い
         Rect? SsRectOf(int i)
         {
-            if (i == SS_START) return new Rect(474, 591, 439, 73);
-            if (i == SS_BACK) return SS.net == "guest" ? (Rect?)null : new Rect(950, 591, 229, 73);
-            var p = SsPos(i); return new Rect(p.x, p.y, 137, 96);
+            // 清書1109 の絵の、斜めにする前の箱
+            if (i == SS_START) return new Rect(477.5f, 591, 432.5f, 74);
+            if (i == SS_BACK) return SS.net == "guest" ? (Rect?)null : new Rect(952.5f, 591, 226, 74);
+            var p = SsPos(i); return new Rect(p.x + 18.5f, p.y, 137.5f, 91);
         }
-        static readonly float SS_TAN = Mathf.Tan(13 * Mathf.Deg2Rad);
+        const float SS_TAN = 0.344f;                // 清書1109 の斜め（高さ 96 で 33 ずれる）
         int SsHit(float x, float y)
         {
             for (int i = 0; i <= SS_BACK; i++)
@@ -437,7 +444,7 @@ namespace Nekorobo
             if (nagT > 0 && ssGoBtn != null)
             {
                 nagT -= dt; float u = 1 - nagT / 0.36f;
-                ssGoBtn.anchoredPosition = new Vector2(474 + Mathf.Sin(u * Mathf.PI * 5) * 8 * (1 - u), -591);
+                ssGoBtn.anchoredPosition = new Vector2(462 + Mathf.Sin(u * Mathf.PI * 5) * 8 * (1 - u), -591);
                 if (ssWaitT != null) ssWaitT.color = nagT > 0 ? Mats.Hex(0xffd400) : Mats.Hex(0xe6e6e6);
             }
             if (SS.win >= 0)

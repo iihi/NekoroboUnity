@@ -286,12 +286,15 @@ namespace Nekorobo
             var f = UiBoard.Box(fingRoot, 0, 0, 0, 0, "Finger_" + c.P.name);
             Hand.Add(f, c.P.col);
             // 値札（指の下）。人の色
-            c.tagBg = UiBoard.Fill(f, Mats.Hex(c.P.col), 6, 44, 10, 20, 6, "Tag");
+            c.tagBg = UiBoard.Fill(f, Mats.Hex(c.P.col), 6, 55, 10, 20, 6, "Tag");
             c.tag = UiBoard.T(c.tagBg.rectTransform, "", 6, 3, 13, Color.white);
             // 「買えません」（指の左上に灰色の札。担当の見本）
-            c.tagCant = UiBoard.Fill(f, Mats.Hex(0xd9d9d9), -10, -30, 10, 22, 6, "Cant");
-            c.cantT = UiBoard.T(c.tagCant.rectTransform, Lang.Tr("買えません"), 7, 4, 13, Mats.Hex(0x333333));
-            var cb = c.tagCant.gameObject.AddComponent<Outline>(); cb.effectColor = Color.white; cb.effectDistance = new Vector2(2, -2);
+            // 清書1109：灰色の地・白い太い縁（3px）・角の丸み・丸い書体 16px・右下へ黒い影（3px）
+            c.tagCant = UiBoard.Fill(f, Color.white, -10, -30, 10, 33, 8, "Cant");
+            var cs = c.tagCant.gameObject.AddComponent<Shadow>(); cs.effectColor = Color.black; cs.effectDistance = new Vector2(3, -3);
+            var ci = UiBoard.Fill(c.tagCant.rectTransform, Mats.Hex(0xcfcfcf), 3, 3, 4, 27, 6, "In");
+            var cr = ci.rectTransform; cr.anchorMin = Vector2.zero; cr.anchorMax = Vector2.one; cr.offsetMin = new Vector2(3, 3); cr.offsetMax = new Vector2(-3, -3);
+            c.cantT = UiBoard.T(c.tagCant.rectTransform, Lang.Tr("買えません"), 13, 9, 16, Mats.Hex(0x333333));
             c.el = f;
             if (!IsViewer(c.P) && c.P.src.kind != "net") f.gameObject.SetActive(false);   // NPC の指は出さない（オンラインの相手の指は出す）
         }
@@ -650,8 +653,8 @@ namespace Nekorobo
                 {
                     c.tagBg.gameObject.SetActive(false);
                     c.tagCant.gameObject.SetActive(true);
-                    c.tagCant.rectTransform.sizeDelta = new Vector2(c.cantT.preferredWidth + 14, 22);
-                    c.tagCant.rectTransform.anchoredPosition = new Vector2(-c.cantT.preferredWidth - 14 + 6, 30);
+                    c.tagCant.rectTransform.sizeDelta = new Vector2(c.cantT.preferredWidth + 26, 33);
+                    c.tagCant.rectTransform.anchoredPosition = new Vector2(-c.cantT.preferredWidth - 26 + 6, 35);   // 指の左上（右端が指先の 6px 右、下が 2px 上）
                 }
                 else
                 {

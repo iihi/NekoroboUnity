@@ -42,7 +42,7 @@ namespace Nekorobo
         public bool TutShown { get { return tutRoot.gameObject.activeSelf; } }
 
         // ---- バン
-        RectTransform bangRoot, bangBox, bangBx; Graphic bangSl; CanvasGroup bangCg; float bangRot, bangSlA;
+        RectTransform bangRoot, bangBox, bangBx, bangWord; Graphic bangSl; CanvasGroup bangCg; float bangRot, bangSlA;
         float bangT = -1; System.Action bangThen;
         public bool BangOn { get { return bangT >= 0; } }
 
@@ -462,12 +462,29 @@ namespace Nekorobo
             bangBx.anchorMin = bangBx.anchorMax = new Vector2(0.5f, 0.5f); bangBx.pivot = new Vector2(0.5f, 0.5f);
             bangBx.sizeDelta = new Vector2(1060, 400); bangBx.anchoredPosition = new Vector2(0, 25);
             bangCg = bangBx.gameObject.AddComponent<CanvasGroup>();
-            var cc = Mats.Hex(tu ? 0x1f5fd0 : cleared ? 0x13924a : 0xd0302a);
-            ComicUi.Burst(bangBx, 1060, 400, 22, Mats.Hex(tu ? 0x7fd0ff : cleared ? 0xffd400 : 0xa9b8cc), Mats.Hex(cleared ? 0xfffbe6 : 0xeef2f7));
-            var l1 = ComicUi.Label(bangBx, tu ? "TIME UP!!" : cleared ? "STAGE CLEAR!!" : "FAILED…", 84, Color.white, cc);
-            l1.rectTransform.anchoredPosition = new Vector2(0, 16);
-            var l3 = ComicUi.Label(bangBx, Lang.Tr(sub), 22, Color.white, new Color(0, 0, 0, 0), 3, Vector2.zero);
-            l3.rectTransform.anchoredPosition = new Vector2(0, -49);
+            bangWord = null;
+            var fin = cleared ? DataRoot.Texture("ui/play/finish.png") : null;
+            if (fin != null)
+            {
+                // クリアとタイムアップは FINISH!（清書1109 の絵。トゲトゲの上に字、字は少し遅れて弾む）
+                bangBx.sizeDelta = new Vector2(817, 393.5f); bangBx.anchoredPosition = Vector2.zero;
+                var bst = new GameObject("Bst", typeof(RectTransform)).AddComponent<RawImage>();
+                bst.rectTransform.SetParent(bangBx, false); UiKit.Stretch(bst.rectTransform); bst.raycastTarget = false;
+                bst.texture = DataRoot.Texture("ui/play/finish_bst.png");
+                var wd = new GameObject("Word", typeof(RectTransform)).AddComponent<RawImage>();
+                wd.rectTransform.SetParent(bangBx, false); UiKit.Stretch(wd.rectTransform); wd.raycastTarget = false;
+                wd.texture = fin; wd.gameObject.AddComponent<CanvasGroup>();
+                bangWord = wd.rectTransform;
+            }
+            else
+            {
+                var cc = Mats.Hex(tu ? 0x1f5fd0 : cleared ? 0x13924a : 0xd0302a);
+                ComicUi.Burst(bangBx, 1060, 400, 22, Mats.Hex(tu ? 0x7fd0ff : cleared ? 0xffd400 : 0xa9b8cc), Mats.Hex(cleared ? 0xfffbe6 : 0xeef2f7));
+                var l1 = ComicUi.Label(bangBx, tu ? "TIME UP!!" : cleared ? "STAGE CLEAR!!" : "FAILED…", 84, Color.white, cc);
+                l1.rectTransform.anchoredPosition = new Vector2(0, 16);
+                var l3 = ComicUi.Label(bangBx, Lang.Tr(sub), 22, Color.white, new Color(0, 0, 0, 0), 3, Vector2.zero);
+                l3.rectTransform.anchoredPosition = new Vector2(0, -49);
+            }
             bangRot = -4;                                             // CSS の --rot:-4deg（右回りが正）
             Game.SeUi(cleared ? "clear" : "fail");
             bangThen = then; bangT = 0;
@@ -494,6 +511,12 @@ namespace Nekorobo
             bangBx.localScale = Vector3.one * sc;
             bangBx.localRotation = Quaternion.Euler(0, 0, -rot);
             bangCg.alpha = Mathf.Clamp01(e);
+            if (bangWord != null)
+            {
+                float kw = Mathf.Clamp01((bangT - 0.08f) / 0.45f), ew = ComicUi.Bezier(kw, 0.2f, 1.8f, 0.4f, 1);
+                bangWord.localScale = Vector3.one * Mathf.LerpUnclamped(1.8f, 1, ew);
+                bangWord.GetComponent<CanvasGroup>().alpha = Mathf.Clamp01(ew);
+            }
             // 集中線（0.3 秒で 1.35 → 1）
             float ks = Mathf.Clamp01(bangT / 0.3f), es = 1 - Mathf.Pow(1 - ks, 3);
             bangSl.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.35f, 1, es);

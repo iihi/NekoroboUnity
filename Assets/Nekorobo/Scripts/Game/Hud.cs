@@ -123,6 +123,8 @@ namespace Nekorobo
             return t;
         }
         float readyAnim; string readyShown = "";
+        // 3・2・1 と START! の絵（清書1109。HTML版 assets/ui/play/n1〜n3・start・start_bst）
+        RectTransform readyRoot, readyGo, readyWord; RawImage readyNum; CanvasGroup readyCg;
         GameObject menuPanel;
         Text menuText;
         ResultWin resultWin;
@@ -190,6 +192,24 @@ namespace Nekorobo
             center = Txt(root, "", 110, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-400, -100), new Vector2(400, 100));
             center.fontStyle = FontStyle.Bold;
             var co = center.GetComponent<Outline>(); co.effectColor = new Color(0, 0, 0, 0.45f); co.effectDistance = new Vector2(3, -5);
+            {
+                // 数字は高さ 188px、START! はトゲトゲ（817×393.5）の上に字（字は少し遅れて弾む）
+                readyRoot = UiKit.Rect(root, "Ready");
+                readyRoot.anchorMin = readyRoot.anchorMax = new Vector2(0.5f, 0.5f); readyRoot.sizeDelta = new Vector2(817, 393.5f);
+                readyCg = readyRoot.gameObject.AddComponent<CanvasGroup>(); readyCg.blocksRaycasts = false;
+                readyNum = new GameObject("N", typeof(RectTransform)).AddComponent<RawImage>();
+                readyNum.rectTransform.SetParent(readyRoot, false); readyNum.raycastTarget = false;
+                readyGo = UiKit.Rect(readyRoot, "Go"); UiKit.Stretch(readyGo);
+                var bst = new GameObject("Bst", typeof(RectTransform)).AddComponent<RawImage>();
+                bst.rectTransform.SetParent(readyGo, false); UiKit.Stretch(bst.rectTransform); bst.raycastTarget = false;
+                bst.texture = DataRoot.Texture("ui/play/start_bst.png");
+                var wd = new GameObject("Word", typeof(RectTransform)).AddComponent<RawImage>();
+                wd.rectTransform.SetParent(readyGo, false); UiKit.Stretch(wd.rectTransform); wd.raycastTarget = false;
+                wd.texture = DataRoot.Texture("ui/play/start.png");
+                wd.gameObject.AddComponent<CanvasGroup>();
+                readyWord = wd.rectTransform;
+                readyRoot.gameObject.SetActive(false);
+            }
 
             // ---- 結果
 
@@ -466,9 +486,20 @@ namespace Nekorobo
             if (label != readyShown)
             {
                 readyShown = label; readyAnim = 0;
-                center.text = Lang.Tr(label);
                 bool go = label == "スタート！";
                 if (label != "") Game.SeUi(go ? "go" : "count");
+                // 数字と START! は絵（清書1109）。絵が無ければ前の字で出す
+                Texture nt = null;
+                if (label != "" && !go) nt = DataRoot.Texture("ui/play/n" + Mathf.Min(3, int.Parse(label)) + ".png");
+                bool pic = label != "" && (go ? DataRoot.Texture("ui/play/start.png") != null : nt != null);
+                readyRoot.gameObject.SetActive(pic);
+                if (pic)
+                {
+                    readyGo.gameObject.SetActive(go);
+                    readyNum.gameObject.SetActive(!go);
+                    if (!go) { readyNum.texture = nt; readyNum.rectTransform.sizeDelta = new Vector2(188f * nt.width / nt.height, 188); }
+                }
+                center.text = pic ? "" : Lang.Tr(label);
                 center.fontSize = go ? 74 : 110;
                 center.color = go ? Mats.Hex(0xffd24a) : Color.white;
             }
@@ -479,6 +510,12 @@ namespace Nekorobo
                 float e = 1 + 2.7f * Mathf.Pow(k - 1, 3) + 1.7f * Mathf.Pow(k - 1, 2);   // 行き過ぎて戻る
                 center.rectTransform.localScale = Vector3.one * Mathf.LerpUnclamped(2.1f, 1f, e);
                 var cc = center.color; cc.a = Mathf.Clamp01(k * 2.5f); center.color = cc;
+                readyRoot.localScale = Vector3.one * Mathf.LerpUnclamped(2.1f, 1f, e);
+                readyCg.alpha = Mathf.Clamp01(k * 2.5f);
+                // START! の字は 0.08 秒遅れて、1.8 倍から弾んで止まる（0.45 秒）
+                float kw = Mathf.Clamp01((readyAnim - 0.08f) / 0.45f), ew = ComicUi.Bezier(kw, 0.2f, 1.8f, 0.4f, 1);
+                readyWord.localScale = Vector3.one * Mathf.LerpUnclamped(1.8f, 1, ew);
+                readyWord.GetComponent<CanvasGroup>().alpha = Mathf.Clamp01(ew);
             }
 
             var cam = g.mainCam;
