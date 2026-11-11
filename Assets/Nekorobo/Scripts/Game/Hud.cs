@@ -447,6 +447,7 @@ namespace Nekorobo
         void Update()
         {
             Net.Pump();                                    // 部屋サーバーから届いた便りを配る（タイトルの間も）
+            Ptr.TrackInput();                              // 直前に使ったのがマウスか（指をマウスの所から始めるため）
             EosAch.Tick();                                 // 実績を EOS へ（鍵が無ければ何もしない）
             if (achToast != null) achToast.Tick(Time.unscaledDeltaTime);
             NetWaitTick();
@@ -467,7 +468,7 @@ namespace Nekorobo
             if (Story.TalkOn) { }                                     // 会話の間は、ショップも面選びも止める
             else if (ending.Open) ending.Tick(Time.unscaledDeltaTime);
             else if (finalWin.Open) finalWin.Tick(Time.unscaledDeltaTime);
-            else if (shopWin.Open) { shopWin.Tick(Time.deltaTime); Ptr.CursorOnly(); }    // ショップは自分の指を持っている
+            else if (shopWin.Open) { shopWin.Tick(Time.deltaTime); Ptr.NoCursor(); }      // ショップは人の指を持っている（マウスもその指を動かすので、本物は消す）
             else if (pauseWin.Open) pauseWin.Tick(Time.unscaledDeltaTime);                  // ポーズメニュー（1人のときは止めてあるので unscaled）
             else
             {

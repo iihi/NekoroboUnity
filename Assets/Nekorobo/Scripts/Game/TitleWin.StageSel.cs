@@ -94,6 +94,12 @@ namespace Nekorobo
             if (SS.cur.Count == 0) SS.cur.Add(SsNewVoter(0, new PlayerSrc(), Net.Id, true));
             SS.timed = SS.cur.Count > 1 && g.T.stageSelTime > 0;
             SS.t = g.T.stageSelTime;
+            // マウスで遊んでいる人の指は、マウスの所から（ほかの人は今までどおり選んである面の上から。JS版 199b78c）
+            {
+                var mc = SS.cur.Find(c => c.local && c.src.kind == "key") ?? SS.cur.Find(c => c.local);
+                var mp = mc != null && ssB != null ? Ptr.MouseIn(ssB.box, 1280, 720) : null;
+                if (mp != null) { mc.x = mp.Value.x; mc.y = mp.Value.y; mc.at = SsHit(mc.x, mc.y); }
+            }
             SsShow();
         }
         void SsOpenGuest(JObject d)
@@ -458,6 +464,7 @@ namespace Nekorobo
             // マウスは最初のキーボードの人（居なければ最初の人）の指を動かす
             var mc = SS.cur.Find(c => c.local && c.src.kind == "key") ?? SS.cur.Find(c => c.local);
             var ms = Mouse.current;
+            if (mc != null) Ptr.NoCursor();                  // マウスが人の指を動かすので、本物のカーソルは消す（2つ見えないように）
             if (mc != null && ms != null)
             {
                 Vector2 lp;

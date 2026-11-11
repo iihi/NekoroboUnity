@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Nekorobo
@@ -21,6 +22,12 @@ namespace Nekorobo
         public bool Open { get; private set; }
 
         readonly List<bool> ok = new List<bool>(), prevOk = new List<bool>();
+        // 人ごとの指（同じ画面で2人以上のとき）。最初から「ショップへ」の上。A / Enter で OK、もう一度か B / Esc で取り消し。
+        // スティックで自由に動き、十字キー・矢印キーでボタンへ跳ぶ。マウスはキーボードの人（居なければ最初の人）の指を動かす
+        class RFing { public int i; public Player P; public RectTransform el; public Text tg; public CanvasGroup cg; public float x, y; public bool pOk = true, pBack = true, armed, rep, seOn = true; }
+        readonly List<RFing> fing = new List<RFing>();
+        static readonly Rect RES_BTN = new Rect(937, 591, 260, 83);         // 「ショップへ」の箱（板の px）
+        float fLockT;
         readonly List<float> npcT = new List<float>();
         float shownAt, autoT, goT, pressT;
         bool went;
@@ -204,16 +211,117 @@ namespace Nekorobo
             UiBoard.T(btn, Lang.Tr(goLabel), 130, 41.5f - 16, 32, Color.white, 2);
             var bimg = btn.gameObject.AddComponent<Image>(); bimg.color = new Color(0, 0, 0, 0);
             var bb = btn.gameObject.AddComponent<Button>(); bb.targetGraphic = bimg;
-            bb.onClick.AddListener(() => { if (Time.unscaledTime - shownAt > g.T.menuLock) PressMine(); });
+            // 人ごとの指を出しているときは、ここでは拾わない（指の所で決める。Tick）
+            bb.onClick.AddListener(() => { if (fing.Count == 0 && Time.unscaledTime - shownAt > g.T.menuLock) PressMine(); });
             B.In(btn, "pop", 5);
             oks = UiBoard.Box(bx, 1067, 556, 0, 26, "Oks");
             okNote = UiBoard.T(bx, "", 1067, 681, 13, Mats.Hex(0xc8c8c8), 2);
+            // 人ごとの指（この画面で遊ぶ人が2人以上のとき）。横に少しずつずらして「ショップへ」の上に並べる
+            fing.Clear();
+            if (g.MultiLocal())
+            {
+                var ids = new List<int>();
+                for (int i = 0; i < g.players.Count; i++)
+                    if (OwnSlot(i) && (g.players[i].src.kind == "key" || g.players[i].src.kind == "pad")) ids.Add(i);
+                if (ids.Count >= 2)
+                {
+                    var root2 = UiBoard.Box(bx, 0, 0, 1280, 720, "Fingers");
+                    for (int n = 0; n < ids.Count; n++)
+                    {
+                        var P = g.players[ids[n]];
+                        var el = UiBoard.Box(root2, 0, 0, 0, 0, "Finger");
+                        Hand.Add(el, P.col);
+                        var tgBg = UiBoard.Fill(el, Mats.Hex(P.col), 36, 24, 30, 20, 4, "Tg");
+                        var tg = UiBoard.T(tgBg.rectTransform, "", 6, 3, 13, Color.white);
+                        var f = new RFing { i = ids[n], P = P, el = el, tg = tg, cg = el.gameObject.AddComponent<CanvasGroup>(),
+                                            x = RES_BTN.x + RES_BTN.width / 2 + (n - (ids.Count - 1) / 2f) * 76, y = RES_BTN.y + 20 };
+                        fing.Add(f);
+                    }
+                    fLockT = 0.35f;                  // 開いた直後は押さない（走りながら押していた指で OK しないため）
+                    // マウスで遊んでいる人の指は、マウスの所から（ほかの人はボタンの上から）
+                    var mc = fing.Find(c => c.P.src.kind == "key") ?? fing[0];
+                    var mp = Ptr.MouseIn(B.box, 1280, 720);
+                    if (mp != null) { mc.x = mp.Value.x; mc.y = mp.Value.y; }
+                    FingPlace();
+                }
+            }
             B.Active = true;
             Open = true;
             B.StartIn();
             Refresh();
         }
         RawImage kira;
+
+        static bool InBtn(float x, float y) { return x >= RES_BTN.x && x <= RES_BTN.xMax && y >= RES_BTN.y && y <= RES_BTN.yMax; }
+        // 自分の OK を切り替える（押すと OK、もう一度押すと取り消し）
+        void FingToggle(int i)
+        {
+            ok[i] = !ok[i];
+            pressT = Game.PRESS_SHOW;
+            Game.SeUi(ok[i] ? "ok" : "back");
+            Refresh();
+        }
+        // 指を今の位置へ置いて、札（「1P」「1P OK!」）を描き直す。OK にした人の指は薄く
+        void FingPlace()
+        {
+            foreach (var c in fing)
+            {
+                c.el.anchoredPosition = new Vector2(c.x, -c.y);
+                string s = (c.P.idx + 1) + "P" + (ok[c.i] ? " OK!" : "");
+                if (c.tg.text != s) { c.tg.text = s; ((RectTransform)c.tg.transform.parent).sizeDelta = new Vector2(c.tg.preferredWidth + 12, 20); }
+                c.cg.alpha = ok[c.i] ? 0.45f : 1;
+                bool on = InBtn(c.x, c.y);
+                if (on && !c.seOn) Game.SeUi("cur", 0.7f);             // 自分の指がボタンに乗ったら、カーソルの音
+                c.seOn = on;
+            }
+        }
+        void FingTick(float dt)
+        {
+            Ptr.NoCursor();                                            // マウスもキーボードの人の指を動かすので、本物のカーソルは消す
+            if (fLockT > 0) fLockT -= dt;
+            float sp = 1150 / Mathf.Max(0.2f, g.T.ptrCross);
+            var kb = Keyboard.current;
+            // マウス：キーボードの人（居なければ最初の人）の指。画面いっぱいで拾い、板の端までで止める。押すのは指の所
+            var mc = fing.Find(c => c.P.src.kind == "key") ?? fing[0];
+            var ms = Mouse.current;
+            if (ms != null)
+            {
+                Vector2 lp;
+                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(B.box, ms.position.ReadValue(), null, out lp))
+                {
+                    float mx = Mathf.Clamp(lp.x + 640, 0, 1280), my = Mathf.Clamp(360 - lp.y, 0, 720);
+                    if (ms.delta.ReadValue().sqrMagnitude > 0.01f) { mc.x = mx; mc.y = my; }
+                    if (ms.leftButton.wasPressedThisFrame && fLockT <= 0 && Time.unscaledTime - shownAt > g.T.menuLock)
+                    {
+                        mc.x = mx; mc.y = my;
+                        if (InBtn(mc.x, mc.y)) { FingToggle(mc.i); FingPlace(); return; }
+                    }
+                }
+            }
+            foreach (var c in fing)
+            {
+                var inp = c.P.input;
+                bool okNow = inp.ok, back = inp.back;
+                if (c.P.src.kind == "key" && kb != null) back |= kb.escapeKey.isPressed || kb.backspaceKey.isPressed;
+                // 十字キー・矢印キー：ボタンの上へ跳ぶ
+                bool dir = inp.dpLeft || inp.dpRight || inp.dpUp || inp.dpDown;
+                if (dir && !c.rep && !InBtn(c.x, c.y)) { c.x = Mathf.Clamp(c.x, RES_BTN.x + 16, RES_BTN.xMax - 16); c.y = RES_BTN.y + 20; }
+                c.rep = dir;
+                // スティック：自由に動く（面選びと同じ速さ）
+                if (inp.axX != 0 || inp.axY != 0)
+                {
+                    c.x = Mathf.Clamp(c.x + inp.axX * sp * dt, 0, 1280);
+                    c.y = Mathf.Clamp(c.y + inp.axY * sp * dt, 0, 720);
+                }
+                if (!okNow) c.armed = true;                            // 開いてから一度離すまで決定しない
+                bool hitOk = okNow && !c.pOk, hitBack = back && !c.pBack;
+                c.pOk = okNow; c.pBack = back;
+                if (fLockT > 0 || Time.unscaledTime - shownAt <= g.T.menuLock) continue;
+                if (hitOk && c.armed && InBtn(c.x, c.y)) FingToggle(c.i);
+                else if (hitBack && ok[c.i]) FingToggle(c.i);
+            }
+            FingPlace();
+        }
 
         /// <summary>この画面の人ぶんの「OK」をまとめて切り替える（下の大きなボタン・1人の決定）</summary>
         void PressMine()
@@ -308,6 +416,7 @@ namespace Nekorobo
             bool redraw = false;
             bool armed = Time.unscaledTime - shownAt > g.T.menuLock;      // 開いた直後は少しのあいだ効かない
             bool multi = g.MultiLocal();
+            if (fing.Count > 0) FingTick(dt);                               // 人ごとの指（同じ画面で2人以上）
             for (int i = 0; i < g.players.Count; i++)
             {
                 var P = g.players[i];
@@ -320,6 +429,7 @@ namespace Nekorobo
                     continue;
                 }
                 bool now = P.input.ok;
+                if (fing.Exists(c => c.i == i)) { prevOk[i] = now; continue; }   // 指を持っている人は、指の所で決める（FingTick）
                 if (now && !prevOk[i] && armed)
                 {
                     // 同じ画面の2人以上は、それぞれの決定で自分のぶんだけ。1人はボタンを押したのと同じ

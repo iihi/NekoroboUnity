@@ -95,6 +95,46 @@ namespace Nekorobo
             Draw();
         }
 
+        // ---- 直前に使ったのがマウスか（JS版 LASTM / mouseStart）。画面が変わっても、マウスで遊んでいる人の指はマウスの所から始める
+        static float lastMouseT = -99, lastKeyT = -99;
+        /// <summary>毎フレーム（Hud の始め）。マウスを動かした・押した時刻と、キー・パッドを押した時刻を控える</summary>
+        public static void TrackInput()
+        {
+            float now = Time.unscaledTime;
+            var ms = Mouse.current;
+            if (ms != null && (ms.delta.ReadValue().sqrMagnitude > 0.25f || ms.leftButton.wasPressedThisFrame)) lastMouseT = now;
+            var kb = Keyboard.current;
+            if (kb != null && kb.anyKey.wasPressedThisFrame) lastKeyT = now;
+            foreach (var gp in Gamepad.all)
+                if (gp.buttonSouth.wasPressedThisFrame || gp.buttonEast.wasPressedThisFrame || gp.dpad.ReadValue().sqrMagnitude > 0.25f
+                    || gp.leftStick.ReadValue().sqrMagnitude > 0.25f) lastKeyT = now;
+        }
+        /// <summary>マウスで遊んでいるか（直前に使ったのがマウスで、4 秒以内）</summary>
+        public static bool MouseUser { get { return lastMouseT > lastKeyT && Time.unscaledTime - lastMouseT < 4; } }
+        /// <summary>マウスの所（box の中の「左上からの px」。box の外なら端に寄せる）。マウスで遊んでいなければ null</summary>
+        public static Vector2? MouseIn(RectTransform box, float w, float h)
+        {
+            var ms = Mouse.current;
+            if (!MouseUser || ms == null || box == null) return null;
+            Vector2 lp;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(box, ms.position.ReadValue(), null, out lp)) return null;
+            var r = box.rect;
+            return new Vector2(Mathf.Clamp(lp.x - r.xMin, 0, w), Mathf.Clamp(r.yMax - lp.y, 0, h));
+        }
+
+        /// <summary>
+        /// 面選び・ショップ・結果（人ごとの指）のように、**マウスが人の指を動かす画面**。本物のカーソルは画面いっぱいで消す
+        /// （出ていると、人の指と2つ見える。窓の形でできる板の外の余白でも消す。JS版 c846acd）。毎フレーム呼ぶ
+        /// </summary>
+        public static void NoCursor()
+        {
+            usedFrame = Time.frameCount;
+            FingerCursor(false);
+            On = false; viaStick = false; Moved = false;
+            if (img != null && img.gameObject.activeSelf) img.gameObject.SetActive(false);
+            Cursor.visible = false;
+        }
+
         /// <summary>Hud の毎フレームの最後に呼ぶ。このフレームにメニューが無ければ、指をしまって元のカーソルに戻す。</summary>
         public static void EndFrame()
         {

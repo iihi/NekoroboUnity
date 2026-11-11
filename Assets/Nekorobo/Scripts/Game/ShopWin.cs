@@ -278,6 +278,12 @@ namespace Nekorobo
                 c.x = cd.hitX + cd.hitW / 2; c.y = cd.hitY + cd.hitH / 2; c.placed = true;
                 MakeFinger(c);
             }
+            // マウスで遊んでいる人の指は、マウスの所から（前は最初の品物から始まり、マウスを少し動かすと跳んでいた。JS版 199b78c）
+            {
+                var mc = cur.Find(c => c.P == g.me && IsViewer(c.P)) ?? cur.Find(c => IsViewer(c.P));
+                var mp = mc != null ? Ptr.MouseIn(pick, gw, gh) : null;
+                if (mp != null) { mc.x = mp.Value.x; mc.y = mp.Value.y; Over(mc); }
+            }
             Refresh();
         }
 
@@ -318,10 +324,10 @@ namespace Nekorobo
                 Vector2 lp;
                 if (RectTransformUtility.ScreenPointToLocalPointInRectangle(pick, ms.position.ReadValue(), null, out lp))
                 {
-                    float mx = lp.x, my = -lp.y;
-                    bool inside = mx >= 0 && mx <= gw && my >= 0 && my <= gh;
-                    if (inside && ms.delta.ReadValue().sqrMagnitude > 0.01f) { mc.x = mx; mc.y = my; }
-                    if (inside && ms.leftButton.wasPressedThisFrame)
+                    // マウスは画面いっぱい（品物の箱の外・板の外の余白も）で拾い、指は箱の端までで止める（JS版 c846acd）
+                    float mx = Mathf.Clamp(lp.x, 0, gw), my = Mathf.Clamp(-lp.y, 0, gh);
+                    if (ms.delta.ReadValue().sqrMagnitude > 0.01f) { mc.x = mx; mc.y = my; }
+                    if (ms.leftButton.wasPressedThisFrame)
                     {
                         mc.x = mx; mc.y = my; Over(mc);
                         if (mc.onRdy) { mc.ready = !mc.ready; pressT = Game.PRESS_SHOW; Game.SeUi(mc.ready ? "ok" : "back"); }
@@ -695,7 +701,10 @@ namespace Nekorobo
             }
             // 購入完了のボタン（この画面の人のぶん）
             var meC = cur.Find(c => c.P == g.me) ?? cur.Find(c => c.P.src.kind != "npc");
-            bool rdy = meC != null && meC.ready;
+            // 光ったままにするのは、この画面の人が全員「購入完了」のときだけ（1人なら、その人が押している間。JS版 7d79b6d）。
+            // マウスの人の状態だけで光らせると、パッドの人が押しても一瞬光って戻るだけに見えた
+            var locC = cur.FindAll(c => c.P.src.kind == "key" || c.P.src.kind == "pad");
+            bool rdy = locC.Count > 0 ? locC.TrueForAll(c => c.ready) : meC != null && meC.ready;
             if (pressT > 0) pressT -= Time.unscaledDeltaTime;
             bool hov = cur.Exists(c => c.onRdy && IsViewer(c.P));
             btnOn.color = new Color(1, 1, 1, rdy || pressT > 0 ? 1 : 0);
