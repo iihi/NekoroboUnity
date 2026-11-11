@@ -305,6 +305,18 @@ namespace Nekorobo
             if (!IsViewer(c.P) && c.P.src.kind != "net") f.gameObject.SetActive(false);   // NPC の指は出さない（オンラインの相手の指は出す）
         }
 
+        static readonly List<RaycastResult> rayHits = new List<RaycastResult>();
+        /// <summary>そこに押せる部品（Button など）があるか</summary>
+        static bool OverButton(Vector2 pos)
+        {
+            var es = EventSystem.current;
+            if (es == null) return false;
+            rayHits.Clear();
+            es.RaycastAll(new PointerEventData(es) { position = pos }, rayHits);
+            foreach (var h in rayHits) if (h.gameObject.GetComponentInParent<Selectable>() != null) return true;
+            return false;
+        }
+
         // ================================================================ 毎フレーム
         public void Tick(float dt)
         {
@@ -319,7 +331,9 @@ namespace Nekorobo
             // マウスでも買えるように（この画面の人のカーソルがマウスに付いていく）
             var mc = cur.Find(c => c.P == g.me && IsViewer(c.P)) ?? cur.Find(c => IsViewer(c.P));
             var ms = Mouse.current;
-            if (mc != null && ms != null && !(EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()))
+            // 押せる部品（右上の歯車・音のボタン）の上だけ避ける。前は IsPointerOverGameObject で見ていたが、
+            // 板の背景が当たりを取るので、いつも「部品の上」になり、マウスがまったく効かなかった（担当の指摘）
+            if (mc != null && ms != null && !OverButton(ms.position.ReadValue()))
             {
                 Vector2 lp;
                 if (RectTransformUtility.ScreenPointToLocalPointInRectangle(pick, ms.position.ReadValue(), null, out lp))

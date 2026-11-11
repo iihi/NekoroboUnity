@@ -14,8 +14,7 @@ namespace Nekorobo
     {
         static readonly string[][] NPC_SEAT_OPTS =
         {
-            new[] { "off", "なし" }, new[] { "npc-serious", "NPC・まじめ" }, new[] { "npc-normal", "NPC・普通" },
-            new[] { "npc-wild", "NPC・暴走" }, new[] { "npc-easy", "NPC・かんたん" },
+            new[] { "off", "なし" }, new[] { "npc-normal", "NPC" }, new[] { "npc-easy", "NPC・かんたん" },
         };
 
         /// <summary>つながり具合の1行。パッドしか無い人にも分かるように、状態を文で出す（JS版 netLine）。</summary>

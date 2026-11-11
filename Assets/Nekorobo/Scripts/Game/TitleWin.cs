@@ -71,8 +71,7 @@ namespace Nekorobo
         {
             new[] { "off", "なし" }, new[] { "key", "キーボード" },
             new[] { "pad0", "パッド1" }, new[] { "pad1", "パッド2" }, new[] { "pad2", "パッド3" }, new[] { "pad3", "パッド4" },
-            new[] { "npc-serious", "NPC・まじめ" }, new[] { "npc-normal", "NPC・普通" },
-            new[] { "npc-wild", "NPC・暴走" }, new[] { "npc-easy", "NPC・かんたん" },
+            new[] { "npc-normal", "NPC" }, new[] { "npc-easy", "NPC・かんたん" },      // JS版 SLOT_OPTS と同じ（性格は1つ＋かんたん）
         };
 
         public TitleWin(RectTransform parent, Game game)
@@ -225,7 +224,7 @@ namespace Nekorobo
         void PageSolo(Stack st)
         {
             Head(st, Lang.Tr("1人プレイ"));
-            Tiles(st,
+            Tiles3(st,
                 Tile("ストーリー", "red", "story", () => Go("Story"), "屋台の店主に教わりながら進む12面。遊び方を覚えるほうです。", "story"),
                 Tile("フリープレイ", "blue", "free", () => { from = "Solo"; next = false; rounds = 0; Go("Free"); }, "好きな面を選んで、終わりなく続けます。", "free"),
                 Tile("ラウンドマッチ", "gold", "cup", () => { Lobby.ruleTo = "Solo"; Go("Len"); }, "3／5／10ラウンド遊んで、最後に最終結果を出して終わります。", "match"));
@@ -272,12 +271,12 @@ namespace Nekorobo
             foreach (var n in Game.MATCH_LENS)
             {
                 int k = n;
-                ts.Add(Tile(Lang.Tr("{0}ラウンド", n), col[n], "cup", () => go(k),
+                ts.Add(Tile(Lang.Tr("{0}ラウンド", n), col[n], n.ToString(), () => go(k),
                             Lang.Tr(solo ? "{0}ラウンド遊んで、最後に最終結果を出して終わります（合計の利益）。"
                                          : "{0}ラウンド遊んで、最後に最終結果を出して終わります（利益の合計で順位）。", n), "r" + n));
             }
             Head(st, Lang.Tr(solo ? "ラウンドマッチ" : "遊び方を選ぶ"));
-            Tiles(st, ts.ToArray());
+            if (solo) Tiles3(st, ts.ToArray()); else TilesGrid(st, ts.ToArray());
             Btn(st, Lang.Tr("戻る"), "sec", () => Go(solo ? "Solo" : "Rule"), null, true);
             return "r" + (solo && rounds == 0 ? 3 : rounds);
         }
@@ -357,13 +356,19 @@ namespace Nekorobo
                 new[] { "team", "チーム戦（青と赤。売上も修理費もチームごと）", "team" },
                 new[] { "coop", "協力（売上も修理費も店舗ぜんぶ）", "coop" },
             }, mode, "Local", x => mode = x), null, false, "mode");
+            {
+                var opts = new List<string[]> { new[] { "0", Game.LenName(0), "free" } };
+                foreach (var n in Game.MATCH_LENS) opts.Add(new[] { n.ToString(), Game.LenName(n), "cup" });
+                Btn(st, Lang.Tr("遊び方：{0}　▾", Game.LenName(rounds)), "sec",
+                    () => PickOpen("遊び方を選ぶ", null, opts, rounds.ToString(), "Local", x => rounds = int.Parse(x)), null, false, "len");
+            }
             Note(st, live.Count == 0 ? "枠が全部「なし」です。1つ以上選んでください。"
                    : oneSide ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（上の 1P：青 などを押すと入れ替わります）。"
                    : team ? Lang.Tr("<b>{0}人</b>（{1}）　青 <b>{2}人</b> 対 赤 <b>{3}人</b>で遊びます。次の画面で面を選びます。",
                                     live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), n0, n1)
                    : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray())));
             BtnRow(st, new[] { "面を選ぶ ▶", "戻る" }, new[] { "go", "sec" },
-                   new System.Action[] { () => { from = "Local"; next = false; Go("Free"); }, () => Go("Rule") },
+                   new System.Action[] { () => { from = "Local"; next = false; Go("Free"); }, () => Go("Len") },
                    new[] { live.Count == 0 || oneSide, false });
         }
 
@@ -626,7 +631,11 @@ namespace Nekorobo
             return o;
         }
 
-        static string SlotLabel(string v) { foreach (var s in SLOT_OPTS) if (s[0] == v) return s[1]; return "なし"; }
+        static string SlotLabel(string v)
+        {
+            foreach (var s in SLOT_OPTS) if (s[0] == v) return s[1];
+            return v != null && v.StartsWith("npc-") ? "NPC" : "なし";      // 前の版の NPC（まじめ・暴走）を覚えていたとき
+        }
         static string SlotIc(string v) { return v == "off" ? "off" : v == "key" ? "key" : v.StartsWith("pad") ? "pad" : "npc"; }
         static string PadHint(string v)
         {
@@ -1108,6 +1117,27 @@ namespace Nekorobo
         }
 
         /// <summary>2枚を横に（左が大きい 1.32:1）。3枚目は下に細い板（wide）。</summary>
+        /// <summary>
+        /// 大きな板を2列で段に重ねる（JS版 tTiles に細い板（wide）を入れないとき。遊び方を選ぶ：フリープレイ・3・5・10）。
+        /// 左 1.32：右 1。2枚目だけ右上の角を落とす。↑↓は1段ぶん動く
+        /// </summary>
+        void TilesGrid(Stack st, params TileSpec[] ts)
+        {
+            const float H = 168, gap = 4;
+            float wl = (1098 - gap) * 1.32f / 2.32f, wr = 1098 - gap - wl;
+            for (int r0 = 0; r0 < ts.Length; r0 += 2)
+            {
+                var rw = r0 > 0 ? st.Row(H, gap) : st.Row(H);
+                for (int i = r0; i < ts.Length && i < r0 + 2; i++)
+                {
+                    BigTile(rw, i % 2 == 0 ? 0 : wl + gap, i % 2 == 0 ? wl : wr, H, ts[i], i == 1 ? 1 : 0);
+                    items[items.Count - 1].grid = 2;
+                }
+            }
+            st.Gap(10);
+        }
+
+        /// <summary>大きな板2枚と、その下に細い板（JS版 tTiles と、3枚目からの「tile … wide」）</summary>
         void Tiles(Stack st, params TileSpec[] ts)
         {
             const float H = 202, gap = 4;
@@ -1125,6 +1155,23 @@ namespace Nekorobo
                 for (int i = 0; i < n; i++) WideTile(r2, x0 + i * (ww + gg), ww, 46, ts[2 + i]);
                 st.Gap(4);
             }
+        }
+
+        /// <summary>3枚を横1列に並べる（JS版 tTiles3。1.2：1：1）。2枚目だけ右上の角を落とす</summary>
+        void Tiles3(Stack st, params TileSpec[] ts)
+        {
+            const float H = 202, gap = 4;
+            float u = (1098 - gap * 2) / 3.2f;
+            var row = st.Row(H);
+            float x = 0;
+            for (int i = 0; i < ts.Length && i < 3; i++)
+            {
+                float w = i == 0 ? u * 1.2f : u;
+                BigTile(row, x, w, H, ts[i], i == 1 ? 1 : 0);
+                items[items.Count - 1].grid = 3;
+                x += w + gap;
+            }
+            st.Gap(10);
         }
 
         static readonly float[] CLIP_RECT = { 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0 };
@@ -1195,7 +1242,14 @@ namespace Nekorobo
         void Icon(RectTransform parent, string ic, float size, Vector2 pos, float alpha)
         {
             var tex = Resources.Load<Texture2D>("Ui/Title/" + ic);
-            if (tex == null) return;
+            if (tex == null)
+            {
+                if (string.IsNullOrEmpty(ic)) return;
+                var t = UiKit.Label(parent, ic, size, new Color(1, 1, 1, alpha), true, TextAnchor.MiddleCenter);
+                var tr = t.rectTransform; tr.anchorMin = tr.anchorMax = new Vector2(0.5f, 0.5f); tr.sizeDelta = new Vector2(size * 2, size * 1.3f); tr.anchoredPosition = pos;
+                var ts = t.gameObject.AddComponent<Shadow>(); ts.effectColor = new Color(0, 0, 0, 0.3f); ts.effectDistance = new Vector2(0, -4);
+                return;
+            }
             var ri = UiKit.Rect(parent, "Ic").gameObject.AddComponent<RawImage>();
             ri.texture = tex; ri.raycastTarget = false; ri.color = new Color(1, 1, 1, alpha);
             var r = ri.rectTransform; r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.5f); r.sizeDelta = new Vector2(size, size); r.anchoredPosition = pos;
