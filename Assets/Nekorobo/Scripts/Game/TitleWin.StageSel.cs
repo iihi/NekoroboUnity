@@ -38,6 +38,9 @@ namespace Nekorobo
         UiBoard ssB;
         Text ssSec; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
         const int SS_START = FREE_SLOTS + 1, SS_BACK = FREE_SLOTS + 2;
+        /// <summary>自動マッチングの部屋の面選びか。「もどる」を出さない（ホストが戻ると、そろった全員の対戦が崩れるため）。</summary>
+        bool SsAuto { get { return SS.net != null && Net.Room != null && (bool?)Net.Room["auto"] == true; } }
+        bool SsNoBack { get { return SS.net == "guest" || SsAuto; } }
         // カードの左上（板の px）。清書1109：横 146・縦 109 おき（PSD の 292・218 の半分）。カードの絵は 177.5×100
         static Vector2 SsPos(int i) { return new Vector2(40 + (i % 8) * 146, 148 + (i / 8) * 109); }
         public bool SsOpenNow { get { return SS.open; } }
@@ -104,6 +107,7 @@ namespace Nekorobo
         }
         void SsOpenGuest(JObject d)
         {
+            MmOff();                                     // 自動マッチング：そろって面選びになった
             flist = FreeList();
             SS.ctx = new SsCtx { forRoom = true, goNext = (int?)d["gn"] == 1, goOn = false, cont = (int?)d["gn"] == 1, multi = false, head = (string)d["head"] ?? "" };
             SS.net = "guest"; SS.key = (string)d["k"];
@@ -212,7 +216,7 @@ namespace Nekorobo
                 ssWaitT = UiBoard.T(ssWait, s, 219.5f, 0, 17, Mats.Hex(0xe6e6e6), 2);
             }
             else { ssWait = null; ssWaitT = null; }
-            if (SS.net != "guest")
+            if (!SsNoBack)                               // 参加者と、自動マッチングの面選びには「もどる」を出さない
             {
                 var back = UiBoard.Box(bx, 937, 591, 260, 83, "Back");
                 UiBoard.Img(back, "ui/ss/back.png", 0, 0, 260, 83, "B0");
@@ -242,7 +246,7 @@ namespace Nekorobo
         {
             // 清書1109 の絵の、斜めにする前の箱
             if (i == SS_START) return new Rect(477.5f, 591, 432.5f, 74);
-            if (i == SS_BACK) return SS.net == "guest" ? (Rect?)null : new Rect(952.5f, 591, 226, 74);
+            if (i == SS_BACK) return SsNoBack ? (Rect?)null : new Rect(952.5f, 591, 226, 74);
             var p = SsPos(i); return new Rect(p.x + 18.5f, p.y, 137.5f, 91);
         }
         const float SS_TAN = 0.344f;                // 清書1109 の斜め（高さ 96 で 33 ずれる）
@@ -283,9 +287,9 @@ namespace Nekorobo
                 int col = at % 8, row = at / 8;
                 if (dx != 0) { int nc = col + dx; return nc < 0 || nc > 7 ? at : row * 8 + nc; }
                 if (dy < 0) return row > 0 ? at - 8 : at;
-                return row < 3 ? at + 8 : (col >= 6 && SS.net != "guest" ? SS_BACK : SS_START);
+                return row < 3 ? at + 8 : (col >= 6 && !SsNoBack ? SS_BACK : SS_START);
             }
-            if (at == SS_START) return dx > 0 && SS.net != "guest" ? SS_BACK : dy < 0 ? 27 : at;
+            if (at == SS_START) return dx > 0 && !SsNoBack ? SS_BACK : dy < 0 ? 27 : at;
             if (at == SS_BACK) return dx < 0 ? SS_START : dy < 0 ? 31 : at;
             return at;
         }
@@ -353,7 +357,7 @@ namespace Nekorobo
                 if (SS.net == "guest") { Game.SeUi("ok"); Net.Send(new JObject { ["p"] = "ssgo", ["k"] = SS.key }); return; }
                 SsDecide(); return;
             }
-            if (c.at == SS_BACK) { if (SS.net == "guest") return; Game.SeUi("back"); SsBack(); return; }
+            if (c.at == SS_BACK) { if (SsNoBack) return; Game.SeUi("back"); SsBack(); return; }
             if (c.at != FREE_SLOTS && FreePick(c.at) == null) { Game.SeUi("ng"); return; }
             c.vote = c.at;
             Game.SeUi("ok");
@@ -366,7 +370,7 @@ namespace Nekorobo
         void SsBack()
         {
             var x = SS.ctx;
-            if (SS.net == "guest") return;
+            if (SsNoBack) return;
             if (SS.net == "host" && !x.goNext) Net.Send(new JObject { ["p"] = "ss", ["o"] = 0, ["k"] = SS.key });
             SsClose();
             if (x.goNext)
@@ -422,10 +426,11 @@ namespace Nekorobo
         void SsGo()
         {
             var x = SS.ctx; var e = SS.go;
+            bool auto = SsAuto;                          // 自動マッチングの最初の面も、決まったら始める（参加者は待つ）
             if (SS.net == "guest")
             {
                 SsClose();
-                if (x.goNext) g.hud.NetWait("次の面が決まりました", Lang.Tr("「{0}」が始まるのを待っています…", e != null ? Lang.Tr(e.n) : "?"));
+                if (x.goNext || auto) g.hud.NetWait("次の面が決まりました", Lang.Tr("「{0}」が始まるのを待っています…", e != null ? Lang.Tr(e.n) : "?"));
                 else if (Open) Go("Wait");
                 return;
             }
@@ -435,7 +440,7 @@ namespace Nekorobo
                 SsClose();
                 RoomPick();
                 // ショップのあとの面選びは、決まったらそのまま始める（前はホストが待機の画面で「始める」を押していた）
-                if (x.goNext && SS.net == "host") RoomStart();
+                if ((x.goNext || auto) && SS.net == "host") RoomStart();
                 return;
             }
             var live = x.multi ? Live() : new List<PlayerSrc> { new PlayerSrc() };

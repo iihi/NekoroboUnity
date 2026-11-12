@@ -55,9 +55,11 @@ namespace Nekorobo
                     Go("Online");
                 },
                 "部屋サーバー（HTML版とも遊べる）と EOS（サーバー要らず・Unity版どうし）を切り替えます。相手と同じにしてください。", false, "kind");
+            // 自動マッチング（担当「ルーム番号を選んで入るのではなく、自動マッチングに。番号で入るプライベートは残す」）
             Tiles(st,
-                Tile("ルームを作る", "green", "make", () => { Lobby.ruleTo = "Make"; Go("Rule"); }, "あなたがホストになります。面を選ぶのもホストです。", "make", !on),
-                Tile("ルームに参加", "blue", "join", () => { Net.ListRooms(); Go("Join"); }, "開いている部屋の一覧から選ぶか、ルームIDを入れて入ります。", "join", !on));
+                Tile("オンラインマッチ", "red", "versus", () => Go("MatchLen"), "自動で対戦相手を探します。個人戦。遊び方を選んで、面はそろってから全員で投票します。", "match", !on),
+                Tile("プライベート", "blue", "join", () => Go("Private"), "友達と遊びます。誰かが部屋を作って、ほかの人はルームIDを入れて参加します。", "priv", !on));
+            if (EarlyQuit.Bad) Note(st, "<b>途中退出が多いため</b>、オンラインマッチの相手が見つかりにくくなっています（" + EarlyQuit.M + "回中" + EarlyQuit.Q + "回）。");
             Btn(st, on ? "つなぎ直す" : "もう一度つなぐ", "sec", () => { Net.Close(); Net.Connect(); Go("Online"); }, null, false, "redo");
             Btn(st, "戻る", "sec", () => Go("Multi"), null, true);
         }
@@ -67,7 +69,7 @@ namespace Nekorobo
         {
             Head(st, "ルームを作る");
             Note(st, NetLine() + "\n作っています…");
-            Btn(st, "戻る", "sec", () => Go("Online"), null, true);
+            Btn(st, "戻る", "sec", () => Go("Private"), null, true);
         }
 
         void PageJoin(Stack st)
@@ -75,21 +77,13 @@ namespace Nekorobo
             Head(st, "ルームに参加");
             Note(st, NetLine());
             if (Net.Why.Length > 0) Note(st, "<color=#ff9e6b><b>" + Net.Why + "</b></color>");
-            var list = Lobby.rooms;
-            if (list != null && list.Count > 0)
-                foreach (var r in list)
-                {
-                    string code = (string)r["code"];
-                    Btn(st, (string)r["name"] + "　" + r["n"] + "/" + r["max"] + "人　" + code, "", () => Net.JoinRoom(code), null, false, "r" + code);
-                }
-            else Note(st, "<i>開いている部屋がありません。</i>");
-            Btn(st, "一覧を出し直す", "sec", () => Net.ListRooms(), null, false, "refresh");
+            // 公開の部屋の一覧は無くした（知らない人どうしはオンラインマッチで）
             Btn(st, "番号で入る：" + (Lobby.code.Length > 0 ? Lobby.code : "（未入力）") + "　▾", "sec",
                 () => AskOpen("ルームIDを入れる", "12桁の番号です。相手に聞いて入れてください。", Lobby.code, "Join", v => Lobby.code = v, true),
                 null, false, "code");
             var go = Btn(st, "この番号で入る", "", () => Net.JoinRoom(Lobby.code), null, false, "go");
             if (Lobby.code.Length == 0) Off(go);
-            Btn(st, "戻る", "sec", () => Go("Online"), null, true);
+            Btn(st, "戻る", "sec", () => Go("Private"), null, true);
         }
 
         static Font mono;
@@ -199,7 +193,7 @@ namespace Nekorobo
             if (!host || Lobby.rpick == null || rOne) Off(goB);
             Btn(st, g.InSession ? "部屋を出る" : "戻る", "sec", () =>
                    {
-                       System.Action leave = () => { Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
+                       System.Action leave = () => { if (g.InSession) EarlyQuit.Quitted(); Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
                        if (!g.InSession) { leave(); return; }
                        // 続きの最中は、抜ける前に確かめる（押し間違えると、みんなの続きがその場で終わる）
                        ConfirmOpen("部屋を出ますか？", "いま <b>" + g.runDone + "面</b> まで遊んだところです。\n"
@@ -234,6 +228,8 @@ namespace Nekorobo
                 ["pick"] = pk, ["cont"] = g.np.stage > 0, ["gn"] = g.np.stage,
                 ["npc"] = new JArray(Lobby.rnpc), ["mode"] = Lobby.mode, ["team"] = new JArray(Lobby.rteam),
                 ["rounds"] = Lobby.rounds, ["w"] = g.WalletsJson(),
+                // ホストの調子の数値。全員この数値で遊ぶ（面ごとの上書きは各自の画面で乗せる）
+                ["tune"] = g.TuneBaseJson(),
             });
         }
 

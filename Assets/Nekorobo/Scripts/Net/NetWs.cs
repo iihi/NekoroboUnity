@@ -88,6 +88,7 @@ namespace Nekorobo
             {
                 if (conn != c) return;
                 Raw(new JObject { ["t"] = "hello", ["name"] = Net.Name });     // 名乗ってから知らせる（知らせを受けて部屋を作ることがある）
+                Raw(new JObject { ["t"] = "stats", ["m"] = Net.StatM, ["q"] = Net.StatQ });   // 成績も名乗り直す
                 Net.ReportOpen();
             });
         }
@@ -112,6 +113,7 @@ namespace Nekorobo
                 case "hi": Net.ReportId((int?)m["id"] ?? -1); return;
                 case "room": Net.ReportRoom(m["room"] as JObject, m); return;
                 case "left": Net.ReportRoom(null, m); return;
+                case "kicked": Net.ReportKicked((string)m["code"]); Net.ReportRoom(null, m); return;
                 case "err": Net.ReportErr((string)m["why"], m); return;
                 case "rooms": Net.ReportRooms(m["rooms"] as JArray); return;
                 case "start": Net.ReportStart(m["room"] as JObject, m); return;
@@ -128,9 +130,13 @@ namespace Nekorobo
         }
 
         public bool SetName(string n) { return Raw(new JObject { ["t"] = "hello", ["name"] = n ?? "" }); }
-        public bool CreateRoom(string name, bool priv) { return Raw(new JObject { ["t"] = "create", ["name"] = name ?? "", ["priv"] = priv }); }
+        public bool CreateRoom(string name, bool priv, bool auto, int tier, int len)
+        { return Raw(new JObject { ["t"] = "create", ["name"] = name ?? "", ["priv"] = priv, ["auto"] = auto, ["tier"] = tier != 0 ? 1 : 0, ["len"] = len }); }
+        public bool LockRoom() { return Raw(new JObject { ["t"] = "lock" }); }
         public bool JoinRoom(string code) { return Raw(new JObject { ["t"] = "join", ["code"] = code ?? "" }); }
-        public bool ListRooms() { return Raw(new JObject { ["t"] = "list" }); }
+        public bool ListRooms(bool auto) { return Raw(new JObject { ["t"] = "list", ["auto"] = auto }); }
+        public bool SetStats(int m, int q) { return Raw(new JObject { ["t"] = "stats", ["m"] = m, ["q"] = q }); }
+        public bool Kick(int id) { return Raw(new JObject { ["t"] = "kick", ["id"] = id }); }
         public bool LeaveRoom() { return Raw(new JObject { ["t"] = "leave" }); }
         public bool StartRoom(JObject cfg) { return Raw(new JObject { ["t"] = "start", ["cfg"] = cfg }); }
         public bool Send(JObject d, int? id)

@@ -71,6 +71,7 @@ namespace Nekorobo
         /// <summary>オンライン：自分だけ抜ける。参加者はホストに知らせてから部屋を出る（ホストはその人のロボをリタイアにする）。</summary>
         public void PauseQuit()
         {
+            EarlyQuit.Quitted();                                // 自動マッチングの対戦なら途中退出
             if (NetGuest) Net.Send(new JObject { ["p"] = "quit" });
             PauseClose();
             NpEnd();                                       // 先に同期をやめる（部屋を出た知らせを「ホストが切れた」と取り違えない）

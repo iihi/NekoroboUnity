@@ -48,6 +48,7 @@ namespace Nekorobo
         public static event Action<JObject> OnStart;     // 始まった（m.room, m.cfg）
         public static event Action<int, JObject> OnFrom; // 部屋の中の便り（送った人, 中身）
         public static event Action<JObject> OnErr;
+        public static event Action<string> OnKicked;     // ホストに部屋から外された（部屋の番号）。続けて OnRoom も来る
 
         // ================================================================ 中身を選ぶ
         /// <summary>**差し替えるのはここだけ。**EOS を足すときは1行増やす。</summary>
@@ -122,7 +123,7 @@ namespace Nekorobo
         public static void Reset()
         {
             Close();
-            OnState = null; OnRoom = null; OnRooms = null; OnStart = null; OnFrom = null; OnErr = null;
+            OnState = null; OnRoom = null; OnRooms = null; OnStart = null; OnFrom = null; OnErr = null; OnKicked = null;
             Id = -1; Why = "";
         }
 
@@ -145,9 +146,14 @@ namespace Nekorobo
         }
 
         public static bool SetName(string n) { Name = n ?? ""; return On && Be().SetName(Name); }
-        public static bool CreateRoom(string name, bool priv) { return On && Be().CreateRoom(name ?? "", priv); }
+        public static bool CreateRoom(string name, bool priv, bool auto = false, int tier = 0, int len = 0) { return On && Be().CreateRoom(name ?? "", priv, auto, tier, len); }
+        public static bool LockRoom() { return On && Be().LockRoom(); }
         public static bool JoinRoom(string code) { return On && Be().JoinRoom(code ?? ""); }
-        public static bool ListRooms() { return On && Be().ListRooms(); }
+        public static bool ListRooms(bool auto = false) { return On && Be().ListRooms(auto); }
+        /// <summary>名乗る成績（自動マッチングの対戦数・途中退出）。つなぎ直したときも中身が名乗り直す。</summary>
+        public static int StatM, StatQ;
+        public static bool SetStats(int m, int q) { StatM = m; StatQ = q; return On && Be().SetStats(m, q); }
+        public static bool Kick(int id) { return On && Be().Kick(id); }
         public static bool LeaveRoom() { return On && Be().LeaveRoom(); }
         public static bool StartRoom(JObject cfg) { return On && Be().StartRoom(cfg); }
         /// <summary>部屋の中へ届ける。id を省くと全員へ（自分には届かない）。</summary>
@@ -175,6 +181,7 @@ namespace Nekorobo
         public static void ReportRooms(JArray rooms) { Fire(OnRooms, rooms ?? new JArray()); }
         public static void ReportStart(JObject room, JObject m) { if (room != null) Room = room; Fire(OnStart, m); }
         public static void ReportErr(string why, JObject m) { Why = why ?? "うまくいきませんでした"; Fire(OnErr, m); }
+        public static void ReportKicked(string code) { Fire(OnKicked, code ?? ""); }
         public static void ReportFrom(int id, JObject d)
         {
             if (d == null || OnFrom == null) return;

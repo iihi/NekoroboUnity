@@ -86,21 +86,29 @@ namespace Nekorobo
         }
 
         // ---- サーバから何か来たら、開いている画面を描き直す（JS版 NETMOD.on(...)）
-        static bool NetPage(string p) { return p == "Online" || p == "Make" || p == "Join" || p == "Wait"; }
+        static bool NetPage(string p) { return p == "Online" || p == "Private" || p == "Make" || p == "Join" || p == "Wait" || p == "Match"; }
         void NetHook()
         {
             // 描き直しはその場でせず、次のコマで（画面を組んでいる途中に知らせが来ても、組み直さない）
-            Net.OnState += () => { if (Open && NetPage(page)) GoLater(page); };
+            EarlyQuit.Init();                                 // 前回、自動マッチングの対戦の途中で閉じた・落ちたなら、途中退出を数える
+            Net.OnKicked += MmOnKicked;
+            Net.OnState += () =>
+            {
+                if (Open && NetPage(page)) GoLater(page);
+                if (mm.on && Net.State == "on" && mm.phase == "search") mm.nextList = 0;   // つながったらすぐ探す
+            };
             Net.OnRoom += m =>
             {
                 // 入ってきた人にも、いま選んでいる面と空き席のNPCとルールを教える
                 Lobby.SendPick(); Lobby.SendNpc(); Lobby.SendRule();
                 if (SS.open && SS.net != null) { if (Net.Room != null) SsOnRoom(); return; }   // 面選びの間は、指を作り直すだけ
+                if (MmOnRoom()) return;                                                         // 自動マッチング
                 if (Open) GoLater(Net.Room != null ? "Wait" : "Online");
             };
             Net.OnFrom += (id, d) =>
             {
                 string p = (string)d["p"];
+                if (MmOnFrom(d)) return;                     // 自動マッチング（開始までの秒数・確認待ちの人）
                 if (p != null && p.StartsWith("ss")) { SsOnFrom(id, d); return; }
                 if (p == "pick") Lobby.rpick = d["pick"] as Newtonsoft.Json.Linq.JObject;
                 else if (p == "npc" && d["npc"] is Newtonsoft.Json.Linq.JArray na)
@@ -112,13 +120,13 @@ namespace Nekorobo
                     if (d["team"] is Newtonsoft.Json.Linq.JArray ta)
                         for (int i = 0; i < 4 && i < ta.Count; i++) Lobby.rteam[i] = ((int?)ta[i] ?? 0) != 0 ? 1 : 0;
                     if (d["rounds"] != null && d["rounds"].Type == Newtonsoft.Json.Linq.JTokenType.Integer)
-                        Lobby.rounds = System.Array.IndexOf(Game.MATCH_LENS, (int)d["rounds"]) >= 0 ? (int)d["rounds"] : 0;
+                        Lobby.rounds = Game.RoundsOk((int)d["rounds"]) ? (int)d["rounds"] : 0;
                 }
                 else return;
                 if (Open && page == "Wait") GoLater("Wait");
             };
-            Net.OnRooms += a => { Lobby.rooms = a; if (Open && page == "Join") GoLater("Join"); };
-            Net.OnErr += m => { if (Open && (page == "Join" || page == "Online")) GoLater(page); };
+            Net.OnRooms += a => { if (MmOnRooms(a)) return; Lobby.rooms = a; if (Open && page == "Join") GoLater("Join"); };
+            Net.OnErr += m => { if (MmOnErr()) return; if (Open && (page == "Join" || page == "Online")) GoLater(page); };
         }
         string goLater;
         void GoLater(string pg) { goLater = pg; }
@@ -172,6 +180,10 @@ namespace Nekorobo
                 case "Pick": def = PagePick(st); break;
                 case "Debug": PageDebug(st); break;
                 case "Online": PageOnline(st); break;
+                case "Private": PagePrivate(st); break;
+                case "MatchLen": def = PageMatchLen(st); break;
+                case "Match": PageMatch(st); break;
+                case "MmAsk": def = PageMmAsk(st); break;
                 case "Make": PageMake(st); break;
                 case "Join": PageJoin(st); break;
                 case "Wait": PageWait(st); break;
@@ -260,7 +272,7 @@ namespace Nekorobo
                 {
                     Lobby.rounds = n;
                     for (int i = 0; i < 4; i++) { Lobby.rnpc[i] = "off"; Lobby.rteam[i] = i % 2; }
-                    Net.CreateRoom(Lobby.rname, Lobby.rpriv);
+                    Net.CreateRoom(Lobby.rname, true);           // プライベート（一覧に出さない。番号で入る）
                     Go("Make");
                 }
                 else Go("Local");
@@ -305,7 +317,7 @@ namespace Nekorobo
                 Tile("個人戦", "red", "versus", () => pk("versus"), "売上も修理費も強化も、ひとりずつ。いちばん稼いだ人の勝ち。", "versus"),
                 Tile("チーム戦", "blue", "team", () => pk("team"), "青と赤の2チームで競います。お金と強化はチームでひとつ。人数はそろえなくても遊べます。", "team"),
                 Tile("協力", "green", "coop", () => pk("coop"), "全員でお店ひとつ。みんなで利益を上げます。", "coop"));
-            Btn(st, "戻る", "sec", () => Go(toMake ? "Online" : "Multi"), null, true);
+            Btn(st, "戻る", "sec", () => Go(toMake ? "Private" : "Multi"), null, true);
             return toMake ? Lobby.mode : mode;
         }
 
@@ -666,6 +678,7 @@ namespace Nekorobo
         public void Tick(float dt)
         {
             if (!Open || SS.open) return;            // ステージ選択の間は、そちらが入力を見る（SsTick）
+            MmTick();                                // 自動マッチング
             if (goLater != null) { var pg = goLater; goLater = null; Go(pg); }
             if (lockT > 0) lockT -= dt;
             var kb = Keyboard.current;

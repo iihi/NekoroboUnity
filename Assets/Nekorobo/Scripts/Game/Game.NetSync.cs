@@ -249,7 +249,9 @@ namespace Nekorobo
                 // 並びは JS版と同じ（12〜14 は奪った・奪われた額とクレーン代、15 はダッシュのクールタイム。3 は 1＝止まった・2＝途中で抜けた）
                 pl.Add(new JArray(Mathf.RoundToInt(P.sales), R1(P.botDmg), R1(P.shopDmg), P.down ? (P.quit ? 2 : 1) : 0, P.carried != null ? 1 : 0,
                                   P.delivered, P.hurt, Mathf.RoundToInt(P.wreck), P.bestCombo, P.slot ?? "", R1(P.revT), R1(P.invT),
-                                  Mathf.RoundToInt(P.lootIn), Mathf.RoundToInt(P.lootOut), Mathf.RoundToInt(P.crCost), R1(P.dashCd)));
+                                  Mathf.RoundToInt(P.lootIn), Mathf.RoundToInt(P.lootOut), Mathf.RoundToInt(P.crCost), R1(P.dashCd),
+                                  // 16〜18：ホストが数えたお金（修理費・救急車代・合計）。参加者はこれを出す。1銭まで（合計の丸めが食い違わないように）
+                                  R2(LedgerOf(P).repair), R2(LedgerOf(P).ambCost), R2(LedgerOf(P).total)));
             d["pl"] = pl;
             d["e"] = NpSnap();
             return d;
@@ -560,6 +562,7 @@ namespace Nekorobo
                     P.quit = (int)v[3] == 2;
                     if (v.Count > 14) { P.lootIn = (float)v[12]; P.lootOut = (float)v[13]; P.crCost = (float)v[14]; }
                     P.dashCd = v.Count > 15 ? (float)v[15] : 0;
+                    P.hostL = v.Count > 18 ? new[] { (float)v[16], (float)v[17], (float)v[18] } : null;   // 古い版のホストは送ってこない
                 }
             // ---- 照準の輪。自分のぶんは手元で描く（ホストの値へは、手を止めている間だけ寄せる）。ほかの人のぶんはここで作って動かす
             if (A["am"] is JArray ama)
@@ -699,6 +702,7 @@ namespace Nekorobo
         public void NpLostHost(string why)
         {
             if (np.role == "off") return;
+            EarlyQuit.Done();                             // ホストが抜けて終わった（自分の通信が切れたときは、先に途中退出にしてある）
             np.role = "off";
             NetStop();
             hud.NetWarn("", false);

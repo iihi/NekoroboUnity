@@ -13,11 +13,13 @@ namespace Nekorobo
     ///   自分の番号       → Net.ReportId(id)
     ///   部屋の中身       → Net.ReportRoom(部屋, 届いた物)   部屋が null なら抜けた
     ///   部屋の一覧       → Net.ReportRooms(一覧)
+    ///   部屋から外された → Net.ReportKicked(部屋の番号)（続けて ReportRoom(null) も）
     ///   始まった         → Net.ReportStart(部屋, 届いた物)   届いた物の cfg が始める中身
     ///   部屋の中の便り   → Net.ReportFrom(送った人, 中身)
     ///   うまくいかない   → Net.ReportErr(理由, 届いた物)
     ///
-    /// **部屋の中身の形**：{ code, name, priv, max, host, players:[{ id, name, host }] }
+    /// **部屋の中身の形**：{ code, name, priv, auto, tier, len, playing, max, host, players:[{ id, name, host, st:{m,q} }] }
+    ///   auto … 自動マッチングの部屋、tier … 途中退出の多い人向けの部屋か（0／1）、st … その人の自動マッチングの成績（対戦数・途中退出）
     /// host は「いま計算する人」。抜けたら次の人へ移すこと。
     /// </summary>
     public interface INetBackend
@@ -38,9 +40,17 @@ namespace Nekorobo
         void Tick();
 
         bool SetName(string name);
-        bool CreateRoom(string name, bool priv);
+        /// <summary>部屋を作る。auto … 自動マッチングの部屋、tier … 途中退出の多い人向けか（0／1）、len … 遊び方（1＝フリープレイ1回・3/5/10 ラウンド）。</summary>
+        bool CreateRoom(string name, bool priv, bool auto, int tier, int len);
+        /// <summary>ホストが部屋を締め切る（一覧に出さず、入れない。始まった扱い）。自動マッチングで、そろって面を投票している間。</summary>
+        bool LockRoom();
         bool JoinRoom(string code);
-        bool ListRooms();
+        /// <summary>開いている部屋の一覧。auto なら自動マッチングの部屋だけ（そうでなければふつうの公開の部屋だけ）。</summary>
+        bool ListRooms(bool auto);
+        /// <summary>自分の自動マッチングの成績（対戦数・途中退出）を名乗る。部屋に居れば部屋の全員へ（players[].st）。</summary>
+        bool SetStats(int m, int q);
+        /// <summary>ホストが人を部屋から外す（自動マッチングで参加を許さなかったとき）。</summary>
+        bool Kick(int id);
         bool LeaveRoom();
         bool StartRoom(JObject cfg);
 

@@ -28,6 +28,10 @@ namespace Nekorobo
         /// <summary>会話・案内・バン（ストーリーの画面）。</summary>
         public StoryUi Story;
         TitleWin title;
+        /// <summary>オンラインの対戦が始まった（自動マッチングを止める）。</summary>
+        public void MmOff() { if (title != null) title.MmOff(); }
+        /// <summary>最終結果の「もう一度さがす」（自動マッチングを始め直す）。</summary>
+        public void MmAgain() { if (title != null) title.MmAgain(); }
         EndingWin ending;
         PauseWin pauseWin;
         /// <summary>ポーズメニュー（Esc・P・≡）</summary>

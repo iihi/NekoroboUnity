@@ -103,7 +103,9 @@ namespace Nekorobo
         public class MatchPer { public float tot, sales, cost; public int deliv; }
         public class MatchRound { public string name; public int frames; public List<MatchPer> per = new List<MatchPer>(); }
         [System.NonSerialized] public List<MatchRound> matchHist = new List<MatchRound>();
-        public static string LenName(int n) { return n > 0 ? Lang.Tr("ラウンドマッチ {0}ラウンド", n) : Lang.Tr("フリープレイ（とことん）"); }
+        public static string LenName(int n) { return n == 1 ? Lang.Tr("フリープレイ（1回だけ）") : n > 0 ? Lang.Tr("ラウンドマッチ {0}ラウンド", n) : Lang.Tr("フリープレイ（とことん）"); }
+        /// <summary>配られたラウンド数として受けてよいか。1 は自動マッチングのフリープレイ（1回だけ遊んで終わる）。</summary>
+        public static bool RoundsOk(int n) { return System.Array.IndexOf(MATCH_LENS, n) >= 0 || n == 1; }
         public bool IsMatch { get { return !IsStory && matchRounds > 0; } }
         public bool MatchOver { get { return IsMatch && runDone >= matchRounds; } }
         public bool StoryNoShop { get { return entry != null && entry.noShop; } }

@@ -20,7 +20,7 @@ namespace Nekorobo
         public bool Open { get; private set; }
         readonly RawImage[] b0 = new RawImage[2], b1 = new RawImage[2]; readonly Texture[] b0Tex = new Texture[2];
         readonly RectTransform[] btnRt = new RectTransform[2]; System.Action[] act;
-        int cur; float lockT, goT = -1; bool armed, pL, pR, pOk, room;
+        int cur; float lockT, goT = -1; bool armed, pL, pR, pOk, room, auto;   // auto … 自動マッチングの部屋
         const string UI = "ui/res/";
         static readonly Color YEL = Mats.Hex(0xffd400), SUB = Mats.Hex(0xcfd8de), NEG = Mats.Hex(0xff6b5b), PANEL = new Color(8 / 255f, 20 / 255f, 32 / 255f, 0.65f);
 
@@ -59,8 +59,10 @@ namespace Nekorobo
         public void Show()
         {
             g.AchMatchEnd();
+            EarlyQuit.Done();                                   // 最後まで遊んだ（自動マッチングの途中退出の印を消す）
             // オンラインは、試合が終わったので同期を畳む（部屋には残る）
             room = g.NpOn && Net.Room != null;
+            auto = room && (bool?)Net.Room["auto"] == true;
             g.NpEnd();
             B.Clear();
             var bx = B.box;
@@ -199,7 +201,7 @@ namespace Nekorobo
             Table(bx, cols, H);
             // ---- ボタン。オンラインは部屋へ戻る（ホストがもう一度始められる）
             act = new System.Action[] { Again, ToTitle };
-            Btn(0, room ? "部屋へ戻る" : "もう一度", 728, 7);
+            Btn(0, room ? (auto ? "もう一度さがす" : "部屋へ戻る") : "もう一度", 728, 7);
             Btn(1, "タイトルへ", 998, 8);
             cur = 0; lockT = g.T.menuLock; armed = false; goT = -1;
             Focus(0);
@@ -304,6 +306,8 @@ namespace Nekorobo
         void Again()
         {
             g.matchHist.Clear(); g.matchRounds = 0;
+            // 自動マッチングの部屋は、出て新しく探す（同じ顔ぶれで続けたいときはプライベートで）
+            if (Net.Room != null && (bool?)Net.Room["auto"] == true) { Net.LeaveRoom(); g.NpEnd(); g.hud.OpenTitle("Online"); g.hud.MmAgain(); return; }
             if (Net.Room != null) { g.hud.OpenTitle("Wait"); return; }
             g.hud.OpenTitle("Free", false);
         }

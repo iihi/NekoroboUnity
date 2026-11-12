@@ -43,6 +43,7 @@ namespace Nekorobo
             public Dictionary<int, bool> shopped = new Dictionary<int, bool>();
             public Dictionary<int, bool> rdy = new Dictionary<int, bool>();
             public bool waitHost, waitShop;
+            public Tune tuneMine;              // ホストの調子を借りている間、自分の数値を控えておく（NpEnd で戻す）
         }
         [System.NonSerialized] public NetPlay np = new NetPlay();
         public bool NpOn { get { return np.role != "off"; } }
@@ -60,6 +61,7 @@ namespace Nekorobo
             Net.OnState += () =>
             {
                 if (Net.State == "on") return;
+                EarlyQuit.Quitted();                          // 自動マッチングの対戦中に自分の通信が切れた → 途中退出
                 // 遊んでいる最中に切れたら、黙って固まらせない
                 bool playing = NetGuest && !hud.TitleOpen;
                 if (playing) NpLostHost("サーバとの通信が切れました。");
@@ -106,8 +108,26 @@ namespace Nekorobo
             Lobby.mode = mode;
         }
 
+        /// <summary>面ごとの上書き（stage.tune）を外した、いまの調子の数値（start で配る）。</summary>
+        public JObject TuneBaseJson() { return (tuneBack ?? T).ToJson(); }
+
+        /// <summary>
+        /// ホストの調子を手元へ入れる（JS版 npTuneUse）。**自分の数値は控えておき、対戦が終わったら戻す**（NpEnd）。
+        /// 面ごとの上書きが乗っていれば先に外す（控えを取る前に。外さないと上書きぶんを自分の数値として覚える）
+        /// </summary>
+        void NpTuneUse(JObject tn)
+        {
+            if (tn == null) return;
+            if (tuneBack != null) { T.CopyFrom(tuneBack); tuneBack = null; }
+            if (np.tuneMine == null) np.tuneMine = T.Clone();
+            T.Apply(tn);
+            hud.RefreshSettings();
+        }
+
         public void NpEnd()
         {
+            // ホストの調子を借りていたら、自分の数値へ戻す（面ごとの上書きの控えもホスト基準なので捨てる）
+            if (np.tuneMine != null) { tuneBack = null; T.CopyFrom(np.tuneMine); np.tuneMine = null; hud.RefreshSettings(); }
             np.role = "off"; np.shopped.Clear(); np.rdy.Clear();
             np.waitHost = false; np.waitShop = false; np.stage = 0;
             NetStop();
@@ -130,13 +150,19 @@ namespace Nekorobo
             if (again && cfg["w"] is JArray wa)
                 for (int i = 0; i < wa.Count && i < wallets.Length; i++) WalletFromJson(wallets[i], wa[i] as JObject);
             if (!again && room != null) NpBegin(room["players"] as JArray ?? new JArray(), cfg != null ? cfg["npc"] as JArray : null, cfg);
+            if (!again)
+            {
+                hud.MmOff();                                             // 自動マッチングは終わり
+                if (room != null && (bool?)room["auto"] == true) EarlyQuit.Begin();   // 自動マッチングの対戦は数える
+            }
             // ラウンドマッチのラウンド数はホストが決めたもの（続きのときは持ち越し）
             if (!again)
             {
                 int rn = cfg != null && cfg["rounds"] != null && cfg["rounds"].Type == JTokenType.Integer ? (int)cfg["rounds"] : 0;
-                matchRounds = System.Array.IndexOf(MATCH_LENS, rn) >= 0 ? rn : 0;
+                matchRounds = RoundsOk(rn) ? rn : 0;
                 Lobby.rounds = matchRounds;
             }
+            if (cfg != null && !Net.IsHost) NpTuneUse(cfg["tune"] as JObject);   // 全員ホストの調子で遊ぶ
             np.shopped.Clear(); np.rdy.Clear(); np.waitHost = false; np.waitShop = false;
             hud.NetWaitHide();                       // 次の面が来た。待ちの画面は畳む
             hud.NetWarn("", false);

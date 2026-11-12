@@ -1568,6 +1568,11 @@ namespace Nekorobo
             if (solo) foreach (var q in grp) { L.lootIn += q.lootIn; L.lootOut += q.lootOut; L.resc += q.crCost; }
             else foreach (var q in players) L.resc += q.crCost;
             L.total = L.sales + L.wreck + L.lootIn - L.repair - L.ambCost - L.lootOut - L.resc;
+            // **オンラインの参加者は、ホストが数えた額をそのまま出す**（JS版と同じ）。
+            // 修理費・救急車代は調子の数値（T）とお店の倍率で決まるので、手元で数え直すと
+            // 調子が違うだけで食い違っていた。売上などの元の数も丸めて届くので、合計もホストの値を使う
+            if (np.role == "guest" && P != null && P.hostL != null)
+            { L.repair = P.hostL[0]; L.ambCost = P.hostL[1]; L.total = P.hostL[2]; }
             return L;
         }
 
