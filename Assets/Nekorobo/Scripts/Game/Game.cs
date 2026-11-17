@@ -1603,7 +1603,8 @@ namespace Nekorobo
                 foreach (var P in players)
                 {
                     var Lp = LedgerOf(P);
-                    mr.per.Add(new MatchPer { tot = Mathf.Round(Lp.total), sales = Mathf.Round(Lp.sales), deliv = P.delivered, cost = Mathf.Round(Lp.repair + Lp.ambCost) });
+                    mr.per.Add(new MatchPer { tot = Mathf.Round(Lp.total), sales = Mathf.Round(Lp.sales), deliv = P.delivered, cost = Mathf.Round(Lp.repair + Lp.ambCost),
+                                               dmg = Mathf.Round(Lp.dmg * 10) / 10, amb = Lp.amb });
                 }
                 matchHist.Add(mr);
             }

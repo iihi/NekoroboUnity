@@ -227,7 +227,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/HudBar.cs` | 上の帯（清書 1020。JS版 #hud2）。絵は HTML版の `assets/ui/hud/`（面の札・人の札・HP・アイテム・順位・クロッシュ）、座標は PSD の 1280×720 のまま。人の札は 263px おきで前の人が上。字は変わる物だけ重ねる。金額は増えたときだけ数え上げて跳ねる |
 | `Scripts/Game/Game.Ach.cs` / `AchToast.cs` | 実績（JS版 ACHS など。39個＋準備中1つ）。取ったら画面の下にメダルと★の知らせ。記録は PlayerPrefs の nekorobo.ach（JS版と同じ形）。タイトルの「実績」に一覧（仕分けの札・★2・★3 は取るまで？？？） |
 | `Scripts/Net/EosAch.cs` | 実績を EOS の実績にも送る（Connect の端末IDでログイン、ログイン時に端末の記録と合わせる）。Dev Portal での登録は `Tools/eos_achievements/README.md` |
-| `Scripts/Game/FinalWin.cs` | ラウンドマッチの最終結果（JS版 showFinal）。個人戦は表彰台、チーム戦は WIN／LOSE、1人・協力は合計の利益。右にラウンドごとの内訳 |
+| `Scripts/Game/FinalWin.cs` | ラウンドマッチの最終結果（JS版 showFinal）。清書1113（HTML版の assets/ui/fin。tools/psd/cut1113.py）。個人戦は表彰台（台の上のロボは、それぞれの機体を層31だけ映すカメラでその場で撮る。1位は笑顔）と4位・リタイアの行、チーム戦は WIN／LOSE、1人・協力は合計の利益。右は「ラウンド詳細」：累積売上・ラウンド売上（どちらも順位と同じ利益で描く）・店舗ダメージ・昇天数の札のグラフと、王冠の帯のひとこと。札は LB / RB・↑で札の段へ入って ← →・クリック |
 | `Scripts/Game/Game.Emote.cs` | 煽り（JS版 emoTick など）。L2・Q／R2・E の板と右スティック・X / C で選び、頭の上にフキダシ。絵文字は `Resources/Ui/Emo` の PNG（Chrome で描いた物）。オンラインはホストが配る |
 | `Scripts/Game/ComicUi.cs` | マンガ調の大きな知らせの部品（ギザギザの吹き出し・網点・集中線・太い縁取りの字。JS版 comicBurstSvg / speedLinesSvg）。STAGE CLEAR!!／TIME UP!!／FAILED…（StoryUi.Bang）と、高額・VIP オーダー出現（HudVip）で使う |
 | `Scripts/Game/ShineText.cs` / `Thicken.cs` | 順位の数字の金・銀・銅のグラデーションと走る光 ／ 字を太らせる（CSS の font-weight:900 の代わり） |

@@ -59,8 +59,8 @@ namespace Nekorobo
 
         // ------------------------------------------------------------ 部品
         static Sprite disc, ring;
-        /// <summary>丸（ring なら輪）。ダッシュのクールタイムに使う。</summary>
-        static Sprite Circle(bool isRing)
+        /// <summary>丸（ring なら輪）。ダッシュのクールタイムに使う。最終結果のグラフの点にも使う</summary>
+        public static Sprite Circle(bool isRing)
         {
             if (isRing ? ring != null : disc != null) return isRing ? ring : disc;
             const int N = 64; const float R = 31.5f, W = 9f;      // 輪の太さは JS版（直径30に線4）と同じ割合

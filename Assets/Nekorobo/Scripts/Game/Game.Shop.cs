@@ -100,7 +100,7 @@ namespace Nekorobo
         public static readonly int[] MATCH_LENS = { 3, 5, 10 };
         [System.NonSerialized] public int matchRounds;
         /// <summary>ラウンドごとの記録（面の名前・クリアのタイム・人ごとの差引・売上・配膳数・修理費）</summary>
-        public class MatchPer { public float tot, sales, cost; public int deliv; }
+        public class MatchPer { public float tot, sales, cost, dmg; public int deliv, amb; }   // dmg … 店舗ダメージ（％）、amb … 昇天させた客の数
         public class MatchRound { public string name; public int frames; public List<MatchPer> per = new List<MatchPer>(); }
         [System.NonSerialized] public List<MatchRound> matchHist = new List<MatchRound>();
         public static string LenName(int n) { return n == 1 ? Lang.Tr("フリープレイ（1回だけ）") : n > 0 ? Lang.Tr("ラウンドマッチ {0}ラウンド", n) : Lang.Tr("フリープレイ（とことん）"); }
