@@ -35,7 +35,8 @@ namespace Nekorobo
 
         // ---- 案内
         RectTransform tutRoot, tutBubble;
-        Image tutBg, tutRing, tutTail, tutFace;
+        Image tutBg, tutRing, tutTail;
+        RawImage tutFace;
         Text tutSt, tutText;
         CanvasGroup tutCg;
         float tutPop = 1;
@@ -243,14 +244,23 @@ namespace Nekorobo
             var box = Box1280(tutRoot);
             tutCg = box.gameObject.AddComponent<CanvasGroup>();
             tutCg.blocksRaycasts = false; tutCg.interactable = false;
-            // 店主の顔
+            // 店主の顔。会話の窓と同じ本番の絵（HTML版 assets/ui/face_owner.png。JS版 faceHtml("店主")）を、78×78 の枠に縦横比のまま収める。
+            // 前は Resources の古い仮の顔を使っていて、HTML版と違って見えていた（担当の指摘）
             var fr = UiKit.Rect(box, "Face");
             fr.anchorMin = fr.anchorMax = new Vector2(0, 1); fr.pivot = new Vector2(0, 1);
             fr.sizeDelta = new Vector2(78, 78); fr.anchoredPosition = new Vector2(12, -(720 - 12 - 78));
-            tutFace = fr.gameObject.AddComponent<Image>();
-            var tex = Resources.Load<Texture2D>("Ui/face_owner");
-            if (tex != null) tutFace.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100);
-            tutFace.raycastTarget = false;
+            {
+                var im = new GameObject("Img", typeof(RectTransform)).AddComponent<RawImage>();
+                var ir = im.rectTransform; ir.SetParent(fr, false);
+                ir.anchorMin = ir.anchorMax = ir.pivot = new Vector2(0.5f, 0.5f);
+                var tex = DataRoot.Texture("ui/face_owner.png");
+                if (tex == null) tex = Resources.Load<Texture2D>("Ui/face_owner");
+                im.texture = tex; im.raycastTarget = false;
+                float k = tex != null ? Mathf.Min(78f / tex.width, 78f / tex.height) : 1;      // object-fit:contain
+                ir.sizeDelta = tex != null ? new Vector2(tex.width * k, tex.height * k) : new Vector2(78, 78);
+                var fsh = im.gameObject.AddComponent<Shadow>(); fsh.effectColor = new Color(0, 0, 0, 0.45f); fsh.effectDistance = new Vector2(0, -4);
+                tutFace = im;
+            }
             // 吹き出し（左下を原点にして、文の大きさで伸びる）
             tutBubble = UiKit.Rect(box, "Bubble");
             tutBubble.anchorMin = tutBubble.anchorMax = new Vector2(0, 1); tutBubble.pivot = new Vector2(0, 0);
