@@ -59,7 +59,6 @@ namespace Nekorobo
             Tiles(st,
                 Tile("オンラインマッチ", "red", "versus", () => Go("MatchLen"), "自動で対戦相手を探します。個人戦。遊び方を選んで、面はそろってから全員で投票します。", "match", !on),
                 Tile("プライベート", "blue", "join", () => Go("Private"), "友達と遊びます。誰かが部屋を作って、ほかの人はルームIDを入れて参加します。", "priv", !on));
-            if (EarlyQuit.Bad) Note(st, "<b>途中退出が多いため</b>、オンラインマッチの相手が見つかりにくくなっています（" + EarlyQuit.M + "回中" + EarlyQuit.Q + "回）。");
             Btn(st, on ? "つなぎ直す" : "もう一度つなぐ", "sec", () => { Net.Close(); Net.Connect(); Go("Online"); }, null, false, "redo");
             Btn(st, "戻る", "sec", () => Go("Multi"), null, true);
         }
@@ -193,7 +192,7 @@ namespace Nekorobo
             if (!host || Lobby.rpick == null || rOne) Off(goB);
             Btn(st, g.InSession ? "部屋を出る" : "戻る", "sec", () =>
                    {
-                       System.Action leave = () => { if (g.InSession) EarlyQuit.Quitted(); Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
+                       System.Action leave = () => { Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
                        if (!g.InSession) { leave(); return; }
                        // 続きの最中は、抜ける前に確かめる（押し間違えると、みんなの続きがその場で終わる）
                        ConfirmOpen("部屋を出ますか？", "いま <b>" + g.runDone + "面</b> まで遊んだところです。\n"

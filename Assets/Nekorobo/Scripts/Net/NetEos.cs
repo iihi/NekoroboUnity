@@ -19,10 +19,9 @@ namespace Nekorobo
     ///
     /// 部屋サーバー（rooms.js）と同じ決まりにそろえてある：
     ///   名乗り   … Connect の端末ID（Epic アカウントは要らない）。番号（Net.Id）は EOS の長い ID から作る8桁の数（どの端末でも同じ数になる）
-    ///   部屋     … Lobby（4人まで）。属性 code（12桁のルームID）・name・priv・playing・game・auto・tier を持たせる。
-    ///              人ごとの属性 name と st（自動マッチングの成績「対戦数,途中退出」）
+    ///   部屋     … Lobby（4人まで）。属性 code（12桁のルームID）・name・priv・playing・game・auto・len を持たせる。
+    ///              人ごとの属性 name
     ///   一覧     … game が一致・priv でない・playing でない・auto が一致する部屋を探す（40件まで）
-    ///   外す     … 持ち主（ホスト）が KickMember。外された人には Kicked が届く
     ///   番号で入る… code が一致する部屋を探して入る。始まっている／いっぱいなら断る
     ///   ホスト   … Lobby の持ち主。抜けたら EOS が次の人へ移す
     ///   始める   … 持ち主が playing を立て、{t:"start", room, cfg} を全員へ P2P で送る（自分にも知らせる）。
@@ -61,7 +60,6 @@ namespace Nekorobo
         readonly byte[] rbuf = new byte[P2PInterface.MAX_PACKET_SIZE];
         ulong nAuth, nStatus, nMemUpd, nLobUpd, nReq;
         ProductUserId owner;         // いまの部屋の持ち主（ホスト）。部屋の中身を作り直すたびに覚え直す
-        string curCode;              // いまの部屋の番号（外されたときに知らせる）
 
         static LobbyInterface Lb { get { return EosHost.P.GetLobbyInterface(); } }
         static P2PInterface P2p { get { return EosHost.P.GetP2PInterface(); } }
@@ -199,7 +197,7 @@ namespace Nekorobo
             return true;
         }
 
-        public bool CreateRoom(string name, bool priv, bool auto, int tier, int len)
+        public bool CreateRoom(string name, bool priv, bool auto, int len)
         {
             if (me == null) return false;
             int g = gen;
@@ -224,10 +222,8 @@ namespace Nekorobo
                     Attr(h, "priv", new AttributeDataValue { AsBool = priv });
                     Attr(h, "playing", new AttributeDataValue { AsBool = false });
                     Attr(h, "auto", new AttributeDataValue { AsBool = auto });
-                    Attr(h, "tier", new AttributeDataValue { AsInt64 = tier != 0 ? 1 : 0 });
                     Attr(h, "len", new AttributeDataValue { AsInt64 = len });
                     MAttr(h, "name", Cut(Net.Name, 16, ""));
-                    MAttr(h, "st", Net.StatM + "," + Net.StatQ);
                 }, rc =>
                 {
                     if (rc != Result.Success) { Err(g, "部屋を作れません（" + rc + "）"); LeaveQuiet(); return; }
@@ -266,7 +262,7 @@ namespace Nekorobo
                     if (d.ResultCode == Result.NotFound) { Err(g, "その番号の部屋がありません"); return; }
                     if (d.ResultCode != Result.Success) { Err(g, "部屋に入れません（" + d.ResultCode + "）"); return; }
                     lobby = d.LobbyId;
-                    Modify(g, h => { MAttr(h, "name", Cut(Net.Name, 16, "")); MAttr(h, "st", Net.StatM + "," + Net.StatQ); }, null);
+                    Modify(g, h => MAttr(h, "name", Cut(Net.Name, 16, "")), null);
                     RoomChanged(new JObject { ["you"] = IdOf(me) });   // ここで持ち主（owner）を覚える
                     AcceptHost();
                 });
@@ -301,7 +297,7 @@ namespace Nekorobo
                         {
                             ["code"] = AStr(det, "code"), ["name"] = AStr(det, "name"),
                             ["n"] = (int)(max - info.Value.AvailableSlots), ["max"] = (int)max,
-                            ["auto"] = ABool(det, "auto"), ["tier"] = AInt(det, "tier"), ["len"] = AInt(det, "len"),
+                            ["auto"] = ABool(det, "auto"), ["len"] = AInt(det, "len"),
                         });
                     }
                     det.Release();
@@ -316,25 +312,6 @@ namespace Nekorobo
         {
             if (lobby == null || me == null || !AmHost) return false;
             Modify(gen, h => Attr(h, "playing", new AttributeDataValue { AsBool = true }), null);
-            return true;
-        }
-
-        public bool SetStats(int m, int q)
-        {
-            if (lobby != null) Modify(gen, h => MAttr(h, "st", m + "," + q), null);
-            return true;
-        }
-
-        /// <summary>ホストが人を部屋から外す（KickMember）。外された人には Kicked が届く（OnStatus）。</summary>
-        public bool Kick(int id)
-        {
-            ProductUserId u;
-            if (lobby == null || me == null || !AmHost || !users.TryGetValue(id, out u) || Same(u, me)) return false;
-            var o = new KickMemberOptions { LobbyId = lobby, LocalUserId = me, TargetUserId = u };
-            Lb.KickMember(ref o, null, (ref KickMemberCallbackInfo d) =>
-            {
-                if (d.ResultCode != Result.Success) Debug.LogWarning("[EOS] 外せません（" + d.ResultCode + "）");
-            });
             return true;
         }
 
@@ -410,11 +387,7 @@ namespace Nekorobo
                 case LobbyMemberStatus.Left:
                 case LobbyMemberStatus.Disconnected:
                 case LobbyMemberStatus.Kicked:
-                    if (self)
-                    {
-                        if (st == LobbyMemberStatus.Kicked) { string kc = curCode; Do(g, () => Net.ReportKicked(kc)); }   // ホストに外された
-                        Gone(g); break;
-                    }
+                    if (self) { Gone(g); break; }
                     CloseConn(who);
                     RoomChanged(new JObject { ["left"] = id });
                     break;
@@ -475,18 +448,12 @@ namespace Nekorobo
                     if (u == null) continue;
                     int id = IdOf(u);
                     string nm = MStr(det, u, "name");
-                    var pl = new JObject { ["id"] = id, ["name"] = string.IsNullOrEmpty(nm) ? "P" + id : nm, ["host"] = owner != null && Same(u, owner) };
-                    // 自動マッチングの成績「対戦数,途中退出」
-                    var sp = MStr(det, u, "st").Split(',');
-                    int sm, sq;
-                    if (sp.Length == 2 && int.TryParse(sp[0], out sm) && int.TryParse(sp[1], out sq)) pl["st"] = new JObject { ["m"] = sm, ["q"] = sq };
-                    players.Add(pl);
+                    players.Add(new JObject { ["id"] = id, ["name"] = string.IsNullOrEmpty(nm) ? "P" + id : nm, ["host"] = owner != null && Same(u, owner) });
                 }
-                curCode = AStr(det, "code");
                 return new JObject
                 {
-                    ["code"] = curCode, ["name"] = AStr(det, "name"), ["priv"] = ABool(det, "priv"),
-                    ["auto"] = ABool(det, "auto"), ["tier"] = AInt(det, "tier"), ["len"] = AInt(det, "len"), ["playing"] = ABool(det, "playing"),
+                    ["code"] = AStr(det, "code"), ["name"] = AStr(det, "name"), ["priv"] = ABool(det, "priv"),
+                    ["auto"] = ABool(det, "auto"), ["len"] = AInt(det, "len"), ["playing"] = ABool(det, "playing"),
                     ["max"] = (int)max, ["host"] = owner != null ? (JToken)IdOf(owner) : JValue.CreateNull(), ["players"] = players,
                 };
             }

@@ -90,8 +90,7 @@ namespace Nekorobo
         void NetHook()
         {
             // 描き直しはその場でせず、次のコマで（画面を組んでいる途中に知らせが来ても、組み直さない）
-            EarlyQuit.Init();                                 // 前回、自動マッチングの対戦の途中で閉じた・落ちたなら、途中退出を数える
-            Net.OnKicked += MmOnKicked;
+            MmClearOld();                                     // 前の版が覚えていた途中退出の数を消す
             Net.OnState += () =>
             {
                 if (Open && NetPage(page)) GoLater(page);
@@ -183,7 +182,6 @@ namespace Nekorobo
                 case "Private": PagePrivate(st); break;
                 case "MatchLen": def = PageMatchLen(st); break;
                 case "Match": PageMatch(st); break;
-                case "MmAsk": def = PageMmAsk(st); break;
                 case "Make": PageMake(st); break;
                 case "Join": PageJoin(st); break;
                 case "Wait": PageWait(st); break;

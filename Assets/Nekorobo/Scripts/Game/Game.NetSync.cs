@@ -702,7 +702,6 @@ namespace Nekorobo
         public void NpLostHost(string why)
         {
             if (np.role == "off") return;
-            EarlyQuit.Done();                             // ホストが抜けて終わった（自分の通信が切れたときは、先に途中退出にしてある）
             np.role = "off";
             NetStop();
             hud.NetWarn("", false);

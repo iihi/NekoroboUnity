@@ -61,7 +61,6 @@ namespace Nekorobo
             Net.OnState += () =>
             {
                 if (Net.State == "on") return;
-                EarlyQuit.Quitted();                          // 自動マッチングの対戦中に自分の通信が切れた → 途中退出
                 // 遊んでいる最中に切れたら、黙って固まらせない
                 bool playing = NetGuest && !hud.TitleOpen;
                 if (playing) NpLostHost("サーバとの通信が切れました。");
@@ -150,11 +149,7 @@ namespace Nekorobo
             if (again && cfg["w"] is JArray wa)
                 for (int i = 0; i < wa.Count && i < wallets.Length; i++) WalletFromJson(wallets[i], wa[i] as JObject);
             if (!again && room != null) NpBegin(room["players"] as JArray ?? new JArray(), cfg != null ? cfg["npc"] as JArray : null, cfg);
-            if (!again)
-            {
-                hud.MmOff();                                             // 自動マッチングは終わり
-                if (room != null && (bool?)room["auto"] == true) EarlyQuit.Begin();   // 自動マッチングの対戦は数える
-            }
+            if (!again) hud.MmOff();                                     // 自動マッチングは終わり
             // ラウンドマッチのラウンド数はホストが決めたもの（続きのときは持ち越し）
             if (!again)
             {

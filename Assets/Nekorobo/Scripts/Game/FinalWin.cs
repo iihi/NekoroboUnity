@@ -59,7 +59,6 @@ namespace Nekorobo
         public void Show()
         {
             g.AchMatchEnd();
-            EarlyQuit.Done();                                   // 最後まで遊んだ（自動マッチングの途中退出の印を消す）
             // オンラインは、試合が終わったので同期を畳む（部屋には残る）
             room = g.NpOn && Net.Room != null;
             auto = room && (bool?)Net.Room["auto"] == true;

@@ -36,12 +36,10 @@ HTML版と同じ決まり（HTML版の README「自動マッチング（オン�
 - 先に遊び方（フリープレイ＝1回だけ／3・5・10ラウンド／こだわらない）を選び、同じ遊び方の部屋どうしで組む。
   自動で部屋を探して入り、無ければ作って待つ。2人そろったら20秒（4人ならすぐ）で部屋を締め切り（`LockRoom`）、面を全員で投票（STAGE SELECT）して始める。
   個人戦・空き席は NPC。自動マッチングの面選びには「もどる」を出さない。
-- 途中退出（`EarlyQuit`。PlayerPrefs `nekorobo.quit`＝「対戦数,途中退出,対戦中の印」）は自動マッチングの対戦だけ数える。
-  対戦5回以上で途中退出3割以上の人は、はじめの30秒は同じような人どうしで探し、ふつうの人の部屋に入るとホストに「参加の確認」（15秒で断る）。断ると外す。
-- 通信口に `CreateRoom(name, priv, auto, tier, len)`・`ListRooms(auto)`・`SetStats`・`Kick`・`LockRoom`、できごと `OnKicked` を足した。
-  - 部屋サーバー（ws）… HTML版の rooms.js と同じ便り（`stats`・`kick`・`kicked`・`lock`・`list` の `auto`・`create` の `len`）。HTML版と同じ部屋で出会える（確かめた）
-  - EOS … ロビーの属性 `auto`（bool）・`tier`・`len`（int）、人ごとの属性 `st`（「対戦数,途中退出」）、外すのは `KickMember`、締め切りは `playing` を立てる
-- のちに途中退出の数を EOS の Stats（足し算だけの統計）へ移す予定。
+- 途中退出のペナルティ（途中退出を数えて、多い人をマッチングしにくくする・ホストに参加の確認を出して外す）は、担当の判断でやめた。HTML版と同じ。前の版が残した PlayerPrefs `nekorobo.quit` は起動したときに消す。
+- 通信口に `CreateRoom(name, priv, auto, len)`・`ListRooms(auto)`・`LockRoom` を足した。
+  - 部屋サーバー（ws）… HTML版の rooms.js と同じ便り（`lock`・`list` の `auto`・`create` の `len`）。HTML版と同じ部屋で出会える（確かめた）
+  - EOS … ロビーの属性 `auto`（bool）・`len`（int）、締め切りは `playing` を立てる
 
 ### オンラインのお金と調子はホストが正
 
