@@ -167,7 +167,9 @@ namespace Nekorobo
             if (fr != null) { talkFrame.texture = fr; talkFrame.rectTransform.sizeDelta = new Vector2(fr.width * 158f / fr.height, 158); }
             talkName.text = Lang.Tr(sp[0]);
             talkName.rectTransform.anchoredPosition = new Vector2(L ? 285.5f : 936, talkName.rectTransform.anchoredPosition.y);
-            talkText.text = TutText(text, 24);
+            List<Vector2Int> tch;
+            talkText.text = TutText(text, 24, out tch);
+            PlaceKbd(talkText, tch);
             // 右下：1／5 ▼ [Enter]
             talkKey.text = Gamepad.all.Count > 0 ? "A" : "Enter";
             float kw = talkKey.preferredWidth + 12, right = 1280 - 266.5f;
@@ -289,7 +291,8 @@ namespace Nekorobo
             tutBg.color = ok ? Mats.Hex(0xeafbe9) : PAPER;
             tutRing.color = ink; tutTail.color = ink;
             tutText.color = ok ? Mats.Hex(0x1a7a3c) : TEXT;
-            tutText.text = TutText(text, 18);
+            List<Vector2Int> kch;
+            tutText.text = TutText(text, 18, out kch);
             tutSt.text = st ?? "";
             // 幅は文の長さ（最大 476）。高さは折り返したぶん
             const float maxW = 560 - 78 - 6 - 40;
@@ -304,6 +307,7 @@ namespace Nekorobo
             sr.anchoredPosition = new Vector2(20, -11); sr.sizeDelta = new Vector2(w, 15);
             var tr = tutText.rectTransform; tr.anchorMin = tr.anchorMax = new Vector2(0, 1); tr.pivot = new Vector2(0, 1);
             tr.anchoredPosition = new Vector2(20, -(11 + sth)); tr.sizeDelta = new Vector2(w, th + 4);
+            PlaceKbd(tutText, kch);                                   // ボタン名の黒い札
             if (pop) tutPop = 0;
         }
 
@@ -548,32 +552,117 @@ namespace Nekorobo
 
         // ================================================================ 文
         /// <summary>
-        /// 案内の文。{up} などはその人の押すボタンに置き換える（パッドがあればパッドの名前）。JS版 tutText。
-        /// JS版はボタン名を黒い札（kbd）にしている。ここの字は札を描けないので、色を変えて［ ］で囲む。
+        /// 案内の文。{up} などはその人の押すボタンに置き換える（パッドがあればパッドの名前）。JS版 tutText と同じ名前・同じ決まり。
+        /// ボタン名は JS版と同じく黒い札（kbd）にする：字は白く小さく（0.8 倍）して前後に少し空け、札の絵は PlaceKbd が字の後ろに置く。
+        /// chips … 札にする所（文の何文字目から何文字目。前後の空きも入れる）
         /// </summary>
-        public static string TutText(string s, int size)
+        public static string TutText(string s, int size) { List<Vector2Int> c; return TutText(s, size, out c); }
+        public static string TutText(string s, int size, out List<Vector2Int> chips)
         {
+            chips = new List<Vector2Int>();
             if (string.IsNullOrEmpty(s)) return "";
-            return System.Text.RegularExpressions.Regex.Replace(s, @"\{(\w+)\}", m => Key(m.Groups[1].Value, size));
+            var sb = new System.Text.StringBuilder();
+            int at = 0;
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(s, @"\{(\w+)\}"))
+            {
+                sb.Append(s, at, m.Index - at);
+                at = m.Index + m.Length;
+                string v = Key(m.Groups[1].Value);
+                if (v == null) { sb.Append(m.Value); continue; }
+                sb.Append("<color=#ffffff><size=" + Mathf.RoundToInt(size * 0.8f) + ">");
+                int a = sb.Length;
+                sb.Append("\u00A0\u00A0" + v.Replace(' ', '\u00A0') + "\u00A0\u00A0");     // 札の中の左右の空き（前後で折り返さない空白）
+                chips.Add(new Vector2Int(a, sb.Length - 1));
+                sb.Append("</size></color>");
+            }
+            sb.Append(s, at, s.Length - at);
+            return sb.ToString();
         }
 
-        static string Key(string k, int size)
+        // ボタンの名前（JS版 tutText の K と同じ）
+        static string Key(string k)
         {
             bool pd = Gamepad.all.Count > 0;
-            string v;
             switch (k)
             {
-                case "up": v = pd ? "A" : "↑"; break;
-                case "back": v = pd ? "B" : "↓"; break;
-                case "turn": v = pd ? "スティック" : "← →"; break;
-                case "jump": v = pd ? "X(□)" : "スペース"; break;
-                case "use": v = pd ? "Y(△)" : "Z"; break;
-                case "cycle": v = pd ? "R1" : "X"; break;
-                case "ok": v = pd ? "A" : "Enter"; break;
-                case "move": v = pd ? "スティック" : "↑↓←→"; break;
-                default: return "{" + k + "}";
+                case "up": return pd ? "A" : "↑";
+                case "back": return pd ? "B" : "↓";
+                case "turn": return pd ? Lang.Tr("スティック") : "← →";
+                case "jump": return pd ? "X" : Lang.Tr("スペース");
+                case "use": return pd ? "Y" : "Z";
+                case "cycle": return pd ? "RB" : "X";
+                case "ok": return pd ? "A" : "Enter";
+                case "move": return pd ? Lang.Tr("スティック") : "↑↓←→";
+                default: return null;
             }
-            return "<color=#9a5a1c>［" + v + "］</color>";
+        }
+
+        /// <summary>
+        /// ボタン名の黒い札（JS版の kbd：地 #3b2a1c・角の丸み 6・下に影）を、字の後ろに置く。
+        /// 字の位置は TextGenerator で測る（字の箱の大きさを決めてから呼ぶ）
+        /// </summary>
+        static void PlaceKbd(Text t, List<Vector2Int> chips)
+        {
+            var tr = t.rectTransform;
+            var hostT = tr.parent.Find(t.name + "_Kbd");
+            RectTransform host;
+            if (hostT == null)
+            {
+                host = UiKit.Rect(tr.parent, t.name + "_Kbd");
+                host.SetSiblingIndex(tr.GetSiblingIndex());          // 字より後ろ
+            }
+            else host = (RectTransform)hostT;
+            foreach (Transform c in host) Object.Destroy(c.gameObject);
+            host.anchorMin = tr.anchorMin; host.anchorMax = tr.anchorMax; host.pivot = tr.pivot;
+            host.anchoredPosition = tr.anchoredPosition; host.sizeDelta = tr.sizeDelta;
+            host.localScale = tr.localScale;
+            if (chips == null || chips.Count == 0) return;
+            var gen = new TextGenerator();
+            gen.Populate(t.text, t.GetGenerationSettings(tr.rect.size));
+            float ppu = t.pixelsPerUnit > 0 ? t.pixelsPerUnit : 1;
+            // 字の番号。タグ（<color> など）を数えない作りなら、タグを抜いた番号にする
+            string raw = t.text;
+            bool withTags = gen.characterCount >= raw.Length;
+            var map = new int[raw.Length + 1];
+            int vis = 0;
+            for (int k = 0; k < raw.Length; k++)
+            {
+                map[k] = vis;
+                if (raw[k] == '<')
+                {
+                    int e = raw.IndexOf('>', k);
+                    if (e > k && System.Text.RegularExpressions.Regex.IsMatch(raw.Substring(k, e - k + 1), @"^</?(color|size|b|i)(=[^>]*)?>$"))
+                    { for (int q = k + 1; q <= e; q++) map[q] = vis; k = e; continue; }
+                }
+                vis++;
+            }
+            map[raw.Length] = vis;
+            var chars = gen.characters; var lines = gen.lines;
+            foreach (var c in chips)
+            {
+                int i0 = withTags ? c.x : map[c.x], i1 = withTags ? c.y : map[c.y];
+                if (i0 < 0 || i1 >= chars.Count || i0 > i1) continue;
+                // 行（同じ札が2行に分かれたときは、行ごとに置く）
+                int s0 = i0;
+                while (s0 <= i1)
+                {
+                    int li = 0;
+                    for (int L = 0; L < lines.Count; L++) if (lines[L].startCharIdx <= s0) li = L;
+                    int lineEnd = li + 1 < lines.Count ? lines[li + 1].startCharIdx - 1 : chars.Count - 1;
+                    int s1 = Mathf.Min(i1, lineEnd);
+                    float x0 = chars[s0].cursorPos.x / ppu, x1 = (chars[s1].cursorPos.x + chars[s1].charWidth) / ppu;
+                    float top = lines[li].topY / ppu, lh = lines[li].height / ppu;
+                    float h = t.fontSize * 0.8f * 1.5f;
+                    var im = UiKit.Img(host, Mats.Hex(0x3b2a1c), 6, "Kbd");
+                    var r = im.rectTransform;
+                    r.anchorMin = r.anchorMax = tr.pivot; r.pivot = new Vector2(0, 0.5f);
+                    r.sizeDelta = new Vector2(Mathf.Max(4, x1 - x0), h);
+                    r.anchoredPosition = new Vector2(x0, top - lh * 0.55f);
+                    var sh = im.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.4f); sh.effectDistance = new Vector2(0, -2);
+                    s0 = s1 + 1;
+                    if (s1 >= lineEnd) { }
+                }
+            }
         }
 
         // ================================================================ 部品
