@@ -57,7 +57,8 @@ namespace Nekorobo
             foreach (var c in P.ent.GetComponentsInChildren<Collider>()) c.isTrigger = on;
         }
 
-        public void RescueStart(Player P)
+        /// <summary>free … 研修で店主が呼んだクレーン（お金を取らない）</summary>
+        public void RescueStart(Player P, bool free = false)
         {
             var R = P.ent; var p = R.rb.position;
             if (P.carried != null) DropDish(P, Vector3.zero);          // 運んでいた料理はその場に落とす
@@ -69,10 +70,10 @@ namespace Nekorobo
             R.rb.linearVelocity = Vector3.zero; R.rb.angularVelocity = Vector3.zero;
             R.rb.isKinematic = true;
             CrSensor(P, true);
-            P.crCost += T.rescueCost;
+            if (!free) P.crCost += T.rescueCost;
             P.slipT = 0; P.airborne = false;
             if (P.npc != null) { P.npc.wantCr = false; P.npc.wetT = 0; P.npc.idleT = 0; P.npc.path = null; }
-            hud.Pop(p + Vector3.up * 1.3f, "−" + Yen(T.rescueCost), 0xffb300, true);
+            if (!free) hud.Pop(p + Vector3.up * 1.3f, "−" + Yen(T.rescueCost), 0xffb300, true);
             Say(P, "たすけてにゃ～！", 1.6f);
             NetEv("cr", P.idx);
             CraneShow(P);

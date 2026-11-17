@@ -38,6 +38,8 @@ namespace Nekorobo
         UiBoard ssB;
         Text ssSec; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
         const int SS_START = FREE_SLOTS + 1, SS_BACK = FREE_SLOTS + 2;
+        // 決まった面を光らせておく秒数（前は 1.5秒。担当「長い。半分に。ビカビカの速度も上げる」）
+        const float SS_WIN_SEC = 0.75f;
         /// <summary>自動マッチングの部屋の面選びか。「もどる」を出さない（ホストが戻ると、そろった全員の対戦が崩れるため）。</summary>
         bool SsAuto { get { return SS.net != null && Net.Room != null && (bool?)Net.Room["auto"] == true; } }
         bool SsNoBack { get { return SS.net == "guest" || SsAuto; } }
@@ -404,7 +406,7 @@ namespace Nekorobo
                 if (pool.Count == 0) { Game.SeUi("ng"); return; }
                 e = pool[Random.Range(0, pool.Count)];
             }
-            SS.win = flist.IndexOf(e); SS.winT = 1.5f; SS.go = e;
+            SS.win = flist.IndexOf(e); SS.winT = SS_WIN_SEC; SS.go = e;
             SS.why = cnt.Count == 0 ? Lang.Tr("誰も選ばなかったので、ランダムで決めました")
                    : tie ? Lang.Tr("同じ票数だったので、抽選で決めました")
                    : pk == FREE_SLOTS ? Lang.Tr("ランダムで決めました") : "";
@@ -418,7 +420,7 @@ namespace Nekorobo
             if (!SS.open || SS.win >= 0) return;
             string rf = (string)d["ref"];
             int i = flist.FindIndex(f => f != null && f.refKey == rf);
-            SS.win = i >= 0 ? i : FREE_SLOTS; SS.winT = 1.5f; SS.go = i >= 0 ? flist[i] : null;
+            SS.win = i >= 0 ? i : FREE_SLOTS; SS.winT = SS_WIN_SEC; SS.go = i >= 0 ? flist[i] : null;
             SS.why = (string)d["why"] ?? "";
             Game.SeUi("buy");
             SsDraw(false);
@@ -619,7 +621,7 @@ namespace Nekorobo
     {
         void Update()
         {
-            bool on = Mathf.FloorToInt(Time.unscaledTime / 0.25f) % 2 == 0;
+            bool on = Mathf.FloorToInt(Time.unscaledTime / 0.125f) % 2 == 0;     // 0.25 秒で1回（前は 0.5 秒）
             transform.localScale = Vector3.one * (on ? 1.04f : 1f);
             foreach (var g in GetComponentsInChildren<Graphic>()) { var c = g.color; float k = on ? 1.6f : 1f; g.material = null; }
             var cg = GetComponent<CanvasGroup>(); if (cg == null) cg = gameObject.AddComponent<CanvasGroup>();

@@ -535,23 +535,35 @@ namespace Nekorobo
             if (c.ready) return;
             // 協力は財布がひとつなので、NPC に人の金を使わせない
             if (!g.NpcMayShop(c.P)) { c.ready = true; return; }
-            c.buyT -= dt;
-            if (c.buyT > 0) return;
-            c.buyT = 0.5f + Random.value * 0.7f;
+            // **悩まずに、開いたらすぐまとめて買って「購入完了」にする**（HTML版と同じ。担当「NPC が悩んでる演出いらない。
+            // 人間が買い終わってるのに NPC の買い物を待っている状況が起きるのは良くない」）。
+            // 前は 0.5〜1.2秒ごとに1つずつ買っていた。指は最後に買った物の上に置く（何を取ったか見えるように）
             var W = g.WalletOf(c.P);
-            var can = new List<int>();
-            for (int i = 0; i < goods.Count; i++) if (!goods[i].Full(W) && goods[i].Cost(W) <= W.cash) can.Add(i);
-            if (can.Count == 0) { c.ready = true; return; }
-            // 3回に1回はアイテム。強化は半分は「いちばん高い＝効きの大きい」物、半分は適当に
-            var items = can.FindAll(i => goods[i].kind == "it");
-            var ups = can.FindAll(i => goods[i].kind == "up");
-            ups.Sort((a, b) => goods[b].Cost(W).CompareTo(goods[a].Cost(W)));
-            int pickI = (items.Count > 0 && Random.value < 0.34f) ? items[Random.Range(0, items.Count)]
-                      : ups.Count > 0 ? (Random.value < 0.5f ? ups[0] : ups[Random.Range(0, ups.Count)]) : items[0];
-            var cd = cards[pickI];
-            c.x = cd.hitX + cd.hitW / 2; c.y = cd.hitY + cd.hitH / 2;
-            c.idx = pickI;
-            Buy(c);
+            int last = -1;
+            for (int guard = 0; guard < 16; guard++)
+            {
+                var can = new List<int>();
+                for (int i = 0; i < goods.Count; i++) if (!goods[i].Full(W) && goods[i].Cost(W) <= W.cash) can.Add(i);
+                if (can.Count == 0) break;
+                // 3回に1回はアイテム。強化は半分は「いちばん高い＝効きの大きい」物、半分は適当に
+                var items = can.FindAll(i => goods[i].kind == "it");
+                var ups = can.FindAll(i => goods[i].kind == "up");
+                ups.Sort((a, b) => goods[b].Cost(W).CompareTo(goods[a].Cost(W)));
+                int pickI = (items.Count > 0 && Random.value < 0.34f) ? items[Random.Range(0, items.Count)]
+                          : ups.Count > 0 ? (Random.value < 0.5f ? ups[0] : ups[Random.Range(0, ups.Count)]) : items[0];
+                var gd = goods[pickI];
+                if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
+                last = pickI;
+            }
+            if (last >= 0)
+            {
+                var cd = cards[last];
+                c.x = cd.hitX + cd.hitW / 2; c.y = cd.hitY + cd.hitH / 2;
+                c.idx = last;
+                if (IsViewer(c.P)) cd.flash = 0.2f;
+                Game.SeUi("buy", 0.5f);
+            }
+            c.ready = true;
         }
 
         /// <summary>

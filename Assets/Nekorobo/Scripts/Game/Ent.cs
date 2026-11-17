@@ -7,6 +7,9 @@ namespace Nekorobo
     /// 種類（kind）で「ぶつかったら何が起きるか」を分ける。
     ///   floor / pit / wall / fence / counter / table / chair / guest / robot / ramp / prop
     /// </summary>
+    /// <summary>ジャンプ台の形（真ん中・上りの向き・長さと幅の半分・高さ）</summary>
+    public class RampData { public float x, z, ux, uz, hl, hw, rise; }
+
     public class Ent : MonoBehaviour
     {
         static int seq;
@@ -27,6 +30,7 @@ namespace Nekorobo
         public Vector3 home;
 
         public Player player;           // ロボならその人
+        public RampData ramp;           // ジャンプ台（乗ったのか横に当たったのかを見分ける。Game.RampRiding）
         public Player blame;            // 家具どうしの連鎖でも、元のロボまでたどる
 
         // 客

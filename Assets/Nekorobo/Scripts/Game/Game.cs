@@ -692,6 +692,7 @@ namespace Nekorobo
             foreach (var P in players) if (P.npc != null && !P.down && P.cr == null) DriveNpc(P, dt);
             // 救済のクレーン（4つ長押しで呼ぶ・運んでいる間の動き）
             foreach (var P in players) RescueHoldTick(P, dt);
+            TutHelpTick(dt);                       // 研修（ストーリー）だけ：川から引き上げる・故障を直す（店主が手伝う）
             RescueStep(dt);
             if (state == "play") foreach (var P in players) Drive(P, dt);
 
@@ -1009,11 +1010,35 @@ namespace Nekorobo
             if (state != "play") return;
             if (a.kind == "floor" || b.kind == "floor") return;
             if (a.kind == "pit" || b.kind == "pit") return;
+            // ジャンプ台は、**ふつうに乗ったとき**（低い側から上る・上に着地する）だけ床の仲間にする。
+            // 傾けた板1枚の当たり判定なので、上ろうとすると下の縁に当たって走る速さぶんの衝撃が出ていた
+            // （担当「普通に乗った場合にダメージ判定になってるのが良くない」）。横や高い側の面に当たったときは
+            // 今までどおりダメージ（担当「側面に当たった場合はダメージの方が自然」）
+            { var rp = a.kind == "ramp" ? a : b.kind == "ramp" ? b : null;
+              if (rp != null && RampRiding(rp, rp == a ? b : a)) return; }
             if (a.kind == "fence" || b.kind == "fence") return;
             float m1 = a.infMass ? 0 : a.Mass, m2 = b.infMass ? 0 : b.Mass;
             float mr = (m1 > 0 && m2 > 0) ? (m1 * m2) / (m1 + m2) : (m1 > 0 ? m1 : (m2 > 0 ? m2 : 1));
             float j = mr * (a.prevV - b.prevV).magnitude;
             OnImpact(a, b, j);
+        }
+
+        /// <summary>
+        /// ジャンプ台に「乗っている」当たり方か。o はジャンプ台に当たった物（HTML版 rampRiding）。
+        ///   ・板の幅の中から、高い側の端より手前で当たった（低い側から上ってきた・斜面の上に着地した）
+        ///   ・または、物の底が、その位置の斜面の高さ以上にある（並べた隣のジャンプ台へ横に乗り移るときなど）
+        /// どちらでもなければ、横や高い側の面にぶつかった（ダメージあり）
+        /// </summary>
+        bool RampRiding(Ent r, Ent o)
+        {
+            var R = r.ramp;
+            if (R == null || o == null || o.rb == null) return true;
+            var p = o.rb.position; float dx = p.x - R.x, dz = p.z - R.z;
+            float along = dx * R.ux + dz * R.uz, cross = Mathf.Abs(-dx * R.uz + dz * R.ux);
+            if (cross < R.hw + 0.12f && along < R.hl + 0.15f) return true;
+            float bottom = p.y - (o.player != null ? 0.52f : (o.size.y > 0 ? o.size.y / 2 : 0.3f));
+            float h = R.rise * Mathf.Min(1, Mathf.Max(0, (along + R.hl) / (2 * R.hl)));
+            return bottom >= h - 0.12f;
         }
 
         void OnImpact(Ent a, Ent b, float j)
@@ -1251,6 +1276,9 @@ namespace Nekorobo
         void DownPlayer(Player P, float rev)
         {
             if (P.down) return;
+            // 研修（ストーリー）は、壊れて止まらせない。店主が 100% まで直す（担当「故障するとクリア不能になる」）。
+            // 海・穴に落ちたとき（rev。しばらくして戻ってくる）は今までどおり
+            if (!(rev > 0) && TutHelpOn(P)) { P.botDmg = Mathf.Min(P.botDmg, 99); TutFixCall(P); return; }
             P.down = true; P.downT = t;
             P.revT = rev > 0 ? rev : 0;
             if (P.revT <= 0) P.botDmg = 100;

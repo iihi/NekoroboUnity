@@ -15,7 +15,7 @@ namespace Nekorobo
         public class Car { public Ent ent; public Vector3 dir; public float speed; public Vector3 home; public Quaternion homeRot; public float blown; public string vk; }
         public readonly List<Car> cars = new List<Car>();
         // ---- 動く床（1軸の往復）
-        public class Mover { public Ent ent; public float speed, range; public int dir; public int axis; public Vector3 home; public bool routed; public float v; }
+        public class Mover { public Ent ent; public float speed, range; public int dir; public int axis; public Vector3 home; public bool routed; public float v; public float hw = 0.45f; }
         public readonly List<Mover> movers = new List<Mover>();
         // ---- ルートで動く物（いかだも）
         public class Route
@@ -441,20 +441,25 @@ namespace Nekorobo
         /// <summary>動く床（1軸の往復）。乗っている物は「床が動いたぶん」だけ一緒に動かす。</summary>
         void BuildMover(StageObj o, Vector3 b)
         {
-            var e = MakeBody("mover", new Vector3(b.x, -0.1f, b.z), new Vector3(1.45f, 0.1f, 0.45f), Coord.RotX(o.rot),
+            // 板の大きさは 長さ 2.9m × 幅 0.9m。幅は面ごとに "w"（m）で変えられる（研修7は広くしてある。担当）
+            float mw = J.F(o.raw, "w", 0.9f); if (mw <= 0) mw = 0.9f;
+            var e = MakeBody("mover", new Vector3(b.x, -0.1f, b.z), new Vector3(1.45f, 0.1f, mw / 2), Coord.RotX(o.rot),
                              false, 1000, 0.9f, 0f, kinematic: true);
             var mg = Vis(e.transform, "Look");
             Part.Add(mg.transform, MeshGen.Box(2.9f, 0.2f, 0.9f), Mats.Get(0xb08a5a), Vector3.zero);
             ApplyModel(e, mg, "mover");                         // オーバークック風の動く床（models.json の mover）
+            if (!Mathf.Approximately(mw, 0.9f))                 // 見た目も幅に合わせて伸ばす（差し替えたモデルごと）
+            { var ls = mg.transform.localScale; ls.z *= mw / 0.9f; mg.transform.localScale = ls; }
             var d = Coord.Dir(o.rot);
             var raw = o.raw;
             movers.Add(new Mover
             {
                 ent = e, speed = o.speed ?? 2.4f, dir = J.I(raw, "dir", 1), range = J.F(raw, "range", 4.0f),
                 axis = Mathf.Abs(d.x) > Mathf.Abs(d.z) ? 0 : 2, home = e.transform.position, routed = HasRoute(o),
+                hw = mw / 2,                                    // 幅の半分（乗っているかを見るとき）
             });
             var mv = movers[movers.Count - 1];
-            AddMoverLanes(b, mv.axis, mv.range);                 // 動く床が通るマス（NPC の道探し用）
+            AddMoverLanes(b, mv.axis, mv.range, mv.hw);          // 動く床が通るマス（NPC の道探し用）
             objEnt[o] = e;
         }
 
@@ -625,7 +630,7 @@ namespace Nekorobo
                         if (mv.routed) continue;
                         var p = mv.ent.rb.position;
                         int cross = mv.axis == 0 ? 2 : 0;
-                        if (Mathf.Abs(q[mv.axis] - p[mv.axis]) < 1.6f && Mathf.Abs(q[cross] - p[cross]) < 0.58f && q.y > p.y && q.y < p.y + 0.9f)
+                        if (Mathf.Abs(q[mv.axis] - p[mv.axis]) < 1.6f && Mathf.Abs(q[cross] - p[cross]) < mv.hw + 0.13f && q.y > p.y && q.y < p.y + 0.9f)
                         {
                             q[mv.axis] += mv.v * dt;
                             e.rb.position = q;

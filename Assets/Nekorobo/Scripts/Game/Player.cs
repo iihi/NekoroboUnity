@@ -122,6 +122,7 @@ namespace Nekorobo
         public float comboT, comboDmg, comboPaid, wreck, dcomboT;
         public string broken;            // null / "left" / "right"
         public bool brokenDrive, misfire;
+        public float tutWetT, tutFixT;   // 研修の手助け：水に落ちていた秒数・店主が直すまでの秒数（Game.TutHelp）
         public float misT;
         public float? steerHold;
         public float lastJump = -9f, prevVy;

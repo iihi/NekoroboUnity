@@ -981,6 +981,8 @@ namespace Nekorobo
             var c = new Vector3(b.x - nrm.x * th / 2, rise / 2 - nrm.y * th / 2, b.z - nrm.z * th / 2);
             float slope = Mathf.Sqrt(L * L + rise * rise);
             var e = MakeBody("ramp", c, new Vector3(slope / 2, th / 2, Wd / 2), q, true, 0, 0.9f * fr, 0f);
+            // ぶつかったときに「乗った」のか「横に当たった」のかを見分ける用（RampRiding）。u … 上りの向き
+            { var u = Coord.RotX(o.rot) * Vector3.right; e.ramp = new RampData { x = b.x, z = b.z, ux = u.x, uz = u.z, hl = L / 2, hw = Wd / 2, rise = rise }; }
             // オーバークック風のくさび形（models.json の ramp。長さ2・幅1・高さ0.85、+X が上り）。
             // 当たり判定は傾けた板のまま。見た目だけ床に置いて、マスの長さ・幅・高さに合わせて伸ばす
             var RM = ModelStore.For("ramp", shop.n);

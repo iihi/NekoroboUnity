@@ -250,7 +250,7 @@ namespace Nekorobo
         bool MoverHolds(Mover m, Vector3 p, float tt, float ma, float mc)
         {
             var c = MoverAt(m, tt); int ax = m.axis, cr = ax == 0 ? 2 : 0;
-            return Mathf.Abs(p[ax] - c[ax]) < 1.45f - ma && Mathf.Abs(p[cr] - c[cr]) < 0.45f - mc;
+            return Mathf.Abs(p[ax] - c[ax]) < 1.45f - ma && Mathf.Abs(p[cr] - c[cr]) < m.hw - mc;
         }
         // その点を通る動く床の帯（1軸で往復するものだけ）
         Mover MoverStripOf(Vector3 p)
@@ -259,7 +259,7 @@ namespace Nekorobo
             {
                 if (m.routed) continue;
                 var q = m.ent.rb.position; int ax = m.axis, cr = ax == 0 ? 2 : 0;
-                if (Mathf.Abs(p[cr] - q[cr]) < 0.5f && Mathf.Abs(p[ax] - m.home[ax]) < m.range + 1.45f) return m;
+                if (Mathf.Abs(p[cr] - q[cr]) < m.hw + 0.05f && Mathf.Abs(p[ax] - m.home[ax]) < m.range + 1.45f) return m;
             }
             return null;
         }
@@ -526,13 +526,15 @@ namespace Nekorobo
 
         // ---- 道探しに教えるマス（組み立てのときに呼ぶ）
         /// <summary>動く床が通るマス。床の長さ（3マス）ぶんを、動く向きに沿って数える。</summary>
-        void AddMoverLanes(Vector3 b, int axis, float range)
+        void AddMoverLanes(Vector3 b, int axis, float range, float hw = 0.45f)
         {
+            int cwN = Mathf.FloorToInt(hw);                          // 幅の広い床は横のマスも
             for (float s = -range; s <= range; s += 0.5f)
             {
                 float mx = b.x + (axis == 0 ? s : 0), mz = b.z + (axis == 2 ? s : 0);
                 for (int w = -1; w <= 1; w++)
-                    moverLanes.Add(CellOf(new Vector3(mx + (axis == 0 ? w : 0), 0, mz + (axis == 2 ? w : 0))));
+                    for (int cw = -cwN; cw <= cwN; cw++)
+                        moverLanes.Add(CellOf(new Vector3(mx + (axis == 0 ? w : cw), 0, mz + (axis == 2 ? w : cw))));
             }
         }
 
