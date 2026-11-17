@@ -136,6 +136,62 @@ namespace Nekorobo
             return im;
         }
 
+        // ---------------------------------------------------------------- 絵から抜いた字（言語ごとに書く。HTML版 UI_TXT・uiLbl）
+        // 清書の絵に焼き込んであった日本語は、HTML版の tools/psd/cutlang.py で字だけ消して切り直してある。字はゲームが訳して書く。
+        // [鍵（日本語）, x, y（絵の左上からの字の真ん中）, 字の大きさ, 色, 収める幅, 寄せ（"" 真ん中・l 左端・r 右端）]
+        static readonly Dictionary<string, object[][]> UI_TXT = new Dictionary<string, object[][]>
+        {
+            { "shop/h_up", new[] { L("能力強化", 61.0f, 26.0f, 24.9f, 0xffffff, 160) } },
+            { "shop/h_it", new[] { L("アイテム", 61.2f, 27.5f, 25.5f, 0xffffff, 127) } },
+            { "shop/btn", new[] { L("購入完了", 130.5f, 37.5f, 31.2f, 0xffffff, 197) } },
+            { "shop/btn_on", new[] { L("購入完了", 130.5f, 37.5f, 31.2f, 0xffffff, 197) } },
+            { "shop/pp_blue", new[] { L("所持金", 107.9f, 10.8f, 17.2f, 0x45c3ff, 46, "l") } },
+            { "shop/pp_red", new[] { L("所持金", 107.9f, 10.8f, 17.2f, 0xff5a45, 46, "l") } },
+            { "shop/pp_green", new[] { L("所持金", 107.9f, 10.8f, 17.2f, 0x4ac15d, 46, "l") } },
+            { "shop/pp_orange", new[] { L("所持金", 107.9f, 10.8f, 17.2f, 0xff9f45, 46, "l") } },
+            { "res/time", new[] { L("タイム", 88.8f, 18.2f, 25.3f, 0x000000, 94), L("ベスト", 55.0f, 125.2f, 25.6f, 0xcccccc, 92) } },
+            { "res/band_blue", Band(0x45c3ff) }, { "res/band_red", Band(0xff5a45) }, { "res/band_green", Band(0x4ac15d) }, { "res/band_orange", Band(0xff9f45) },
+            { "story/money", new[] { L("所持金", 110.5f, 18.5f, 25.0f, 0x000000, 119) } },
+            { "story/time", new[] { L("通しタイム", 111.2f, 18.8f, 25.3f, 0x000000, 167) } },
+            { "hud/stage", new[] { L("ラウンド", 31.0f, 31.6f, 10.6f, 0x04141a, 54) } },
+            { "play/vipbar", new[] { L("VIPオーダー", 137.2f, 20.2f, 21.4f, 0x402801, 173), L("あと", 289.0f, 20.0f, 21.1f, 0x402801, 50, "l"), L("秒", 424.0f, 20.0f, 21.1f, 0x402801, 50, "r") } },
+            { "play/vipok", new[] { L("VIPオーダー", 137.2f, 20.2f, 21.4f, 0x402801, 173) } },
+            { "play/vipng", new[] { L("VIPオーダー", 137.2f, 20.2f, 21.4f, 0x402801, 173) } },
+        };
+        static object[] L(string k, float x, float y, float fs, int col, float mw, string al = "") { return new object[] { k, x, y, fs, col, mw, al }; }
+        static object[][] Band(int c)
+        {
+            return new[] { L("所持金", 145.0f, 17.2f, 16.1f, c, 46, "l"), L("配膳", 58.0f, 57.5f, 10.5f, c, 43, "l"), L("コンボ", 164.0f, 57.5f, 10.6f, c, 48, "l"),
+                           L("損壊率", 279.1f, 57.5f, 10.5f, c, 34, "l"), L("ダメージ", 387.0f, 57.5f, 10.4f, c, 45, "l"), L("昇天", 454.5f, 57.8f, 10.4f, c, 24, "l") };
+        }
+        /// <summary>key の絵の字を、parent の中の (ox, oy)（その絵の左上）を基準に書く。長い訳は字を小さくして幅に収める</summary>
+        public static List<Text> Lbl(RectTransform parent, string key, float ox, float oy)
+        {
+            var o = new List<Text>();
+            object[][] rows;
+            if (!UI_TXT.TryGetValue(key, out rows)) return o;
+            foreach (var a in rows)
+            {
+                string al = (string)a[6]; float fs = (float)a[3], mw = (float)a[5];
+                var t = T(parent, "", 0, 0, fs, Mats.Hex((int)a[4]), al == "r" ? 1 : al == "l" ? 0 : 2, "Lbl");
+                var r = t.rectTransform;
+                r.pivot = new Vector2(al == "r" ? 1 : al == "l" ? 0 : 0.5f, 0.5f);
+                r.anchoredPosition = new Vector2(ox + (float)a[1], -(oy + (float)a[2]));
+                t.alignment = al == "r" ? TextAnchor.MiddleRight : al == "l" ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+                t.text = Lang.Tr((string)a[0]);
+                float w = t.preferredWidth;
+                if (w > mw) t.fontSize = Mathf.Max(6, Mathf.FloorToInt(fs * mw / w));
+                o.Add(t);
+            }
+            return o;
+        }
+        // 飾り文字の絵（高額・VIP の見出し、成功・失敗の判子）は言語ごとに作ってある（<名前>.<言語>.png。日本語は元の絵）
+        public static string LangImg(string p)
+        {
+            string c = Lang.Cur;
+            return c == "en" || c == "zh-Hans" || c == "zh-Hant" || c == "ko" ? p.Replace(".png", "." + c + ".png") : p;
+        }
+
         /// <summary>
         /// 字。(x, y) は CSS の left・top。al … 0 左寄せ／1 右寄せ（.rr）／2 まん中（.cx）。
         /// line-height 1 の CSS と同じく、字の箱の上を top に合わせる（uGUI は字の上に少し余白があるので詰める）

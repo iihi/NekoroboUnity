@@ -24,7 +24,7 @@ namespace Nekorobo
 
         RectTransform annc, anncBx; Graphic anncSl; CanvasGroup anncCg; float anncT, anncAge, anncRot, anncTop, anncSc;
         readonly Queue<KeyValuePair<string, float>> anncQ = new Queue<KeyValuePair<string, float>>();
-        RectTransform bar, barSt; Text barT; RawImage barBg, barTag, barStImg; string barKey; float barStT, barHurryT;
+        RectTransform bar, barSt, barLbl; Text barT; RawImage barBg, barTag, barStImg; string barKey; float barStT, barHurryT;
         int nKind; float nT, nAmt; Player nP;
 
         class Sale { public RectTransform r; public Text f, a; public Vector3 w; public float age; }
@@ -130,7 +130,10 @@ namespace Nekorobo
                 {
                     var im = new GameObject(nm, typeof(RectTransform)).AddComponent<RawImage>();
                     im.rectTransform.SetParent(anncBx, false); UiKit.Stretch(im.rectTransform); im.raycastTarget = false;
-                    im.texture = DataRoot.Texture("ui/play/" + (vip ? "vip" : "rich") + nm + ".png");
+                    // 見出しの飾り文字は言語ごとの絵（日本語は元の絵）
+                    var src = "ui/play/" + (vip ? "vip" : "rich") + nm + ".png";
+                    Texture2D lt = nm == "_head" ? DataRoot.Texture(UiBoard.LangImg(src)) : null;
+                    im.texture = lt != null ? lt : DataRoot.Texture(src);
                 }
                 var amt = ComicUi.Label(anncBx, Game.Yen(a.Value), 66, Mats.Hex(0xffe45a), new Color(0, 0, 0, 0), 5.5f, Vector2.zero);
                 var ar = amt.rectTransform; ar.anchorMin = ar.anchorMax = new Vector2(0, 1); ar.pivot = new Vector2(0.5f, 0.5f);
@@ -225,7 +228,6 @@ namespace Nekorobo
                 var r = UiKit.Rect(layer, "Coin"); r.sizeDelta = new Vector2(26, 26);
                 var im = r.gameObject.AddComponent<Image>(); im.sprite = Overhead.Round; im.type = Image.Type.Sliced; im.color = GOLD; im.raycastTarget = false;
                 r.gameObject.AddComponent<Outline>().effectColor = Mats.Hex(0x7a4c00);
-                Lbl(r, "¥", 16, Mats.Hex(0x7a4c00), Vector2.zero);
                 r.gameObject.SetActive(false);
                 coins.Add(new Coin { r = r, from = from, to = to, t0 = -i * 0.045f, share = share,
                                      s0 = new Vector2((Random.value - 0.5f) * 40, (Random.value - 0.5f) * 24), lift = 70 + Random.value * 60 });
@@ -321,8 +323,18 @@ namespace Nekorobo
                 {
                     barKey = key; barStT = 0;
                     barBg.texture = DataRoot.Texture("ui/play/" + key + ".png");
+                    // 帯の字（「VIPオーダー」「あと」「秒」）は絵から抜いてあるので、ゲームが訳して重ねる
+                    if (barLbl != null) Object.Destroy(barLbl.gameObject);
+                    barLbl = UiBoard.Box(bar, 0, 0, 455, 50, "Lbl");
+                    UiBoard.Lbl(barLbl, "play/" + key, 0, 0);
+                    barLbl.SetSiblingIndex(barBg.transform.GetSiblingIndex() + 1);
                     barStImg.gameObject.SetActive(key != "vipbar");
-                    if (key != "vipbar") barStImg.texture = DataRoot.Texture("ui/play/" + key + "_st.png");
+                    if (key != "vipbar")
+                    {
+                        var st = "ui/play/" + key + "_st.png";
+                        var lt = DataRoot.Texture(UiBoard.LangImg(st));
+                        barStImg.texture = lt != null ? lt : DataRoot.Texture(st);
+                    }
                 }
                 barTag.gameObject.SetActive(tagP != null);
                 if (tagP != null) barTag.texture = DataRoot.Texture("ui/play/vtag" + (Mathf.Max(0, System.Array.IndexOf(Player.PCOL, tagP.col)) % 4 + 1) + ".png");

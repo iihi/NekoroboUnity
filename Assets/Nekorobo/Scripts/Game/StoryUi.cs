@@ -466,7 +466,7 @@ namespace Nekorobo
             var fin = cleared ? DataRoot.Texture("ui/play/finish.png") : null;
             if (fin != null)
             {
-                // クリアとタイムアップは FINISH!（清書1109 の絵。トゲトゲの上に字、字は少し遅れて弾む）
+                // クリアとタイムアップは FINISH!（清書1109 の絵。トゲトゲの上に字。ひとまとめに出す）
                 bangBx.sizeDelta = new Vector2(817, 393.5f); bangBx.anchoredPosition = Vector2.zero;
                 var bst = new GameObject("Bst", typeof(RectTransform)).AddComponent<RawImage>();
                 bst.rectTransform.SetParent(bangBx, false); UiKit.Stretch(bst.rectTransform); bst.raycastTarget = false;
@@ -499,24 +499,22 @@ namespace Nekorobo
         {
             if (bangT < 0) return;
             bangT += dt;
-            // 出てくる（0.5 秒。回りながら 0.15 → 1、少し行き過ぎて戻る）、そのあと 0.45 秒ごとに 1 ↔ 1.05 で脈打つ
-            float k = Mathf.Clamp01(bangT / 0.5f), e = ComicUi.Bezier(k, 0.2f, 1.7f, 0.4f, 1);
-            float rot = Mathf.LerpUnclamped(bangRot * 5, bangRot, e), sc = Mathf.LerpUnclamped(0.15f, 1, e);
-            if (bangT > 0.5f)
+            // FINISH!・失敗も START! と同じく、吹き出し（トゲトゲ）と字をひとまとめにして、小さい所から一瞬で大きく出す
+            // （0.26 秒。60% で 1.14 倍まで行って戻る。担当「字だけの拡縮じゃなくて、背景も併せて一瞬で大きく」。前は回りながら出て、字だけ遅れて弾んでいた）。
+            // そのあと 0.3 秒から 0.45 秒ごとに 1 ↔ 1.05 で脈打つ
+            float u0 = Mathf.Clamp01(bangT / 0.26f);
+            float sc = u0 < 0.6f ? Mathf.LerpUnclamped(0.1f, 1.14f, ComicUi.Bezier(u0 / 0.6f, 0.2f, 1.5f, 0.45f, 1))
+                                 : Mathf.LerpUnclamped(1.14f, 1, ComicUi.Bezier((u0 - 0.6f) / 0.4f, 0.2f, 1.5f, 0.45f, 1));
+            if (bangT > 0.3f)
             {
-                float u = (bangT - 0.5f) / 0.45f, ph = u - Mathf.Floor(u);
+                float u = (bangT - 0.3f) / 0.45f, ph = u - Mathf.Floor(u);
                 if (((int)Mathf.Floor(u)) % 2 == 1) ph = 1 - ph;
-                sc = 1 + 0.05f * (0.5f - 0.5f * Mathf.Cos(ph * Mathf.PI));
+                sc *= 1 + 0.05f * (0.5f - 0.5f * Mathf.Cos(ph * Mathf.PI));
             }
             bangBx.localScale = Vector3.one * sc;
-            bangBx.localRotation = Quaternion.Euler(0, 0, -rot);
-            bangCg.alpha = Mathf.Clamp01(e);
-            if (bangWord != null)
-            {
-                float kw = Mathf.Clamp01((bangT - 0.08f) / 0.45f), ew = ComicUi.Bezier(kw, 0.2f, 1.8f, 0.4f, 1);
-                bangWord.localScale = Vector3.one * Mathf.LerpUnclamped(1.8f, 1, ew);
-                bangWord.GetComponent<CanvasGroup>().alpha = Mathf.Clamp01(ew);
-            }
+            bangBx.localRotation = Quaternion.Euler(0, 0, -bangRot);
+            bangCg.alpha = Mathf.Clamp01(u0 / 0.6f);
+            if (bangWord != null) { bangWord.localScale = Vector3.one; bangWord.GetComponent<CanvasGroup>().alpha = 1; }
             // 集中線（0.3 秒で 1.35 → 1）
             float ks = Mathf.Clamp01(bangT / 0.3f), es = 1 - Mathf.Pow(1 - ks, 3);
             bangSl.rectTransform.localScale = Vector3.one * Mathf.Lerp(1.35f, 1, es);

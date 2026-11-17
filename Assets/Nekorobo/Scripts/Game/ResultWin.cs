@@ -56,7 +56,7 @@ namespace Nekorobo
         string DownOf(Player P) { return !P.down ? "" : P.quit ? Lang.Tr("途中で抜けた") : P.revT > 0 ? Lang.Tr("復帰 {0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア"); }
         /// <summary>OK か、もう部屋に居ない人（抜けた人は待たない。JS版 resOkOrGone）</summary>
         bool OkOrGone(int i) { return ok[i] || g.SeatGone(i); }
-        static string Plus(float v) { return (v < 0 ? "−¥" : "＋¥") + Mathf.Abs(Mathf.Round(v)).ToString("#,0"); }
+        static string Plus(float v) { return (v < 0 ? "−" : "＋") + Mathf.Abs(Mathf.Round(v)).ToString("#,0", System.Globalization.CultureInfo.InvariantCulture); }   // 「¥」は付けない
 
         class Band { public int rank; public string col, tag, sub = "", outS = ""; public float cash, bonus, bot = -1; public int deliv, combo = -1; public Game.Ledger L; }
 
@@ -139,6 +139,7 @@ namespace Nekorobo
                 if (o.rank == 1) kira = UiBoard.Img(row, UI + "kira.png", 3.5f, 9.5f, 96.5f, 63.5f);
                 if (o.rank == 0) UiBoard.Img(row, "ui/face_robo_" + (clear ? "smile2" : "fear") + ".png", 20, 16, 74, 92);
                 UiBoard.Img(row, UI + "band_" + o.col + ".png", 110.5f, 0.5f, 731, 115.5f);
+                UiBoard.Lbl(row, "res/band_" + o.col, 110.5f, 0.5f);
                 bool jp = System.Text.RegularExpressions.Regex.IsMatch(o.tag, "[^\\x00-\\x7f]");
                 UiBoard.T(row, o.tag, 185.5f, jp ? 5.5f : 1.5f, jp ? 19 : 28, TAGC, 2);
                 string cash = Game.Yen(o.cash);
@@ -170,6 +171,7 @@ namespace Nekorobo
             {
                 var tb = UiBoard.Box(bx, 885.5f, 149, 361.5f, 158, "Time");
                 UiBoard.Img(tb, UI + "time.png", 0, 0, 361.5f, 158);
+                UiBoard.Lbl(tb, "res/time", 0, 0);
                 if (clear)
                 {
                     var tm = UiBoard.T(tb, Game.FmtTime(g.frames), 301, 50, 58, GREEN, 1);

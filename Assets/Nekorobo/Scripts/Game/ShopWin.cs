@@ -193,8 +193,14 @@ namespace Nekorobo
             // ---- 指カーソルの動ける箱（板いっぱい）
             pick = UiBoard.Box(bx, 0, 0, 1280, 720, "Pick");
             gw = 1280; gh = 720;
-            B.In(UiBoard.Img(pick, U + "h_up.png", 50, 148, 145.5f, 60), "left", 2);
-            B.In(UiBoard.Img(pick, U + "h_it.png", 50, 290, 145.5f, 60), "left", 3);
+            // 見出しの字は絵から抜いてあるので、ゲームが訳して重ねる（HTML版 uiLbl）
+            foreach (var h in new[] { new object[] { "h_up", 148f, 2 }, new object[] { "h_it", 290f, 3 } })
+            {
+                var hb = UiBoard.Box(pick, 50, (float)h[1], 145.5f, 60, (string)h[0]);
+                UiBoard.Img(hb, U + (string)h[0] + ".png", 0, 0, 145.5f, 60);
+                UiBoard.Lbl(hb, "shop/" + (string)h[0], 0, 0);
+                B.In(hb, "left", (int)h[2]);
+            }
             int nUp = 0, nIt = 0;
             foreach (var gd in goods)
             {
@@ -240,6 +246,7 @@ namespace Nekorobo
                 var pp = new PpUi { P = P };
                 pp.r = UiBoard.Box(pick, 49 + 222 * n, 562, 250, 113, "Pp" + n);
                 UiBoard.Img(pp.r, U + "pp_" + ck2 + ".png", 0, 0, 250, 113);
+                UiBoard.Lbl(pp.r, "shop/pp_" + ck2, 0, 0);
                 pp.pu = UiBoard.Img(pp.r, U + "pi_up_" + ck2 + ".png", 40, 33.5f, 84.5f, 11.5f);
                 pp.pi = UiBoard.Img(pp.r, U + "pi_it_" + ck2 + ".png", 28, 67.5f, 174.5f, 12);
                 UiBoard.T(pp.r, P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P", 61.5f, 1.25f, 18, Mats.Hex(0x06223a), 2);
@@ -264,6 +271,7 @@ namespace Nekorobo
                 var btn = UiBoard.Box(pick, 978, 591, 260, 83, "Ready");
                 btnOff = UiBoard.Img(btn, U + "btn.png", 0, 0, 260, 83); btnOffTex = null;
                 btnOn = UiBoard.Img(btn, U + "btn_on.png", 0, 0, 260, 83);
+                UiBoard.Lbl(btn, "shop/btn", 0, 0);
                 undoText = UiBoard.T(btn, Lang.Tr("もう一度押すと取り消し"), 130, 86, 11, Mats.Hex(0xc8c8c8), 2);
                 B.In(btn, "pop", 7);
                 rdyRect = new Rect(978, 591, 260, 83);

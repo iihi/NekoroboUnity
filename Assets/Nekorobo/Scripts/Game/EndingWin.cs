@@ -42,6 +42,7 @@ namespace Nekorobo
             // ---- 通しタイムと、面ごとのタイム（4列。12面なら3段）。位置は PSD の ROUND1〜12 から
             var time = UiBoard.Box(bx, 0, 0, 1280, 720, "Time");
             UiBoard.Img(time, U + "time.png", 45.5f, 216.5f, 1191.5f, 158);
+            UiBoard.Lbl(time, "story/time", 45.5f, 216.5f);
             UiBoard.T(time, Game.FmtTime(g.RunFrames()), 233, 307.25f - 28, 56, GREEN, 2);
             int rows = Mathf.Max(1, (n + 3) / 4);
             float pitch = Mathf.Min(33, 99f / Mathf.Max(1, rows - 1)), y0 = 307.5f - pitch * (rows - 1) / 2;
@@ -56,6 +57,7 @@ namespace Nekorobo
             // ---- 所持金とひとこと
             var money = UiBoard.Box(bx, 0, 0, 1280, 720, "Money");
             UiBoard.Img(money, U + "money.png", 45.5f, 399, 361.5f, 158);
+            UiBoard.Lbl(money, "story/money", 45.5f, 399);
             UiBoard.T(money, Game.Yen(net), 234, 489.75f - 28, 56, net < 0 ? NEG : GREEN, 2);
             B.In(money, "left", 3);
             B.In(T(Lang.Tr(net >= 0 ? "黒字で終えました。おつかれさまにゃ！" : "赤字で終わりました…"), 435, 495.25f, 29, net < 0 ? Mats.Hex(0xff8a7a) : Mats.Hex(0xffd84a), 0), "fade", 3);

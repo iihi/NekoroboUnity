@@ -54,6 +54,8 @@ namespace Nekorobo
             public readonly List<Tile> tiles = new List<Tile>();
             public Roll rS, rT; public string hpK = ""; public int rkN = -1;
             public string key = ""; public Order obj; public float tier, downT = -1;
+            // 料理を取ったとき、料理の所を一時的に大きくして料理名を出す（JS版 h2PickPop・CSS の .pk）
+            public RectTransform pk; public Texture2D pkTex; public Text pkNm; public CanvasGroup pkCg; public float pkT = -1;
         }
 
         /// <summary>その人の札の差引の位置（layer の中）。札が無ければ null（奪ったお金が飛んでいく先）</summary>
@@ -76,6 +78,7 @@ namespace Nekorobo
             // ---- 面の札。字の位置は PSD の字の箱から決めた（JS版の CSS のまま）
             sc = UiBoard.Box(bar, 0, 0, 236, 129, "Stage");
             UiBoard.Img(sc, UI + "stage.png", 0, 0, 236, 129);
+            UiBoard.Lbl(sc, "hud/stage", 0, 0);                         // 「ラウンド」（絵から抜いた字）
             var ink = Mats.Hex(0x04141a);
             round = UiBoard.T(sc, "01", 31.5f, 3.7f, 21, ink, 2);
             roundN = UiBoard.T(sc, "", 45, 6, 11, ink);
@@ -193,6 +196,23 @@ namespace Nekorobo
             // 順位（1人のときは出さない）
             c.rk = UiBoard.Img(c.r, UI + "rank1.png", 430, 0, 60, 57, "Rank");
             c.rk.gameObject.SetActive(false);
+            // 料理を取ったとき（担当「取ったことが分かるように、上の料理の所を一時的に大きくしたい。料理名も出したい。値段は無くてよい」）。
+            // 札の白い四角（真ん中 437, 76）と同じ所から、白い札が 2.4 倍ほどに大きくなり、大きな料理の絵と料理名を出して、また四角へ縮んで消える
+            {
+                c.pk = UiBoard.Box(c.r, 373, 12, 128, 128, "PickPop");
+                c.pk.pivot = new Vector2(0.5f, 0.5f); c.pk.anchoredPosition = new Vector2(373 + 64, -(12 + 64));
+                c.pkCg = c.pk.gameObject.AddComponent<CanvasGroup>(); c.pkCg.blocksRaycasts = false;
+                var sh = UiBoard.Fill(c.pk, new Color(0, 0, 0, 0.45f), 0, 6, 128, 128, 14, "Sh");
+                UiBoard.Fill(c.pk, Color.black, 0, 0, 128, 128, 14, "Edge");
+                UiBoard.Fill(c.pk, Color.white, 4, 4, 120, 120, 10, "Bg");
+                c.pkTex = DishPic.NewTex();
+                var pkr = UiBoard.Box(c.pk, 20, 2, 80, 80, "Pic");
+                var pim = pkr.gameObject.AddComponent<RawImage>(); pim.texture = c.pkTex; pim.raycastTarget = false;
+                c.pkNm = UiBoard.T(c.pk, "", 64, 82, 13, Color.black, 2);
+                var nr = c.pkNm.rectTransform; nr.pivot = new Vector2(0.5f, 0.5f); nr.anchoredPosition = new Vector2(64, -100); nr.sizeDelta = new Vector2(122, 36);
+                c.pkNm.alignment = TextAnchor.MiddleCenter; c.pkNm.horizontalOverflow = HorizontalWrapMode.Wrap; c.pkNm.lineSpacing = 0.95f;
+                c.pk.gameObject.SetActive(false);
+            }
             return c;
         }
 
@@ -336,11 +356,13 @@ namespace Nekorobo
                 float price = cd.order != null ? g.OrdPrice(cd.order) : cd.dish.price * g.shop.price;
                 c.pz.text = Mathf.RoundToInt(price * tier).ToString();
                 if (cd.order == c.obj && tier < c.tier) c.downT = 0;          // 同じ注文の皿のまま段が下がった
+                if (cd.order != c.obj) PickPop(c, cd, tier);                  // 取った（受取口・床・ブーメランで奪った）
                 c.obj = cd.order; c.tier = tier;
             }
             else
             {
                 c.key = "";
+                c.obj = null;                                                  // 落とした料理をまた拾ったときも、取ったと分かるように
                 if (P.down) c.em.text = P.revT > 0 ? Lang.Tr("復帰まで\n{0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア");
             }
             // 値段が下がったときの演出（▼ DOWN! が落ちてきて、絵が揺れ、値段が跳ねる）
@@ -373,10 +395,37 @@ namespace Nekorobo
                 }
             }
 
+            // 料理を取ったとき（1.9 秒：10% で 1.1 倍まで大きく、16% で落ち着き、82% から縮んで消える）
+            if (c.pkT >= 0)
+            {
+                c.pkT += dt;
+                float k = c.pkT / 1.9f;
+                if (k >= 1) { c.pkT = -1; c.pk.gameObject.SetActive(false); }
+                else
+                {
+                    System.Func<float, float> eo = u => 1 - (1 - u) * (1 - u);
+                    float sc = k < 0.10f ? Mathf.Lerp(0.414f, 1.1f, eo(k / 0.10f)) : k < 0.16f ? Mathf.Lerp(1.1f, 1, eo((k - 0.10f) / 0.06f))
+                             : k < 0.82f ? 1 : Mathf.Lerp(1, 0.414f, eo((k - 0.82f) / 0.18f));
+                    c.pk.localScale = Vector3.one * sc;
+                    c.pkCg.alpha = k < 0.82f ? 1 : 1 - eo((k - 0.82f) / 0.18f);
+                }
+            }
+
             // 倒れている間は札を暗く（CSS の grayscale(.75) brightness(.8) の代わり）
             var dim = P.down ? new Color(0.62f, 0.62f, 0.64f, 1) : Color.white;
             c.panel.color = dim; c.hp.color = dim;
             if (c.rk.gameObject.activeSelf) c.rk.color = dim;
+        }
+
+        void PickPop(PCard c, Carried cd, float tier)
+        {
+            if (c.pk == null) return;
+            DishPic.Draw(c.pkTex, cd.dish, tier);
+            c.pkNm.text = Lang.Tr(cd.dish.n);
+            c.pkT = 0;
+            c.pk.localScale = Vector3.one * 0.414f;
+            c.pk.gameObject.SetActive(true);
+            c.pk.SetAsLastSibling();
         }
 
         /// <summary>

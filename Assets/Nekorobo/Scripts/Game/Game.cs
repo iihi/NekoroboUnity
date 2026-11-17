@@ -1713,7 +1713,7 @@ namespace Nekorobo
 
         public static string Yen(float v)
         {
-            return (v < 0 ? "−¥" : "¥") + Mathf.Abs(Mathf.Round(v)).ToString("#,0");
+            return (v < 0 ? "−" : "") + Mathf.Abs(Mathf.Round(v)).ToString("#,0", System.Globalization.CultureInfo.InvariantCulture);   // 「¥」は付けない（HTML版と同じ。担当「言語対応のため、すべてで ¥ を外したい」）
         }
 
         public static string FmtTime(int f)

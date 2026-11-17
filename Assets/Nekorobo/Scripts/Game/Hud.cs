@@ -197,7 +197,7 @@ namespace Nekorobo
             center.fontStyle = FontStyle.Bold;
             var co = center.GetComponent<Outline>(); co.effectColor = new Color(0, 0, 0, 0.45f); co.effectDistance = new Vector2(3, -5);
             {
-                // 数字は高さ 188px、START! はトゲトゲ（817×393.5）の上に字（字は少し遅れて弾む）
+                // 数字は高さ 188px、START! はトゲトゲ（817×393.5）の上に字（トゲトゲと字をひとまとめに出す）
                 readyRoot = UiKit.Rect(root, "Ready");
                 readyRoot.anchorMin = readyRoot.anchorMax = new Vector2(0.5f, 0.5f); readyRoot.sizeDelta = new Vector2(817, 393.5f);
                 readyCg = readyRoot.gameObject.AddComponent<CanvasGroup>(); readyCg.blocksRaycasts = false;
@@ -518,10 +518,18 @@ namespace Nekorobo
                 var cc = center.color; cc.a = Mathf.Clamp01(k * 2.5f); center.color = cc;
                 readyRoot.localScale = Vector3.one * Mathf.LerpUnclamped(2.1f, 1f, e);
                 readyCg.alpha = Mathf.Clamp01(k * 2.5f);
-                // START! の字は 0.08 秒遅れて、1.8 倍から弾んで止まる（0.45 秒）
-                float kw = Mathf.Clamp01((readyAnim - 0.08f) / 0.45f), ew = ComicUi.Bezier(kw, 0.2f, 1.8f, 0.4f, 1);
-                readyWord.localScale = Vector3.one * Mathf.LerpUnclamped(1.8f, 1, ew);
-                readyWord.GetComponent<CanvasGroup>().alpha = Mathf.Clamp01(ew);
+                if (readyShown == "スタート！")
+                {
+                    // START! はトゲトゲと字をひとまとめにして、小さい所から一瞬で大きく出す（0.26 秒。60% で 1.14 倍まで行って戻る）
+                    // （担当「字だけの拡縮じゃなくて、背景のトゲトゲも併せて一瞬で大きくなってスタートにしたい」。前は字だけ遅れて弾んでいた）
+                    float u = Mathf.Clamp01(readyAnim / 0.26f);
+                    float sc = u < 0.6f ? Mathf.LerpUnclamped(0.1f, 1.14f, ComicUi.Bezier(u / 0.6f, 0.2f, 1.5f, 0.45f, 1))
+                                        : Mathf.LerpUnclamped(1.14f, 1, ComicUi.Bezier((u - 0.6f) / 0.4f, 0.2f, 1.5f, 0.45f, 1));
+                    readyRoot.localScale = Vector3.one * sc;
+                    readyCg.alpha = Mathf.Clamp01(u / 0.6f);
+                }
+                readyWord.localScale = Vector3.one;
+                readyWord.GetComponent<CanvasGroup>().alpha = 1;
             }
 
             var cam = g.mainCam;

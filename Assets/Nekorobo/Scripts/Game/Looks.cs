@@ -421,7 +421,7 @@ namespace Nekorobo
             var menu = Menu != null && Menu.Count > 0 ? Menu : Dishes.All;
             System.Action<Dish, float, float, float, float, int, int> row = (d, y, px, xl, xr, nameCol, yenCol) =>
             {
-                string yen = "¥" + Mathf.RoundToInt(d.price * MenuPrice);
+                string yen = Mathf.RoundToInt(d.price * MenuPrice).ToString();        // 「¥」は付けない
                 txt(xr, y, yen, yenCol, px, TextAnchor.MiddleRight);
                 txt(xl, y, d.n, nameCol, px, TextAnchor.MiddleLeft);
                 // 値段の幅（だいたい 0.6 字ぶん × 字数）と8px のすき間を除いた幅に、品名が収まらなければ横に縮める
