@@ -5,24 +5,27 @@ using UnityEngine.UI;
 namespace Nekorobo
 {
     /// <summary>
-    /// 実績を取ったときの知らせ（JS版 achToast）。画面の下のまん中に、左にメダル（後ろで光が回り、輪が広がり、火花が散る）、
-    /// 右に斜めの札（「実績解除！」・取った数・名前・説明・★）。いくつも取ったら1つずつ順に出す（後ろが待っているときは少し短く）。
-    /// 会話が出ている間は、会話の枠の上に出す。
+    /// 実績を取ったときの知らせ（HTML版 achToast。清書1111 の「実績獲得」の帯）。画面の下のまん中。
+    /// 帯が左から飛び込み、光が広がって、帯に光が走り、星が1つずつ付く。いくつも取ったら1つずつ順に出す（後ろが待っているときは少し短く）。
+    /// 絵は PSD の半分の大きさで置く（HTML版の assets/ui/ach/get_*）。大きさは上の帯と同じ倍率で縮める。会話が出ている間は会話の枠の上に出す。
     /// </summary>
     public class AchToast
     {
         const float SHOW = 4.4f, SHOW_Q = 3.2f;
+        const string U = "ui/ach/";
+        // 取った時の帯の仕分けのアイコンの大きさ（PSD の半分）
+        static readonly float[][] IC_GET = { new[] { 38.5f, 57 }, new[] { 70.5f, 52 }, new[] { 58f, 58 }, new[] { 64.5f, 64 }, new[] { 68.5f, 65 }, new[] { 66f, 57 }, new[] { 68.5f, 45 } };
         readonly Game g;
         readonly RectTransform root;
         readonly Queue<AchDef> q = new Queue<AchDef>();
         Item cur;
-        static readonly Color GOLD = Mats.Hex(0xffd34a), DARK = Mats.Hex(0x4a3500);
+        static Texture2D shineTex;
 
-        class Spark { public RectTransform r; public float a, rr, d; }
         class Item
         {
-            public AchDef a; public float t, show; public RectTransform r, rays, medal, ring, flash, lb, nm, glow; public CanvasGroup cg, cgNm, cgFade;
-            public Graphic glowG, ringG, flashG; public readonly List<Spark> sp = new List<Spark>(); public readonly List<Text> stars = new List<Text>();
+            public AchDef a; public float t, show;
+            public RectTransform r, bd, ry, fr, ic, tx, shine; public CanvasGroup cg, cgBd, cgRy, cgFr, cgIc, cgTx;
+            public readonly List<RectTransform> stars = new List<RectTransform>();
             public bool[] sePlayed = new bool[3];
         }
 
@@ -31,7 +34,7 @@ namespace Nekorobo
             g = game;
             root = UiKit.Rect(parent, "AchToast");
             root.anchorMin = root.anchorMax = new Vector2(0.5f, 0); root.pivot = new Vector2(0.5f, 0);
-            root.sizeDelta = new Vector2(680, 140);
+            root.sizeDelta = new Vector2(940, 151.5f);
         }
 
         public void Push(AchDef a)
@@ -49,103 +52,68 @@ namespace Nekorobo
             Game.SeUi("ach");
         }
 
+        static RectTransform Pivot(RectTransform r, float px, float py)
+        {
+            // 箱の中の (px, py)（0〜1。y は上から）を軸にする（位置は変えない）
+            var sz = r.sizeDelta; var p0 = r.pivot;
+            r.pivot = new Vector2(px, 1 - py);
+            r.anchoredPosition += new Vector2((r.pivot.x - p0.x) * sz.x, (r.pivot.y - p0.y) * sz.y);
+            return r;
+        }
+
         Item Build(AchDef a, float show)
         {
             var it = new Item { a = a, show = show };
-            it.r = UiBoard.Box(root, 0, 0, 680, 140, "Ach_" + a.id);
+            it.r = UiBoard.Box(root, 0, 0, 940, 151.5f, "Ach_" + a.id);
             it.cg = it.r.gameObject.AddComponent<CanvasGroup>();
-            it.r.pivot = new Vector2(0.5f, 0); it.r.anchoredPosition = new Vector2(340, -140);
-            // ---- 札（斜め -10°）。外の濃い縁・金の縁・紺の地。光彩は後ろでゆっくり明滅
+            Pivot(it.r, 0.5f, 1);
+            // 後ろの光（下のまん中を軸に広がる）
+            var ry = UiBoard.Img(it.r, U + "get_ray.png", 0, 0, 940, 119);
+            it.ry = Pivot(ry.rectTransform, 0.5f, 1); it.cgRy = ry.gameObject.AddComponent<CanvasGroup>();
+            // 帯ぜんぶ（左から飛び込む）
+            it.bd = UiBoard.Box(it.r, 0, 0, 940, 151.5f, "Bd"); it.cgBd = it.bd.gameObject.AddComponent<CanvasGroup>();
+            var pt = UiBoard.Img(it.bd, U + "get_plate.png", 216.5f, 62, 570.5f, 83);
+            // 帯に光が走る（帯の絵の形で切る）
             {
-                var pl = UiBoard.Box(it.r, 0, 0, 680, 140, "Pl");
-                var gl = UiPoly.Skew(pl, new Color(GOLD.r, GOLD.g, GOLD.b, 0.3f), 62 - 14, 18 - 14, 612 + 28, 104 + 28, -10);
-                it.glowG = gl;
-                UiPoly.Skew(pl, DARK, 62 - 7, 18 - 7, 612 + 14, 104 + 14, -10);
-                UiPoly.Skew(pl, GOLD, 62 - 4, 18 - 4, 612 + 8, 104 + 8, -10);
-                UiPoly.Skew(pl, Mats.Hex(0x1f2a40), 62, 18, 612, 104, -10);
-                UiPoly.Skew(pl, Mats.Hex(0x2b3954), 62, 18, 612, 40, -10);
+                var mk = pt.gameObject.AddComponent<Mask>(); mk.showMaskGraphic = true;
+                if (shineTex == null)
+                {
+                    shineTex = new Texture2D(64, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+                    for (int i = 0; i < 64; i++) { float u = Mathf.Abs(i / 63f - 0.5f) * 2; shineTex.SetPixel(i, 0, new Color(1, 1, 1, 0.8f * Mathf.Clamp01(1 - u))); }
+                    shineTex.Apply();
+                }
+                var sh = new GameObject("Shine", typeof(RectTransform)).AddComponent<RawImage>();
+                sh.rectTransform.SetParent(pt.rectTransform, false);
+                sh.texture = shineTex; sh.raycastTarget = false;
+                it.shine = sh.rectTransform;
+                it.shine.anchorMin = it.shine.anchorMax = new Vector2(0, 0.5f); it.shine.pivot = new Vector2(0.5f, 0.5f);
+                it.shine.sizeDelta = new Vector2(274, 140); it.shine.localRotation = Quaternion.Euler(0, 0, -10);
+                it.shine.anchoredPosition = new Vector2(-400, 0);
             }
-            // ---- メダル
+            UiBoard.Img(it.bd, U + "get_stars.png", 643, 84, 102.5f, 33);
+            for (int i = 0; i < a.s && i < 3; i++)
             {
-                var md = UiBoard.Box(it.r, 0, 0, 140, 140, "Md");
-                // 後ろで回る光（★3 は虹色）
-                it.rays = UiKit.Rect(md, "Rays"); it.rays.anchorMin = it.rays.anchorMax = new Vector2(0.5f, 0.5f); it.rays.sizeDelta = new Vector2(208, 208);
-                Color[] rc = a.s >= 3 ? new[] { Mats.Hex(0xff5a5a), GOLD, Mats.Hex(0x5adf6a), Mats.Hex(0x4ab8ff), Mats.Hex(0xc46aff) } : new[] { new Color(1, 232 / 255f, 140 / 255f, 0.9f) };
-                int n = a.s >= 3 ? 24 : 16; float step = 360f / n, wd = a.s >= 3 ? 7 : 9;
-                for (int k = 0; k < n; k++)
-                {
-                    float a0 = k * step * Mathf.Deg2Rad, a1 = (k * step + wd) * Mathf.Deg2Rad;
-                    var pts = new List<Vector2> { Vector2.zero, new Vector2(Mathf.Sin(a0) * 104, -Mathf.Cos(a0) * 104), new Vector2(Mathf.Sin(a1) * 104, -Mathf.Cos(a1) * 104) };
-                    var c = rc[k % rc.Length]; c.a *= 0.55f;
-                    ComicUi.Fan(it.rays, "R", pts, c, Vector2.zero);
-                }
-                // 出た瞬間の白い光
-                it.flash = Disk(md, 220, new Color(1, 0.97f, 0.85f, 0)); it.flashG = it.flash.GetComponent<Image>();
-                // 広がる輪
-                {
-                    var rg = UiKit.Img(md, new Color(1, 0.95f, 0.72f, 0), 0, "Ring");
-                    rg.sprite = UiKit.Ring(1); rg.type = Image.Type.Sliced; rg.pixelsPerUnitMultiplier = 15.5f / 60f;
-                    it.ring = rg.rectTransform; it.ring.anchorMin = it.ring.anchorMax = new Vector2(0.5f, 0.5f); it.ring.sizeDelta = new Vector2(120, 120);
-                    it.ringG = rg;
-                }
-                // メダル本体（濃い縁・金・左上のつや・メダルの絵）
-                it.medal = UiKit.Rect(md, "Dk"); it.medal.anchorMin = it.medal.anchorMax = new Vector2(0.5f, 0.5f); it.medal.sizeDelta = new Vector2(112, 112);
-                var sh = Disk(it.medal, 112, new Color(0, 0, 0, 0.45f)); sh.anchoredPosition = new Vector2(0, -6);
-                Disk(it.medal, 112, DARK);
-                Disk(it.medal, 102, Mats.Hex(0xd98a00));
-                Disk(it.medal, 92, GOLD);
-                var hi = Disk(it.medal, 50, new Color(1, 0.96f, 0.77f, 0.75f)); hi.anchoredPosition = new Vector2(-16, 18);
-                var ic = new GameObject("Ic", typeof(RectTransform)).AddComponent<RawImage>();
-                ic.rectTransform.SetParent(it.medal, false); ic.raycastTarget = false;
-                ic.texture = Resources.Load<Texture2D>("Ui/Title/medal"); ic.color = Mats.Hex(0x6a3c00);
-                ic.rectTransform.sizeDelta = new Vector2(66, 66);
-                // 火花（★が多いほど多く・遠くへ）
-                int ns = 10 + a.s * 4;
-                for (int k = 0; k < ns; k++)
-                {
-                    var s = new Spark { a = (k * 360f / ns + Random.value * 14) * Mathf.Deg2Rad, rr = 90 + a.s * 20 + Random.value * 50, d = 0.38f + Random.value * 0.12f };
-                    s.r = UiKit.Rect(md, "Sp"); s.r.anchorMin = s.r.anchorMax = new Vector2(0.5f, 0.5f); s.r.sizeDelta = new Vector2(22, 22);
-                    var pts = new List<Vector2>();
-                    for (int j = 0; j < 8; j++) { float aa = j * Mathf.PI / 4; float rr = j % 2 == 0 ? 11 : 2.2f; pts.Add(new Vector2(Mathf.Sin(aa) * rr, -Mathf.Cos(aa) * rr)); }
-                    ComicUi.Fan(s.r, "S", pts, k % 3 == 2 ? Mats.Hex(0xffb627) : Mats.Hex(0xfff1a8), Vector2.zero);
-                    s.r.gameObject.SetActive(false);
-                    it.sp.Add(s);
-                }
+                var s = UiBoard.Img(it.bd, U + "get_star_on.png", 646 + i * 34.25f, 87, 28.5f, 27);
+                it.stars.Add(Pivot(s.rectTransform, 0.5f, 0.5f));
             }
-            // ---- 字（傾けない）
+            var fr = UiBoard.Img(it.bd, U + "get_frame.png", 161, 52.5f, 99, 99);
+            it.fr = Pivot(fr.rectTransform, 0.5f, 0.5f); it.cgFr = fr.gameObject.AddComponent<CanvasGroup>();
+            var icw = IC_GET[Mathf.Clamp(a.c, 0, IC_GET.Length - 1)];
+            var ic = UiBoard.Img(it.bd, U + "bic" + a.c + ".png", 206.5f - icw[0] / 2, 98.75f - icw[1] / 2, icw[0], icw[1]);
+            it.ic = Pivot(ic.rectTransform, 0.5f, 0.5f); it.cgIc = ic.gameObject.AddComponent<CanvasGroup>();
+            // 字（名前「を獲得!」。名前が長いときは字を小さくして、星にかからないようにする）
             {
-                var tx = UiBoard.Box(it.r, 176, 25, 474, 90, "Tx");
-                var lb = UiBoard.T(tx, "実績解除！", 0, 0, 24, GOLD);
-                lb.gameObject.AddComponent<Shadow>().effectColor = DARK;
-                // 大きい所から縮むので、字のまん中を中心にする
-                it.lb = lb.rectTransform;
-                { float w = lb.preferredWidth, h = it.lb.sizeDelta.y; it.lb.sizeDelta = new Vector2(w, h); it.lb.pivot = new Vector2(0.5f, 0.5f); it.lb.anchoredPosition += new Vector2(w / 2, -h / 2); }
-                var cn = UiBoard.T(tx, Game.AchCount(), 474, 3, 16, Mats.Hex(0xaebbd2), 1);
-                it.cgFade = UiBoard.Box(tx, 0, 0, 474, 90, "Fade").gameObject.AddComponent<CanvasGroup>();
-                cn.transform.SetParent(it.cgFade.transform, true);
-                var nmBox = UiBoard.Box(tx, 0, 0, 474, 90, "Nm");
-                it.nm = nmBox; it.cgNm = nmBox.gameObject.AddComponent<CanvasGroup>();
-                var nm = UiBoard.T(nmBox, a.n, 0, 29, 36, Color.white);
-                var ns2 = nm.gameObject.AddComponent<Shadow>(); ns2.effectColor = new Color(0, 0, 0, 0.55f); ns2.effectDistance = new Vector2(0, -3);
-                if (nm.preferredWidth > 474) nm.fontSize = Mathf.FloorToInt(36 * 474 / nm.preferredWidth);
-                var ds = UiBoard.T(it.cgFade.transform as RectTransform, a.d, 0, 90 - 16, 16, Mats.Hex(0xc3cde0));
-                if (ds.preferredWidth > 354) ds.fontSize = Mathf.Max(10, Mathf.FloorToInt(16 * 354 / ds.preferredWidth));
-                for (int i = 0; i < 3; i++)
-                {
-                    var st = UiBoard.T(tx, "★", 474 - (2 - i) * 33 - 15, 90 + 4 - 30, 30, i < a.s ? GOLD : new Color(1, 1, 1, 0.18f), 2);
-                    if (i < a.s) { var o = st.gameObject.AddComponent<Shadow>(); o.effectColor = DARK; o.effectDistance = new Vector2(0, -2); }
-                    it.stars.Add(st);
-                }
+                it.tx = UiBoard.Box(it.bd, 280.5f, 100.5f, 0, 0, "Tx"); it.cgTx = it.tx.gameObject.AddComponent<CanvasGroup>();
+                var col = Mats.Hex(0x402801);
+                var nm = UiBoard.T(it.tx, "", 0, 0, 20, col); nm.text = Lang.Tr(a.n);
+                var gt = UiBoard.T(it.tx, "", 0, 0, 20, col); gt.text = Lang.Tr("を獲得!");
+                foreach (var t in new[] { nm, gt }) { t.rectTransform.pivot = new Vector2(0, 0.5f); t.alignment = TextAnchor.MiddleLeft; }
+                float w = nm.preferredWidth + 8 + gt.preferredWidth;
+                if (w > 350) { int fs = Mathf.Max(8, Mathf.FloorToInt(20 * 350 / w)); nm.fontSize = gt.fontSize = fs; }
+                nm.rectTransform.anchoredPosition = Vector2.zero;
+                gt.rectTransform.anchoredPosition = new Vector2(nm.preferredWidth + 8, 0);
             }
             return it;
-        }
-
-        static RectTransform Disk(RectTransform p, float d, Color c)
-        {
-            var im = UiKit.Img(p, c, 0, "Disk");
-            im.sprite = Overhead.Round; im.type = Image.Type.Simple;
-            var r = im.rectTransform; r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.5f); r.sizeDelta = new Vector2(d, d); r.anchoredPosition = Vector2.zero;
-            return r;
         }
 
         static float Bz(float k, float x1, float y1, float x2, float y2) { return ComicUi.Bezier(Mathf.Clamp01(k), x1, y1, x2, y2); }
@@ -162,70 +130,62 @@ namespace Nekorobo
             var it = cur;
             it.t += dt;
             float t = it.t;
-            // 全体：下から出て（0.5秒）、最後の 0.45 秒で下へ沈んで消える
-            float kin = Bz(t / 0.5f, 0.2f, 1.5f, 0.35f, 1);
-            float y = Mathf.LerpUnclamped(-60, 0, kin), sc = Mathf.LerpUnclamped(0.6f, 1, kin), al = Mathf.Clamp01(t / 0.5f * 2);
-            float to = t - (it.show - 0.45f);
-            if (to > 0) { float k = Mathf.Clamp01(to / 0.45f); k = k * k; y = Mathf.Lerp(0, -50, k); sc = Mathf.Lerp(1, 0.85f, k); al = 1 - k; }
-            it.r.anchoredPosition = new Vector2(340, -140 + y);
-            it.r.localScale = Vector3.one * sc;
-            it.cg.alpha = al;
-            // 札の光彩
-            if (it.glowG != null) { var c = it.glowG.color; c.a = 0.18f + 0.17f * (0.5f - 0.5f * Mathf.Cos(Mathf.Max(0, t - 0.4f) / 1.4f * Mathf.PI)); it.glowG.color = c; }
-            // 光：0.15 秒後に 0.5 秒で広がり、6 秒で1回り
-            float rk = Mathf.Clamp01((t - 0.15f) / 0.5f);
-            it.rays.localScale = Vector3.one * (1 - Mathf.Pow(1 - rk, 3));
-            it.rays.localRotation = Quaternion.Euler(0, 0, -t / 6f * 360);
-            // メダル：0→1.25→1 に大きくなりながら、縦の軸で2回まわる
+            // 全体：最後の 0.45 秒で下へ沈んで消える
             {
-                float u = Mathf.Clamp01((t - 0.05f) / 0.75f), e = Bz(u, 0.25f, 1.3f, 0.4f, 1);
-                float scm = u < 0.6f ? Mathf.Lerp(0, 1.25f, u / 0.6f) : Mathf.Lerp(1.25f, 1, (u - 0.6f) / 0.4f);
-                float rot = e * 720 * Mathf.Deg2Rad;
-                it.medal.localScale = new Vector3(Mathf.Max(0, scm) * Mathf.Cos(rot), Mathf.Max(0, scm), 1);
+                float to = (t - (it.show - 0.45f)) / 0.45f, k = Mathf.Clamp01(to); k = k * k;
+                it.r.anchoredPosition = new Vector2(470, -151.5f - 40 * k);
+                it.r.localScale = Vector3.one * Mathf.Lerp(1, 0.9f, k);
+                it.cg.alpha = 1 - k;
             }
-            // 輪（0.45 秒後に 0.6 秒）と白い光（0.35 秒後に 0.5 秒）
+            // 帯：0.5 秒で左から（72% で少し行き過ぎて戻る）
             {
-                float u = (t - 0.45f) / 0.6f;
-                if (u >= 0 && u <= 1) { it.ring.localScale = Vector3.one * Mathf.Lerp(0.6f, 1.9f, 1 - (1 - u) * (1 - u)); var c = it.ringG.color; c.a = 1 - u; it.ringG.color = c; }
-                else { var c = it.ringG.color; c.a = 0; it.ringG.color = c; }
-                float f = (t - 0.35f) / 0.5f;
-                if (f >= 0 && f <= 1) { it.flash.localScale = Vector3.one * Mathf.Lerp(0.4f, 1.3f, f); var c = it.flashG.color; c.a = 1 - f; it.flashG.color = c; }
-                else { var c = it.flashG.color; c.a = 0; it.flashG.color = c; }
+                float u = Mathf.Clamp01(t / 0.5f), e = Bz(u, 0.2f, 1.35f, 0.35f, 1);
+                it.bd.anchoredPosition = new Vector2(Mathf.LerpUnclamped(-700, 0, e), 0);
+                it.cgBd.alpha = Mathf.Clamp01(u / 0.72f);
             }
-            // 火花（0.9 秒で外へ）
-            foreach (var sp in it.sp)
+            // 光：0.12 秒後に 0.6 秒で広がり、そのあとゆっくり明滅
             {
-                float u = (t - sp.d) / 0.9f;
-                bool on = u >= 0 && u <= 1;
-                sp.r.gameObject.SetActive(on);
-                if (!on) continue;
-                float e = 1 - (1 - u) * (1 - u), rr = Mathf.Lerp(48, sp.rr, e);
-                sp.r.anchoredPosition = new Vector2(Mathf.Cos(sp.a) * rr, Mathf.Sin(sp.a) * rr);
-                sp.r.localScale = Vector3.one * Mathf.Lerp(1.4f, 0.3f, e);
-                sp.r.localRotation = Quaternion.Euler(0, 0, -sp.a * Mathf.Rad2Deg);
+                float u = Mathf.Clamp01((t - 0.12f) / 0.6f), e = Bz(u, 0.2f, 1.3f, 0.4f, 1);
+                float sy = Mathf.LerpUnclamped(0, 1, e), sx = Mathf.LerpUnclamped(0.4f, 1, e), al = Mathf.Clamp01(e);
+                if (t > 0.75f) { float p = Mathf.PingPong((t - 0.75f) / 1.3f, 1); p = p * p * (3 - 2 * p); al = Mathf.Lerp(1, 0.6f, p); sy = Mathf.Lerp(1, 0.92f, p); }
+                it.ry.localScale = new Vector3(sx, sy, 1); it.cgRy.alpha = al;
+                // ★3 は光が虹色にゆらぐ
+                if (it.a.s >= 3 && t > 0.75f) it.ry.GetComponent<RawImage>().color = Color.HSVToRGB(Mathf.Repeat((t - 0.75f) / 2.4f, 1), 0.35f, 1);
             }
-            // 字：「実績解除！」は 0.3 秒後に大きい所から、名前は 0.4 秒後に左から、説明と数は 0.6 秒後に
+            // 帯に光が走る（0.5 秒後に 0.8 秒）
             {
-                float u = (t - 0.3f) / 0.4f, e = Bz(u, 0.2f, 1.6f, 0.4f, 1);
-                it.lb.localScale = Vector3.one * (u <= 0 ? 0 : Mathf.LerpUnclamped(2.2f, 1, e));
-                float v = (t - 0.4f) / 0.45f, ev = Bz(v, 0.2f, 1.2f, 0.4f, 1);
-                it.nm.anchoredPosition = new Vector2(Mathf.LerpUnclamped(-30, 0, ev), 0);
-                it.cgNm.alpha = Mathf.Clamp01(v);
-                it.cgFade.alpha = Mathf.Clamp01((t - 0.6f) / 0.4f);
+                float u = Mathf.Clamp01((t - 0.5f) / 0.8f), e = u * u * (3 - 2 * u);
+                it.shine.anchoredPosition = new Vector2(Mathf.Lerp(-0.5f, 1.5f, e) * 570.5f, 0);
+            }
+            // 枠（0.15 秒後）とアイコン（0.25 秒後）：大きい所から
+            Pop(it.fr, it.cgFr, t - 0.15f);
+            Pop(it.ic, it.cgIc, t - 0.25f);
+            // 字（0.35 秒後に左から）
+            {
+                float u = Mathf.Clamp01((t - 0.35f) / 0.45f), e = Bz(u, 0.2f, 1.2f, 0.4f, 1);
+                it.tx.anchoredPosition = new Vector2(280.5f + Mathf.LerpUnclamped(-30, 0, e), -100.5f);
+                it.cgTx.alpha = u;
             }
             // ★（1つずつ、少しずつ高い音で）
             for (int i = 0; i < it.stars.Count; i++)
             {
-                var st = it.stars[i].rectTransform;
-                if (i >= it.a.s) { st.localScale = Vector3.one; continue; }
+                var st = it.stars[i];
                 float d = 0.75f + i * 0.18f, u = (t - d) / 0.4f;
-                if (u >= 0 && !it.sePlayed[i]) { it.sePlayed[i] = true; Game.SeUi("cur", 0.8f, 1.4f + i * 0.25f); }
+                if (t >= d + 0.05f && !it.sePlayed[i]) { it.sePlayed[i] = true; Game.SeUi("cur", 0.8f, 1.4f + i * 0.25f); }
                 float sc2 = u <= 0 ? 0 : u < 0.7f ? Mathf.Lerp(0, 1.6f, u / 0.7f) : u < 1 ? Mathf.Lerp(1.6f, 1, (u - 0.7f) / 0.3f) : 1;
                 float r2 = u <= 0 ? -90 : u < 0.7f ? Mathf.Lerp(-90, 10, u / 0.7f) : u < 1 ? Mathf.Lerp(10, 0, (u - 0.7f) / 0.3f) : 0;
                 st.localScale = Vector3.one * sc2;
                 st.localRotation = Quaternion.Euler(0, 0, -r2);
             }
             if (t >= it.show) Next();
+        }
+
+        static void Pop(RectTransform r, CanvasGroup cg, float t)
+        {
+            float u = Mathf.Clamp01(t / 0.45f), e = Bz(u, 0.2f, 1.6f, 0.4f, 1);
+            r.localScale = Vector3.one * Mathf.LerpUnclamped(2.2f, 1, e);
+            cg.alpha = Mathf.Clamp01(e);
+            if (t <= 0) { r.localScale = Vector3.one * 2.2f; cg.alpha = 0; }
         }
     }
 }

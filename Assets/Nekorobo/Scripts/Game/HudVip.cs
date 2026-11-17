@@ -144,7 +144,7 @@ namespace Nekorobo
                               new ComicUi.Dots { bg = Color.white, dot = Mats.Hex(0xff4d6d), r = 3.1f, gap = 10 });
                 var l1 = ComicUi.Label(anncBx, Lang.Tr(vip ? "♛ VIP オーダー出現！" : "高額オーダー出現！"), 44, Color.white, cc);
                 l1.rectTransform.anchoredPosition = new Vector2(0, 42);
-                var l2 = ComicUi.Label(anncBx, Game.Yen(a.Value) + (Lang.IsJa ? "！" : "!"), 74, Mats.Hex(0xffe14a), cc);
+                var l2 = ComicUi.Label(anncBx, Game.Yen(a.Value) + (Lang.FullPunct ? "！" : "!"), 74, Mats.Hex(0xffe14a), cc);
                 l2.rectTransform.anchoredPosition = new Vector2(0, -25);
             }
             anncRot = (Random.value < 0.5f ? -1 : 1) * (3 + Random.value * 4);

@@ -97,7 +97,7 @@ namespace Nekorobo
                     var ms = g.players.FindAll(q => q.team == ts[i]);
                     int dl = 0; foreach (var q in ms) dl += q.delivered;
                     var sub = new List<string>();
-                    foreach (var q in ms) sub.Add(Tag(q) + " " + Lang.Tr("{0}品", q.delivered) + (q.down ? "（" + DownOf(q) + "）" : ""));
+                    foreach (var q in ms) sub.Add(Tag(q) + " " + Lang.Tr("{0}品", q.delivered) + (q.down ? Lang.Paren(DownOf(q)) : ""));
                     bands.Add(new Band { rank = i + 1, col = RES_COLS[Mathf.Clamp(ts[i], 0, 3)], tag = Lang.Tr(new[] { "青", "赤" }[Mathf.Clamp(ts[i], 0, 1)]),
                                          cash = g.wallets[ts[i]].cash, deliv = dl, L = led[ts[i]], bonus = bonusOf(null, ts[i]), sub = string.Join("　", sub.ToArray()) });
                 }
@@ -116,7 +116,7 @@ namespace Nekorobo
             {
                 int doneN = 0; foreach (var o in g.orders) if (o.done) doneN++;
                 var sub = new List<string>();
-                if (many) foreach (var q in g.players) sub.Add(Tag(q) + " " + Lang.Tr("{0}品", q.delivered) + " " + Game.Yen(q.sales) + (q.down ? "（" + DownOf(q) + "）" : ""));
+                if (many) foreach (var q in g.players) sub.Add(Tag(q) + " " + Lang.Tr("{0}品", q.delivered) + " " + Game.Yen(q.sales) + (q.down ? Lang.Paren(DownOf(q)) : ""));
                 bands.Add(new Band { rank = 0, col = ColKey(g.me), tag = many ? Lang.Tr("みんな") : Tag(g.me), cash = g.WalletOf(g.me).cash,
                                      deliv = many ? doneN : g.me.delivered, L = g.LedgerOf(g.me), bot = many ? -1 : g.me.botDmg,
                                      bonus = bonusOf(null, -1), outS = many ? "" : DownOf(g.me), sub = string.Join("　", sub.ToArray()) });

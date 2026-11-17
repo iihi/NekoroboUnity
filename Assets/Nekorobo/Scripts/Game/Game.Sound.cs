@@ -53,9 +53,6 @@ namespace Nekorobo
                                       : scene == "result" ? "Result.ogg" : "InGame.ogg"));
             // 止めている間は少し下げる（タイトルの裏で止めているのは除く）
             Sound.BgmLevel((hud.MenuOpen || (PauseOn && !NpOn)) && !hud.TitleOpen ? 0.4f : 1);
-            // M キーで音の ON/OFF（BGM も効果音もまとめて止める）
-            var kb = Keyboard.current;
-            if (kb != null && kb.mKey.wasPressedThisFrame && !kb.ctrlKey.isPressed && !kb.altKey.isPressed) hud.FlipSound();
         }
     }
 }

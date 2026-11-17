@@ -62,6 +62,8 @@ namespace Nekorobo
         {
             get
             {
+                var lf = Fonts.ForLang();                // 中国語・韓国語はその言語の書体
+                if (lf != null) return lf;
                 if (round == null) round = Resources.Load<Font>("Fonts/CorpRound");
                 return round != null ? round : Fonts.UI;
             }

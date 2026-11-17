@@ -209,7 +209,7 @@ namespace Nekorobo
                 Vector2 sz; if (!ICON_SZ.TryGetValue(gd.k, out sz)) sz = new Vector2(56, 50);
                 c.ic = UiBoard.Img(c.r, U + "ic_" + gd.k + ".png", 50 - sz.x / 2, 49 - sz.y / 2, sz.x, sz.y);
                 c.ic.texture = Tint(U + "ic_" + gd.k + ".png", gd.kind == "up" ? UPC : ITC);
-                bool lng = gd.n.Length > (Lang.IsJa ? 6 : 11);
+                bool lng = gd.n.Length > (Lang.FullPunct ? 6 : Lang.Cur == "ko" ? 8 : 11);
                 c.nm = UiBoard.T(c.r, Lang.Tr(gd.n), 115.5f, lng ? 25.25f : 23.75f, lng ? 13 : 16, Color.white);
                 c.pz = UiBoard.T(c.r, "", 115.5f, 43.5f, 18, GREEN);
                 c.cp = UiBoard.T(c.r, "", 115.5f, 66.25f, 10, Color.white);
@@ -749,7 +749,7 @@ namespace Nekorobo
             if (c.idx < 0) return head + "<color=" + DS + ">" + Lang.Tr(c.ready ? "買い終わり" : "品物の上へカーソルを動かしてください") + "</color>";
             var gd = goods[c.idx]; var W = g.WalletOf(c.P);
             int lv = gd.Lv(W), cost = gd.Cost(W); bool maxed = gd.Full(W);
-            return head + Lang.Tr(gd.n) + (gd.sub.Length > 0 ? (Lang.IsJa ? "（" + Lang.Tr(gd.sub) + "）" : " (" + Lang.Tr(gd.sub) + ")") : "") + "  "
+            return head + Lang.Tr(gd.n) + (gd.sub.Length > 0 ? Lang.Paren(Lang.Tr(gd.sub)) : "") + "  "
                  + (gd.ammo > 0 ? Lang.Tr("残 {0}/{1}", gd.Rest(W), gd.ammo) : gd.kind == "up" ? "Lv" + lv + "/" + gd.max : "×" + lv + "/" + gd.max) + "  "
                  + "<color=" + (maxed ? "#8b93a0" : W.cash >= cost ? "#68ff00" : "#ff5a45") + ">"
                  + (maxed ? Lang.Tr("最大") : Game.Yen(cost) + (W.cash >= cost ? "" : Lang.Tr("（足りません）"))) + "</color>  "

@@ -48,6 +48,14 @@ namespace Nekorobo
             public System.Action<bool> look;            // 選んでいる見た目に切り替える
             public System.Action<int> adj;              // ← → で値を変える物（言語・音の大きさ）。無ければ ← → は隣へ
             public RectTransform anim; public float bob, scale = 1; public int grid = -1;
+            // 選択枠の形（SelFrame）。frameTan … 斜めのボタンの傾き（高さ1あたりの横のずれ。マイナスは上が右）、frameBox … 角丸の四角、
+            // frameSub … ボタンの中のその範囲だけ囲む（HTML版 data-fr）、frameNone … 出さない
+            public float frameTan; public bool frameBox, frameNone; public Rect? frameSub;
+            // 板の画面（設定・実績）：onFocus … キー・パッドで乗ったらすぐ動く（札）、grp・on … 札の並びと、いま選んである札、
+            // vadj … ↑↓で中を送る（送れたら true）、backFn … B でこのボタンだけの戻り方、hold … マウスで押している間、wheel … ホイール
+            public System.Action onFocus; public string grp; public bool on;
+            public System.Func<int, bool> vadj; public System.Action backFn;
+            public System.Action<Vector2> hold; public System.Action<int> wheel;
         }
         readonly List<Item> items = new List<Item>();
         int idx;
@@ -138,7 +146,7 @@ namespace Nekorobo
             Go(pg ?? "Top");
         }
 
-        public void Close() { Open = false; root.gameObject.SetActive(false); SsClose(); }
+        public void Close() { Open = false; root.gameObject.SetActive(false); SsClose(); BoardHide(); }
 
         // ================================================================ ページ
         void Go(string pg)
@@ -155,6 +163,16 @@ namespace Nekorobo
                 return;
             }
             if (!(SS.net == "guest" && pg == "Wait")) SsClose();
+            // 設定・実績は画面いっぱいの板（清書1111。TitleWin.Board.cs）
+            if (IsBoard(pg))
+            {
+                page = pg;
+                if (box != null) Object.Destroy(box.gameObject);
+                box = null;
+                BoardDraw(pg);
+                return;
+            }
+            BoardHide();
             // 同じ画面の描き直し（部屋サーバーの知らせ）なら、カーソルを同じボタンへ戻す
             bool redraw = pg == page && Open && items.Count > 0;
             string keepKey = redraw && idx < items.Count ? items[idx].key : null;
@@ -186,9 +204,7 @@ namespace Nekorobo
                 case "Join": PageJoin(st); break;
                 case "Wait": PageWait(st); break;
                 case "Ask": def = PageAsk(st); break;
-                case "Settings": PageSettings(st); break;
                 case "Len": def = PageLen(st); break;
-                case "Ach": PageAch(st); break;
                 default: PageTop(st); break;
             }
             // 選んでいるものの説明（下の帯）と、操作の案内
@@ -214,7 +230,7 @@ namespace Nekorobo
             Tiles(st,
                 Tile("1人プレイ", "red", "solo", () => Go("Solo"), "ストーリーと、フリープレイ・ラウンドマッチ。", "solo"),
                 Tile("マルチプレイ", "blue", "multi", () => Go("Multi"), "1台で最大4人、または通信で。個人戦・チーム戦・協力。", "multi"),
-                Tile("設定", "green", "settings", () => { setLic = false; Go("Settings"); }, "操作説明・音の大きさ・著作権表示。", "settings"),
+                Tile("設定", "green", "settings", () => Go("Settings"), "音の大きさ・言語・操作説明・著作権表示。", "settings"),
                 Tile("実績", "purple", "medal", () => Go("Ach"), Lang.Tr("取った実績の一覧（{0}）。", g.AchCountText()), "ach"),
                 Tile("デバッグ", "grey", "debug", () => Go("Debug"), "ステージを作る・コースの並びを変える（開発用）。", "debug"));
             // 終了（担当の案。ゲームを終わらせる）
@@ -694,16 +710,55 @@ namespace Nekorobo
                 if (ask.inp != null && !ask.inp.isFocused) ask.inp.ActivateInputField();
                 up = down = left = right = ok = back = false;            // 打っている字をカーソルの操作にしない
             }
+            bool tabL = false, tabR = false;
             foreach (var gp in Gamepad.all)
             {
                 // 十字キーだけ（スティックは JS版では指カーソル用）
                 up |= gp.dpad.up.isPressed; down |= gp.dpad.down.isPressed; left |= gp.dpad.left.isPressed; right |= gp.dpad.right.isPressed;
                 ok |= gp.buttonSouth.isPressed; back |= gp.buttonEast.isPressed;
+                tabL |= gp.leftShoulder.isPressed; tabR |= gp.rightShoulder.isPressed;    // LB / RB … 札（タブ）を替える（設定・実績）
             }
+            bool board = IsBoard(page) && cfgB != null && cfgB.Active;
+            if (board)
+            {
+                BoardTick(dt);
+                if (page == null || !IsBoard(page)) return;               // 戻った
+                if (tabL && !pTabL) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(-1); else AchTabStep(-1); return; }
+                if (tabR && !pTabR) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(1); else AchTabStep(1); return; }
+            }
+            pTabL = tabL; pTabR = tabR;
             if (back && !pBack)
             {
+                var cb = idx < items.Count ? items[idx] : null;
+                if (cb != null && cb.backFn != null) { Remember(up, down, left, right, ok, back); cb.backFn(); return; }
                 var bk = items.Find(x => x.back && !x.off);
                 if (bk != null) { Remember(up, down, left, right, ok, back); Game.SeUi("back"); bk.fire(); return; }
+            }
+            if (board)
+            {
+                int bx = (left && !pLeft) ? -1 : (right && !pRight) ? 1 : 0, by = (up && !pUp) ? -1 : (down && !pDown) ? 1 : 0;
+                if (!ok) armed = true;
+                bool bfire = ok && !pOk && armed && lockT <= 0;
+                Remember(up, down, left, right, ok, back);
+                if (bx != 0) BoardNav(bx, 0);
+                if (by != 0) BoardNav(0, by);
+                if (!BoardMouse())
+                {
+                    var bm = Mouse.current;
+                    if (bm != null)
+                    {
+                        var mp = bm.position.ReadValue();
+                        if (bm.delta.ReadValue().sqrMagnitude > 0.01f) { int hi = HitAt(mp); if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi, true); }
+                        if (bm.leftButton.wasPressedThisFrame)
+                        {
+                            int hi = HitAt(mp);
+                            if (hi >= 0 && !items[hi].off && items[hi].fire != null) { Focus(hi, true); Game.SeUi(items[hi].back ? "back" : "ok"); items[hi].fire(); return; }
+                        }
+                    }
+                }
+                if (bfire && idx < items.Count && !items[idx].off && items[idx].fire != null) { Game.SeUi(items[idx].back ? "back" : "ok"); items[idx].fire(); return; }
+                ShowFrame();
+                return;
             }
             // 十字キー・矢印キーを使ったら指は引っ込める（両方出ていると、どちらが効いているのか分からない）
             if ((up && !pUp) || (down && !pDown) || (left && !pLeft) || (right && !pRight)) Ptr.Hide();
@@ -746,6 +801,15 @@ namespace Nekorobo
             }
         }
 
+        bool pTabL, pTabR;
+        /// <summary>選んでいるボタンを選択枠で囲む</summary>
+        void ShowFrame()
+        {
+            if (idx >= items.Count || items[idx].frameNone || items[idx].rt == null) { SelFrame.Hide(); return; }
+            var it = items[idx];
+            SelFrame.Show(it.rt, it.frameTan, it.frameBox, it.frameSub);
+        }
+
         void Remember(bool up, bool down, bool left, bool right, bool ok, bool back)
         {
             pUp = up; pDown = down; pLeft = left; pRight = right; pOk = ok; pBack = back;
@@ -772,9 +836,11 @@ namespace Nekorobo
             Focus(idx + (dir > 0 ? (inG.Count - at) : -(at + 1)));
         }
 
-        void Focus(int i)
+        /// <summary>byMouse … マウスで乗った（札の中身は替えない。押したときに替える）</summary>
+        void Focus(int i, bool byMouse = false)
         {
             if (items.Count == 0) return;
+            int was = idx;
             // 押せない物は飛ばす（JS版は disabled のボタンを並びに入れない）
             int dir = i >= idx ? 1 : -1;
             i = Mathf.Clamp(i, 0, items.Count - 1);
@@ -784,6 +850,7 @@ namespace Nekorobo
             idx = i;
             for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx);
             if (cap != null) cap.text = Lang.Tr(items[idx].desc ?? "");
+            if (!byMouse && idx != was && items[idx].onFocus != null) { items[idx].onFocus(); return; }
             // 面選びの説明。一覧から外れたら、いま選んである面に戻す
             if (page == "Free")
             {
@@ -849,7 +916,7 @@ namespace Nekorobo
         // ================================================================ 設定（JS版 TITLE_PAGE.Settings）
         // タイトル・バージョン・コピーライトは決まったらここを書き換える（JS版 GAME_INFO）
         public const string GAME_TITLE = "爆配！ネコロボ！", GAME_VER = "0.1.0", GAME_COPY = "© 2026 （会社名）  All Rights Reserved.";
-        static string setTab = "ctrl", setCtrl = "pad"; static bool setLic;
+        static int achTab;
         // 著作権表示（この版で使っている物）
         static readonly string[][] LICENSES =
         {
@@ -858,231 +925,8 @@ namespace Nekorobo
             new[] { "コーポレート・ロゴ（ラウンド）ver3", "SIL Open Font License 1.1",
                     "LOGOTYPE.JP ／ Source Han Sans © 2014-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'" },
             new[] { "BIZ UDゴシック（看板などの絵の字）", "SIL Open Font License 1.1", "Copyright © 2022 The BIZ UDGothic Project Authors" },
+            new[] { "Noto Sans CJK SC・TC・KR（中国語・韓国語の字）", "SIL Open Font License 1.1", "© 2014-2021 Adobe (http://www.adobe.com/)" },
         };
-        // 操作の一覧（JS版 setPadSvg・setKeySvg の説明の字）。[ボタン, すること, 色]
-        static readonly string[][] CTRL_PAD =
-        {
-            new[] { "L2", "煽り（応援）", "e0569a" }, new[] { "R2", "煽り（挑発）", "e0569a" },
-            new[] { "L1", "前のアイテム", "f08a24" }, new[] { "R1", "次のアイテム", "f08a24" },
-            new[] { "左スティック", "曲がる／押し込みでダッシュ", "2f8fe0" }, new[] { "Y", "アイテムを使う", "f5c518" },
-            new[] { "十字キー", "↑加速 ↓バック ←→曲がる", "2f8fe0" }, new[] { "X", "ジャンプ", "2f8fe0" },
-            new[] { "右スティック", "煽りを選ぶ／押し込みで料理を落とす", "e0569a" }, new[] { "B", "バック／戻る", "e8453c" },
-            new[] { "≡（START）", "ポーズメニュー", "8f8fa8" }, new[] { "A", "加速／決定", "3fbf5a" },
-        };
-        static readonly string[][] CTRL_KEY =
-        {
-            new[] { "↑", "加速（前へ進む）", "2f8fe0" }, new[] { "Esc ／ P", "ポーズメニュー", "8f8fa8" },
-            new[] { "↓", "バック", "2f8fe0" }, new[] { "R", "やり直し", "8f8fa8" },
-            new[] { "← →", "曲がる", "2f8fe0" }, new[] { "M", "音の ON/OFF", "8f8fa8" },
-            new[] { "スペース", "ジャンプ", "3fbf5a" }, new[] { "Enter ／ Esc", "決定／戻る", "8f8fa8" },
-            new[] { "Z", "アイテムを使う", "f08a24" }, new[] { "Q ／ E", "煽り（押している間）", "e0569a" },
-            new[] { "X ／ C", "次／前のアイテム", "f08a24" }, new[] { "Q/E ＋ X ／ C", "煽りを選ぶ（次／前）", "f08a24" },
-            new[] { "Shift", "ダッシュ（5秒に1回）", "3fbf5a" }, new[] { "V", "持っている料理を落とす", "3fbf5a" },
-        };
-
-        void PageSettings(Stack st)
-        {
-            Head(st, Lang.Tr("設定"));
-            // タイトル・バージョン・コピーライト
-            {
-                var t = st.Text("<b>" + Lang.Tr(GAME_TITLE) + "</b>　Ver. " + GAME_VER + "　" + Lang.Tr(GAME_COPY), 12.5f, Color.white, TextAnchor.MiddleCenter, 20);
-                Shade(t, 0.5f);
-            }
-            // 言語。押すたびに次の言語へ（← → でも回る）。名前はその言語で書く
-            {
-                int li = 0; for (int i = 0; i < Lang.LANGS.Length; i++) if (Lang.LANGS[i][0] == Lang.Cur) li = i;
-                System.Action<int> turn = dir =>
-                {
-                    Lang.Set(Lang.LANGS[(li + dir + Lang.LANGS.Length) % Lang.LANGS.Length][0]);
-                    Game.SeUi("cur"); Go("Settings");
-                };
-                var it = Btn(st, Lang.Tr("言語") + (Lang.IsJa ? "：" : ": ") + Lang.LANGS[li][1] + "　◀ ▶", "sec", () => turn(1),
-                             Lang.Tr("表示する言語を選びます（← → でも変わります）。"), false, "lang");
-                it.adj = turn;
-            }
-            // 切り替えの札（操作説明／サウンド）
-            {
-                var r = st.Row(40);
-                float w = 240, gap = 13, x0 = (st.w - (w * 2 + gap)) / 2;
-                BtnAt(r, x0, 0, w, 36, Lang.Tr("操作説明"), setTab == "ctrl" ? "pk" : null, () => { setTab = "ctrl"; Go("Settings"); }, null, false, "tabCtrl", 15);
-                BtnAt(r, x0 + w + gap, 0, w, 36, Lang.Tr("サウンド"), setTab == "snd" ? "pk" : null, () => { setTab = "snd"; Go("Settings"); }, null, false, "tabSnd", 15);
-            }
-            if (setTab == "ctrl")
-            {
-                var r = st.Row(34);
-                float w = 200, gap = 13, x0 = (st.w - (w * 2 + gap)) / 2;
-                BtnAt(r, x0, 0, w, 30, Lang.Tr("コントローラー"), setCtrl == "pad" ? "pk" : null, () => { setCtrl = "pad"; Go("Settings"); }, null, false, "cPad", 13);
-                BtnAt(r, x0 + w + gap, 0, w, 30, Lang.Tr("キーボード"), setCtrl == "key" ? "pk" : null, () => { setCtrl = "key"; Go("Settings"); }, null, false, "cKey", 13);
-                CtrlTable(st, setCtrl == "pad" ? CTRL_PAD : CTRL_KEY,
-                          Lang.Tr(setCtrl == "pad" ? "L1＋L2＋R1＋R2 を長押し：クレーンで出現位置へ戻る（−¥10,000）" : "Q＋E＋X＋C を長押し：クレーンで出現位置へ戻る（−¥10,000）"));
-            }
-            else
-            {
-                SoundRow(st, "BGM", "Bgm", () => Sound.BgmVolume, Sound.SetBgmVolume, () => Sound.BgmMuted, Sound.SetBgmMute);
-                SoundRow(st, "効果音（SE）", "Se", () => Sound.Volume, Sound.SetVolume, () => Sound.Muted, Sound.SetMute);
-                if (Sound.Off) Note(st, Lang.Tr("いまは右上のボタンで<b>すべての音が OFF</b> になっています。"));
-            }
-            // 著作権表示（押すと下に開く）
-            Btn(st, Lang.Tr(setLic ? "著作権表示 ▲" : "著作権表示 ▼"), "sec", () => { setLic = !setLic; Go("Settings"); }, null, false, "lic");
-            if (setLic)
-            {
-                var sb = new System.Text.StringBuilder();
-                sb.Append("<b>" + Lang.Tr(GAME_TITLE) + "</b>　" + Lang.Tr(GAME_COPY));
-                foreach (var l in LICENSES) sb.Append("\n<b>" + Lang.Tr(l[0]) + "</b>　" + l[1] + "　<size=10>" + l[2] + "</size>");
-                Note(st, sb.ToString());
-            }
-            Btn(st, Lang.Tr("戻る"), "sec", () => Go("Top"), null, true);
-        }
-
-        /// <summary>操作の一覧（2列。色の札・ボタン・すること）</summary>
-        void CtrlTable(Stack st, string[][] rows, string foot)
-        {
-            int n = (rows.Length + 1) / 2;
-            const float RH = 25, W = 760;
-            var r = st.Row(n * RH + 16 + 22, 6);
-            var bg = UiKit.Img(r, new Color(0, 0, 0, 0.32f), 12, "Ctrl");
-            var br = bg.rectTransform; br.anchorMin = br.anchorMax = new Vector2(0.5f, 1); br.pivot = new Vector2(0.5f, 1);
-            br.sizeDelta = new Vector2(W, n * RH + 16 + 22); br.anchoredPosition = Vector2.zero;
-            for (int i = 0; i < rows.Length; i++)
-            {
-                var a = rows[i];
-                if (a[0] == "") continue;
-                float x = 22 + (i % 2) * (W / 2), y = 8 + (i / 2) * RH;
-                var chip = UiKit.Img(bg.transform, Mats.Hex(System.Convert.ToInt32(a[2], 16)), 3, "Chip");
-                var cr = chip.rectTransform; cr.anchorMin = cr.anchorMax = new Vector2(0, 1); cr.pivot = new Vector2(0, 1);
-                cr.sizeDelta = new Vector2(8, 19); cr.anchoredPosition = new Vector2(x, -(y + 3));
-                var k = UiKit.Label(bg.transform, Lang.Tr(a[0]), 14, Color.white, true, TextAnchor.MiddleLeft);
-                var kr = k.rectTransform; kr.anchorMin = kr.anchorMax = new Vector2(0, 1); kr.pivot = new Vector2(0, 1);
-                kr.sizeDelta = new Vector2(130, RH); kr.anchoredPosition = new Vector2(x + 16, -y);
-                var v = UiKit.Label(bg.transform, Lang.Tr(a[1]), 13, new Color(1, 1, 1, 0.85f), true, TextAnchor.MiddleLeft);
-                var vr = v.rectTransform; vr.anchorMin = vr.anchorMax = new Vector2(0, 1); vr.pivot = new Vector2(0, 1);
-                vr.sizeDelta = new Vector2(W / 2 - 170, RH); vr.anchoredPosition = new Vector2(x + 150, -y);
-            }
-            var f = UiKit.Label(bg.transform, foot, 12, new Color(1, 1, 1, 0.7f), true, TextAnchor.MiddleCenter);
-            var fr = f.rectTransform; fr.anchorMin = new Vector2(0, 0); fr.anchorMax = new Vector2(1, 0); fr.pivot = new Vector2(0.5f, 0);
-            fr.sizeDelta = new Vector2(0, 20); fr.anchoredPosition = new Vector2(0, 6);
-        }
-
-        /// <summary>音の大きさの段（名前・つまみ（← → で 10% ずつ。押した所にも）・ON/OFF）。JS版 setSoundRow</summary>
-        void SoundRow(Stack st, string name, string k, System.Func<float> vol, System.Action<float> setVol, System.Func<bool> muted, System.Action<bool> setMute)
-        {
-            var r = st.Row(40);
-            float lw = 150, sw = 340, ow = 110, gap = 12, x0 = (st.w - (lw + sw + ow + gap * 2)) / 2;
-            var lb = UiKit.Label(r, Lang.Tr(name), 15, Color.white, true, TextAnchor.MiddleRight);
-            var lr = lb.rectTransform; lr.anchorMin = lr.anchorMax = new Vector2(0, 1); lr.pivot = new Vector2(0, 1);
-            lr.sizeDelta = new Vector2(lw, 36); lr.anchoredPosition = new Vector2(x0, 0);
-            Shade(lb, 0.5f);
-            int pct = Mathf.RoundToInt(vol() * 100);
-            System.Action<float> apply = v => { setVol(Mathf.Clamp01(Mathf.Round(v * 20) / 20)); if (k == "Se") Game.SeUi("tick"); Go("Settings"); };
-            RectTransform track = null;
-            var sl = BtnAt(r, x0 + lw + gap, 0, sw, 36, "", null, () =>
-            {
-                // マウスで押したときだけ、押した所の大きさにする（決定のボタンでは何もしない。← → で変える）
-                var ms = Mouse.current;
-                if (ms == null || !ms.leftButton.wasPressedThisFrame || track == null) return;
-                Vector2 lp;
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(track, ms.position.ReadValue(), null, out lp);
-                apply((lp.x - track.rect.xMin) / Mathf.Max(1, track.rect.width));
-            }, Lang.Tr("← → で大きさを変える（10%ずつ）"), false, "sl" + k, 14);
-            sl.adj = dir => apply(vol() + dir * 0.1f);
-            {
-                var tb = UiKit.Img(sl.anim, new Color(0, 0, 0, 0.45f), 4, "Track");
-                track = tb.rectTransform; track.anchorMin = new Vector2(0, 0.5f); track.anchorMax = new Vector2(1, 0.5f); track.pivot = new Vector2(0, 0.5f);
-                track.offsetMin = new Vector2(22, -5); track.offsetMax = new Vector2(-74, 5);
-                var fill = UiKit.Img(tb.transform, muted() ? new Color(0.6f, 0.6f, 0.6f) : Mats.Hex(0x68ff00), 4, "Fill");
-                var fr = fill.rectTransform; fr.anchorMin = new Vector2(0, 0); fr.anchorMax = new Vector2(pct / 100f, 1); fr.offsetMin = fr.offsetMax = Vector2.zero;
-                var pc = UiKit.Label(sl.anim, pct + "%", 14, Color.white, true, TextAnchor.MiddleRight);
-                var pr = pc.rectTransform; pr.anchorMin = new Vector2(1, 0); pr.anchorMax = new Vector2(1, 1); pr.pivot = new Vector2(1, 0.5f);
-                pr.sizeDelta = new Vector2(60, 0); pr.anchoredPosition = new Vector2(-16, 0);
-            }
-            bool on = !muted();
-            BtnAt(r, x0 + lw + gap + sw + gap, 0, ow, 36, on ? "ON" : "OFF", on ? "go" : "sec", () =>
-            {
-                setMute(on);
-                if (k == "Se" && !on) Game.SeUi("ok");
-                Go("Settings");
-            }, Lang.Tr(on ? "{0} を消す" : "{0} を出す", Lang.Tr(name)), false, "on" + k, 15);
-        }
-
-        /// <summary>実績の一覧（段階5で中身を入れる）</summary>
-        // ---- 実績の一覧（JS版 TITLE_PAGE.Ach）。仕分けの札で切り替える。★1 は取る前から中身が見え、★2・★3 は取るまで「？？？」
-        static int achTab;
-        void AchList(Stack st)
-        {
-            Game.AchStore.Load();
-            var got = Game.AchStore.got;
-            int n = 0, all = 0; foreach (var a in Game.ACHS) { if (a.tbd) continue; all++; if (got.ContainsKey(a.id)) n++; }
-            {
-                var t = st.Text("<size=28><color=#ffd34a>" + n + "</color></size> / " + all + "<size=13>　" + Lang.Tr("★が多いほど難しい。★2・★3 は取るまで中身が伏せてあります") + "</size>",
-                                19, Color.white, TextAnchor.MiddleCenter, 30);
-                Shade(t, 0.5f);
-            }
-            // 仕分けの札
-            {
-                var r = st.Row(36);
-                int nc = Game.ACH_CATS.Length; float gap = 8, w = (st.w - gap * (nc - 1)) / nc;
-                for (int i = 0; i < nc; i++)
-                {
-                    int ci = i, cn = 0, cg = 0;
-                    foreach (var a in Game.ACHS) if (a.c == i && !a.tbd) { cn++; if (got.ContainsKey(a.id)) cg++; }
-                    BtnAt(r, i * (w + gap), 0, w, 32, Lang.Tr(Game.ACH_CATS[i]) + " " + cg + "/" + cn, achTab == i ? "pk" : null,
-                          () => { achTab = ci; Go("Ach"); }, null, false, "at" + i, 13);
-                }
-            }
-            // カード（3列）
-            {
-                var list = new List<AchDef>(); foreach (var a in Game.ACHS) if (a.c == achTab) list.Add(a);
-                const float pad = 12, gap = 8, ch = 66;
-                int rows = Mathf.Max(3, (list.Count + 2) / 3);
-                float W = 1000, cw = (W - pad * 2 - gap * 2) / 3, H = pad * 2 + rows * ch + (rows - 1) * gap;
-                var r = st.Row(H, 8);
-                var bg = UiKit.Img(r, new Color(22 / 255f, 28 / 255f, 42 / 255f, 0.82f), 14, "AchGrid");
-                var br = bg.rectTransform; br.anchorMin = br.anchorMax = new Vector2(0.5f, 1); br.pivot = new Vector2(0.5f, 1);
-                br.sizeDelta = new Vector2(W, H); br.anchoredPosition = Vector2.zero;
-                Ring(bg.transform, new Color(1, 1, 1, 0.85f), 3, 14);
-                for (int i = 0; i < list.Count; i++)
-                {
-                    var a = list[i];
-                    bool has = got.ContainsKey(a.id), open = has || a.s <= 1;
-                    float x = pad + (i % 3) * (cw + gap), y = pad + (i / 3) * (ch + gap);
-                    var cd = UiKit.Img(bg.transform, has ? new Color(1, 211 / 255f, 74 / 255f, 0.2f) : new Color(0, 0, 0, 0.35f), 10, "Card");
-                    var cr = cd.rectTransform; cr.anchorMin = cr.anchorMax = new Vector2(0, 1); cr.pivot = new Vector2(0, 1);
-                    cr.sizeDelta = new Vector2(cw, ch); cr.anchoredPosition = new Vector2(x, -y);
-                    Ring(cd.transform, has ? Mats.Hex(0xffd34a) : new Color(1, 1, 1, 0.22f), 2, 10);
-                    System.Func<string, float, float, Color, Text> L = (txt, yy, size, c) =>
-                    {
-                        var t = UiKit.Label(cd.transform, txt, size, c, true, TextAnchor.UpperLeft);
-                        var tr = t.rectTransform; tr.anchorMin = new Vector2(0, 1); tr.anchorMax = new Vector2(1, 1); tr.pivot = new Vector2(0, 1);
-                        tr.offsetMin = new Vector2(12, -(yy + size + 4)); tr.offsetMax = new Vector2(-12, -yy);
-                        t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Overflow;
-                        return t;
-                    };
-                    if (a.tbd) { L("？？", 22, 16, Color.white); L(Lang.Tr("準備中"), 42, 12, new Color(1, 1, 1, 0.75f)); continue; }
-                    L("<color=#ffd34a>" + new string('★', a.s) + "</color><color=#ffffff33>" + new string('★', 3 - a.s) + "</color>", 6, 13, Color.white);
-                    var nm = L(open ? Lang.Tr(a.n) : "？？？", 22, 16, new Color(1, 1, 1, has ? 1 : 0.55f));
-                    var ds = L(open ? Lang.Tr(a.d) : "？？？", 42, 11, new Color(1, 1, 1, has ? 0.75f : 0.42f));
-                    ds.resizeTextForBestFit = true; ds.resizeTextMinSize = 8; ds.resizeTextMaxSize = 11;
-                    ds.rectTransform.offsetMin = new Vector2(12, -(ch - 4));
-                    ds.verticalOverflow = VerticalWrapMode.Truncate;
-                    if (has)
-                    {
-                        var ok = UiKit.Img(cd.transform, Mats.Hex(0xffd34a), 9, "Ok");
-                        var orr = ok.rectTransform; orr.anchorMin = orr.anchorMax = new Vector2(1, 1); orr.pivot = new Vector2(1, 1);
-                        var ot = UiKit.Label(ok.transform, Lang.Tr("達成"), 11, Mats.Hex(0x3a2300), true, TextAnchor.MiddleCenter);
-                        UiKit.Stretch(ot.rectTransform);
-                        orr.sizeDelta = new Vector2(ot.preferredWidth + 16, 18); orr.anchoredPosition = new Vector2(-10, -7);
-                    }
-                }
-            }
-        }
-
-        // 実績の一覧（中身は実績のところで作る）
-        void PageAch(Stack st)
-        {
-            Head(st, Lang.Tr("実績"));
-            AchList(st);
-            Btn(st, Lang.Tr("戻る"), "sec", () => Go("Top"), null, true);
-        }
 
         /// <summary>見出し（斜めの金の帯）。</summary>
         void Head(Stack st, string s)

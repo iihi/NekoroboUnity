@@ -272,6 +272,7 @@ namespace Nekorobo
                 ic.raycastTarget = false;
                 var ir = ic.rectTransform; ir.anchorMin = ir.anchorMax = new Vector2(0.5f, 0.5f); ir.sizeDelta = new Vector2(24, 24);
                 sndBtn = im; sndIcon = ic;
+                if (Sound.Off) Sound.SetOff(false);          // 前の版で全部消していた音は戻す（ボタンを消したので戻せなくなるため）
                 ShowSound();
             }
 
@@ -565,7 +566,7 @@ namespace Nekorobo
             }
             else { gr.sizeDelta = new Vector2(36, 36); gr.anchoredPosition = new Vector2(-12, tall ? -122 : -88); }
             // 音のボタンはタイトルの上でも押せるように、いちばん手前へ
-            sndBtn.gameObject.SetActive(!settings.Open);
+            sndBtn.gameObject.SetActive(false);              // 右上の仮の音のボタンは消した（HTML版と同じ。音は設定の「サウンド」で）
             sndBtn.rectTransform.anchoredPosition = pic ? new Vector2(-20 * hs, -178 * hs) : new Vector2(-12, tall ? -166 : -132);
             sndBtn.transform.SetAsLastSibling();
             toast.rectTransform.offsetMin = new Vector2(0, tall ? -150 : -110); toast.rectTransform.offsetMax = new Vector2(0, tall ? -126 : -70);

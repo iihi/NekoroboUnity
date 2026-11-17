@@ -9,11 +9,13 @@ namespace Nekorobo
     /// ことば（多言語）。JS版と同じく**日本語の文をそのまま鍵にして、HTML版の lang/&lt;言語&gt;.json から訳を引く**。
     ///   Lang.Tr("ローカル")            … 訳。無ければ英語、それも無ければ日本語のまま
     ///   Lang.Tr("あと {0} 人", left)   … {0} {1} … に値を入れる（日本語のときも）
-    /// 選んだ言語は PlayerPrefs（nekorobo.lang）。初めては OS の言語（日本語でなければ英語）。
+    /// 選んだ言語は PlayerPrefs（nekorobo.lang）。初めては OS の言語（日本語・中国語・韓国語でなければ英語）。
+    /// 簡体字中国語・繁体字中国語・韓国語も全部訳す（HTML版 2026-11-11。担当「日本語・英語・簡体字・繁体字・韓国語に対応したい」）
     /// </summary>
     public static class Lang
     {
-        public static readonly string[][] LANGS = { new[] { "ja", "日本語" }, new[] { "en", "English" } };
+        public static readonly string[][] LANGS = { new[] { "ja", "日本語" }, new[] { "en", "English" },
+            new[] { "zh-Hans", "简体中文" }, new[] { "zh-Hant", "繁體中文" }, new[] { "ko", "한국어" } };
         const string KEY = "nekorobo.lang";
         static readonly Dictionary<string, Dictionary<string, string>> dict = new Dictionary<string, Dictionary<string, string>>();
         public static readonly HashSet<string> Miss = new HashSet<string>();
@@ -29,7 +31,14 @@ namespace Nekorobo
                 if (cur == null)
                 {
                     cur = PlayerPrefs.GetString(KEY, "");
-                    if (cur == "") cur = Application.systemLanguage == SystemLanguage.Japanese ? "ja" : "en";
+                    if (cur == "")
+                    {
+                        var sl = Application.systemLanguage;
+                        cur = sl == SystemLanguage.Japanese ? "ja"
+                            : sl == SystemLanguage.ChineseTraditional ? "zh-Hant"
+                            : sl == SystemLanguage.Chinese || sl == SystemLanguage.ChineseSimplified ? "zh-Hans"
+                            : sl == SystemLanguage.Korean ? "ko" : "en";
+                    }
                     bool ok = false; foreach (var l in LANGS) if (l[0] == cur) ok = true;
                     if (!ok) cur = "en";
                 }
@@ -37,6 +46,12 @@ namespace Nekorobo
             }
         }
         public static bool IsJa { get { return Cur == "ja"; } }
+        /// <summary>句読点を全角にする言語（日本語と中国語。「（）」「：」「、」）。韓国語は英語と同じ半角。</summary>
+        public static bool FullPunct { get { return Cur == "ja" || Cur.StartsWith("zh"); } }
+        /// <summary>「：」（全角の言語）か「: 」。</summary>
+        public static string Colon { get { return FullPunct ? "：" : ": "; } }
+        /// <summary>かっこで包む（全角の言語は「（）」、ほかは「 ()」）。</summary>
+        public static string Paren(string s) { return FullPunct ? "（" + s + "）" : " (" + s + ")"; }
 
         public static void Set(string k)
         {
@@ -69,7 +84,7 @@ namespace Nekorobo
             if (a == null || a.Length == 0) return t;
             return ARG.Replace(t, m => { int i = int.Parse(m.Groups[1].Value); return i < a.Length && a[i] != null ? a[i].ToString() : ""; });
         }
-        /// <summary>並べるときの区切り（日本語は「・」、ほかは「, 」）。</summary>
-        public static string Sep { get { return IsJa ? "・" : ", "; } }
+        /// <summary>並べるときの区切り（日本語は「・」、中国語は「、」、ほかは「, 」）。</summary>
+        public static string Sep { get { return IsJa ? "・" : FullPunct ? "、" : ", "; } }
     }
 }

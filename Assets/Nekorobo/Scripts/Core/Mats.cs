@@ -159,10 +159,35 @@ namespace Nekorobo
     public static class Fonts
     {
         static Font ui;
+        static readonly System.Collections.Generic.Dictionary<string, Font> langFont = new System.Collections.Generic.Dictionary<string, Font>();
+        /// <summary>
+        /// 中国語・韓国語のときの書体（同梱の Noto Sans SC・TC・KR Bold。Resources/Fonts。エディタの LangFontSync が HTML版から写す）。
+        /// 日本語の丸い書体・メイリオにはハングルと中国でだけ使う字が無く、ある字も日本の字の形になるので、その言語では字を全部こちらで出す。
+        /// 日本語・英語は null（今までの書体）
+        /// </summary>
+        public static Font ForLang()
+        {
+            string c = Lang.Cur, n = c == "zh-Hans" ? "NotoSansSC-Bold" : c == "zh-Hant" ? "NotoSansTC-Bold" : c == "ko" ? "NotoSansKR-Bold" : null;
+            if (n == null) return null;
+            Font f;
+            if (!langFont.TryGetValue(n, out f)) { f = Resources.Load<Font>("Fonts/" + n); langFont[n] = f; }
+            return f;
+        }
+        /// <summary>その言語の名前を書く書体（設定の言語のボタン。中国語・韓国語はその言語の書体、ほかは丸い書体）</summary>
+        public static Font OfLang(string k)
+        {
+            string n = k == "zh-Hans" ? "NotoSansSC-Bold" : k == "zh-Hant" ? "NotoSansTC-Bold" : k == "ko" ? "NotoSansKR-Bold" : null;
+            if (n == null) return Resources.Load<Font>("Fonts/CorpRound");
+            Font f;
+            if (!langFont.TryGetValue(n, out f)) { f = Resources.Load<Font>("Fonts/" + n); langFont[n] = f; }
+            return f;
+        }
         public static Font UI
         {
             get
             {
+                var lf = ForLang();
+                if (lf != null) return lf;
                 if (ui == null)
                     ui = Font.CreateDynamicFontFromOSFont(
                         // HTML版と同じ並び（英数字は Segoe UI、日本語は メイリオ）。前の名前に無い字は次の名前から取る
