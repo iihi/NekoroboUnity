@@ -113,7 +113,7 @@ namespace Nekorobo
             for (int k = 0; k < 2; k++)
             {
                 bool f = k == cur;
-                btnEdge[k].color = f ? GOLD : Color.white;
+                btnEdge[k].color = Color.white;          // 金の縁はやめた（選択枠と二重になる）
                 btnBg[k].color = btnSec[k] ? (f ? SEC_ON : SEC) : (f ? BTN_ON : BTN);
             }
         }
@@ -135,7 +135,7 @@ namespace Nekorobo
                 up |= gp.dpad.up.isPressed; down |= gp.dpad.down.isPressed;
                 ok |= gp.buttonSouth.isPressed; back |= gp.buttonEast.isPressed;
             }
-            if ((up && !pUp) || (down && !pDown)) Ptr.Hide();
+            Nav.Apply(ref up, ref down);
             if (up && !pUp) Focus(cur - 1);
             if (down && !pDown) Focus(cur + 1);
             if (!ok) armed = true;
@@ -153,6 +153,7 @@ namespace Nekorobo
                 for (int k = 0; k < 2; k++)
                     if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null)) { Focus(k); fire = true; }
             }
+            SelFrame.Show(btnRt[cur], 0, true);                           // 選んでいるボタンを選択枠で囲む
             if (backHit) { Game.SeUi("back"); act[0](); return; }          // 戻る＝再開（確かめる画面では「やめない」）
             if (fire) { Game.SeUi("ok"); act[cur](); }
         }

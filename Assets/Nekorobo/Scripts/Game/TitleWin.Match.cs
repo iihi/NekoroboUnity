@@ -226,7 +226,9 @@ namespace Nekorobo
                 UiKit.Stretch(ct.rectTransform);
             }
             if (r != null && mm.phase == "room")
-                Note(st, "いま <b>" + Net.Players.Count + " / " + Net.Max + "人</b>。そろわない席は NPC が入ります。");
+                Note(st, Lang.Tr("いま <b>{0} / {1}人</b>。そろわない席は NPC が入ります。", Net.Players.Count, Net.Max));
+            // そろった人をユーザー選択と同じ行で見せる（人が居る席は「OK」、空いた席は「接続中…」。HTML版 olGrid）
+            OlGrid(st, r != null && mm.phase == "room" ? Net.Players : null, r != null && mm.phase == "room" ? Net.Max : 4, false, false, false);
             int ln = r != null && mm.phase == "room" ? (int?)r["len"] ?? 0 : mm.len;
             Note(st, "個人戦・" + (ln > 0 ? Game.LenName(ln) : "遊び方はこだわらない") + "。面はそろってから全員で投票します。");
             Btn(st, "やめる", "sec", () => { MmStop(); Go("MatchLen"); }, null, true);

@@ -107,98 +107,83 @@ namespace Nekorobo
             var players = Net.Players ?? new JArray();
             int max = Net.Max;
             Head(st, (string)r["name"] + ((bool?)r["priv"] == true ? "（非公開）" : ""));
-            Note(st, "ルームID");
-            // 番号は白い札に等幅の字で（JS版 .tCode）
+            // 番号は白い札に等幅の字で（JS版 .tCode）。「ルームID」の見出しは札の中へ（行を1つ減らす）
             var cc = st.Card(48);
-            var ct = UiKit.Label(cc, string.Join(" ", System.Array.ConvertAll(((string)r["code"]).ToCharArray(), ch => ch.ToString())),
+            var ct = UiKit.Label(cc, string.Join(" ", System.Array.ConvertAll(((string)r["code"]).ToCharArray(), ch => ch.ToString())),
                                  22, Mats.Hex(0x3a352c), true, TextAnchor.MiddleCenter);
             ct.font = Mono;
             UiKit.Stretch(ct.rectTransform);
-            Note(st, host ? "あなたがホストです。全員そろったら始めてください。" : "ホストが始めるのを待っています…");
-            Note(st, g.InSession ? g.RoundLine() : Lang.Tr("遊び方：<b>{0}</b>", Game.LenName(Lobby.rounds)));
+            {
+                var lb = UiKit.Label(cc, Lang.Tr("ルームID"), 11, Mats.Hex(0x8a8274), true, TextAnchor.MiddleRight);
+                var lr = lb.rectTransform; lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 0.5f); lr.pivot = new Vector2(1, 0.5f);
+                lr.sizeDelta = new Vector2(200, 30); lr.anchoredPosition = new Vector2(-ct.preferredWidth / 2 - 18, 0);
+            }
+            // 席を1列（4行）にしたぶん、説明は1行にまとめる（HTML版と同じ）
             var pk = Lobby.rpick;
-            Note(st, "遊ぶ面：<b>" + (pk != null ? (string)pk["name"] : "<i>まだ選んでいません</i>") + "</b>"
-                   + (pk != null && pk["shopName"] != null ? "　<i>" + (string)pk["shopName"] + "</i>" : ""));
-            if (host) Btn(st, "面を選ぶ ▶", "sec", () => { from = "Wait"; next = false; Go("Free"); }, "部屋の全員で遊ぶ面を選びます。", false, "pickstage");
-            // ルール。決めるのはホスト（面と同じ）。決めたそばから全員へ配る
+            Note(st, Lang.Tr(host ? "あなたがホストです。全員そろったら始めてください。" : "ホストが始めるのを待っています…") + "　"
+                   + (g.InSession ? g.RoundLine() : Lang.Tr("遊び方：<b>{0}</b>", Game.LenName(Lobby.rounds))) + "　"
+                   + Lang.Tr("遊ぶ面：<b>{0}</b>", pk != null ? Lang.Tr((string)pk["name"]) : Lang.Tr("<i>まだ選んでいません</i>"))
+                   + (pk != null && pk["shopName"] != null ? "　<i>" + Lang.Tr((string)pk["shopName"]) + "</i>" : ""));
             bool team = Lobby.mode == "team";
+            // ホストは「面を選ぶ」「ルール」「遊び方」を横1列に。参加者は字だけ
             if (host)
-                Btn(st, Lang.Tr("ルール：{0}　▾", Lang.Tr(Game.ModeName(Lobby.mode))), "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
+            {
+                var acts = new List<System.Action<RectTransform, float, float>>();
+                bool lenB = !g.InSession;
+                int nb = lenB ? 3 : 2; float bw = 340, gap = 16, bx = (st.w - (bw * nb + gap * (nb - 1))) / 2;
+                var row = st.Row(36);
+                BtnAt(row, bx, 0, bw, 34, "面を選ぶ ▶", "sec", () => { from = "Wait"; next = false; Go("Free"); }, "部屋の全員で遊ぶ面を選びます。", false, "pickstage", 14);
+                BtnAt(row, bx + (bw + gap), 0, bw, 34, Lang.Tr("ルール：{0}　▾", Lang.Tr(Game.ModeName(Lobby.mode))), "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
                 {
                     new[] { "versus", "個人戦（売上も修理費も個人ごと）", "versus" },
                     new[] { "team", "チーム戦（青と赤。売上も修理費もチームごと）", "team" },
                     new[] { "coop", "協力（売上も修理費も店舗ぜんぶ）", "coop" },
-                }, Lobby.mode, "Wait", x => { Lobby.mode = x; Lobby.SendRule(); }), null, false, "rule");
+                }, Lobby.mode, "Wait", x => { Lobby.mode = x; Lobby.SendRule(); }), null, false, "rule", 14);
+                if (lenB)
+                {
+                    var opts = new List<string[]> { new[] { "0", Game.LenName(0), "free" } };
+                    foreach (var n in Game.MATCH_LENS) opts.Add(new[] { n.ToString(), Game.LenName(n), "cup" });
+                    BtnAt(row, bx + (bw + gap) * 2, 0, bw, 34, Lang.Tr("遊び方：{0}　▾", Game.LenName(Lobby.rounds)), "sec", () => PickOpen(Lang.Tr("遊び方を選ぶ"), null, opts, Lobby.rounds.ToString(), "Wait",
+                        x => { int v; Lobby.rounds = int.TryParse(x, out v) ? v : 0; Lobby.SendRule(); }), null, false, "len", 14);
+                }
+            }
             else Note(st, Lang.Tr("ルール：<b>{0}</b>", Lang.Tr(Game.ModeName(Lobby.mode))));
-            // 遊び方（フリープレイ／ラウンドマッチ）。続きの最中は変えられない
-            if (host && !g.InSession)
-            {
-                var opts = new List<string[]> { new[] { "0", Game.LenName(0), "free" } };
-                foreach (var n in Game.MATCH_LENS) opts.Add(new[] { n.ToString(), Game.LenName(n), "cup" });
-                Btn(st, Lang.Tr("遊び方：") + Game.LenName(Lobby.rounds) + "　▾", "sec", () => PickOpen(Lang.Tr("遊び方を選ぶ"), null, opts, Lobby.rounds.ToString(), "Wait",
-                    x => { int v; Lobby.rounds = int.TryParse(x, out v) ? v : 0; Lobby.SendRule(); }), null, false, "len");
-            }
-            // 席。誰がどの色のロボになるかが、始める前に分かるように（並びはそのまま枠の順）。
-            // 人が来ない席は、ホストがNPCで埋められる。人が入ってきたら、その席は人のもの（NPCは押し出される）
-            var row = st.Row(92);
-            float sw = (1098 - 3 * 10) / 4f;
+            // 席はローカルのユーザー選択と同じ行の形（担当の画面案。仮）。人が居る席は「OK」、空いている席は「接続中…」。
+            // **人が来ない席は、ホストがNPCで埋められます**（右の「NPC」）。人が入ってきたら、その席は人のものになります
             int npcN = 0;
-            for (int i = 0; i < Mathf.Min(4, max); i++)
-            {
-                int ii = i;
-                var m = i < players.Count ? players[i] : null;
-                string v = m != null ? null : Lobby.rnpc[i] ?? "off";
-                bool bot = m == null && v != "off";
-                if (bot) npcN++;
-                bool mHost = m != null && (bool?)m["host"] == true;
-                string ic = m != null ? (mHost ? "host" : "solo") : bot ? "npc" : "off";
-                string nm = m != null ? ((int?)m["id"] == Net.Id ? "あなた" : "参加者")
-                          : bot ? SlotLabel(v) : "（空き）";
-                string col = m != null || bot ? (team ? (Lobby.rteam[i] == 1 ? "red" : "blue") : SEAT_COL[i]) : "grey";
-                string pn = (i + 1) + "P" + (team && (m != null || bot) ? "・" + Game.TEAM_NAME[Lobby.rteam[i]] : "");
-                System.Action fire = null;
-                if (m == null && host)
-                    fire = () => PickOpen((ii + 1) + "P の席", "人が来ない席は<b>NPC</b>で埋められます。あとから人が入ったら、その人が入ります。",
-                                          SeatOpts(), v, "Wait", x => { Lobby.rnpc[ii] = x; Lobby.SendNpc(); });
-                Seat(row, i * (sw + 10), sw, pn, ic, nm, col, fire,
-                     bot ? (i + 1) + "P は「" + SlotLabel(v) + "」です。押すと変えられます。" : (i + 1) + "P は空きです。押すとNPCを入れられます。", "seat" + i,
-                     mHost ? "ホスト" : null);
-            }
-            // チーム分け（ホストだけ押せる）。人が居る席とNPCの席だけ並べる
+            for (int i = 0; i < Mathf.Min(4, max); i++) if (i >= players.Count && (Lobby.rnpc[i] ?? "off") != "off") npcN++;
+            OlGrid(st, players, max, host, team, true);
+            // チーム戦は青と赤に1人以上ずつ（チームは行の右の 青／赤）。NPC の人数と1行に
             bool rOne = false;
+            var line = new List<string>();
             if (team)
             {
                 var used = new List<int>();
-                for (int i = 0; i < Mathf.Min(4, max); i++) if (i < players.Count || Lobby.rnpc[i] != "off") used.Add(i);
+                for (int i = 0; i < Mathf.Min(4, max); i++) if (i < players.Count || (Lobby.rnpc[i] ?? "off") != "off") used.Add(i);
                 int n0 = used.FindAll(i => Lobby.rteam[i] == 0).Count, n1 = used.Count - n0;
                 rOne = used.Count > 1 && (n0 == 0 || n1 == 0);
-                if (host && used.Count > 0)
-                {
-                    var r2 = st.Row(36);
-                    float bw = 160, gap = 13, x0 = (1098 - (used.Count * bw + (used.Count - 1) * gap)) / 2;
-                    for (int k = 0; k < used.Count; k++)
-                    {
-                        int i = used[k], t = Lobby.rteam[i];
-                        BtnAt(r2, x0 + k * (bw + gap), 0, bw, 34, (i + 1) + "P：" + (t == 1 ? "赤" : "青"), t == 1 ? "tm1" : "tm0",
-                              () => { Lobby.rteam[i] = 1 - t; Lobby.SendRule(); Go("Wait"); }, null, false, "rt" + i, 14);
-                    }
-                }
-                Note(st, rOne ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください" + (host ? "（上の 1P：青 などを押すと入れ替わります）。" : "。")
-                              : "青 <b>" + n0 + "人</b> 対 赤 <b>" + n1 + "人</b>");
+                line.Add(rOne ? Lang.Tr(host ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（右の 青／赤 を押すと入れ替わります）。" : "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください。")
+                              : Lang.Tr("青 <b>{0}人</b> 対 赤 <b>{1}人</b>", n0, n1));
             }
-            if (npcN > 0) Note(st, "<b>" + (players.Count + npcN) + "人</b>で遊びます（うち<b>" + npcN + "人</b>はNPC）。");
-            Note(st, "<b>ホストが全部計算して、みんなに配ります。</b>始めると、部屋の人数ぶんのロボが出て、いっしょに遊べます。\n<i>途中で入り直すことはできません。</i>");
-            var goB = Btn(st, host ? "始める" : "ホスト待ち", "go", RoomStart, null, false, "go");
-            if (!host || Lobby.rpick == null || rOne) Off(goB);
-            Btn(st, g.InSession ? "部屋を出る" : "戻る", "sec", () =>
-                   {
-                       System.Action leave = () => { Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
-                       if (!g.InSession) { leave(); return; }
-                       // 続きの最中は、抜ける前に確かめる（押し間違えると、みんなの続きがその場で終わる）
-                       ConfirmOpen("部屋を出ますか？", "いま <b>" + g.runDone + "面</b> まで遊んだところです。\n"
-                                   + "出ると、<b>みんなの続きがここで終わります</b>（お金・アイテム・強化もなくなります）。",
-                                   "部屋を出る", "出ない（続ける）", "Wait", leave);
-                   }, null, true);
+            if (npcN > 0) line.Add(Lang.Tr("<b>{0}人</b>で遊びます（うち<b>{1}人</b>はNPC）。", players.Count + npcN, npcN));
+            if (line.Count > 0) Note(st, string.Join("　", line.ToArray()));
+            // 戻ると始めるは横に並べる（ローカルの「キャンセル」「スタート」と同じ並び）。「ホストが全部計算して…」は「始める」の説明（下の帯）へ
+            {
+                var row = st.Row(52, 10);
+                float bw = 400, gap = 22, bx = (st.w - bw * 2 - gap) / 2;
+                BtnAt(row, bx, 9, bw, 36, g.InSession ? "部屋を出る" : "戻る", "sec", () =>
+                {
+                    System.Action leave = () => { Net.LeaveRoom(); g.NpEnd(); Go("Online"); };
+                    if (!g.InSession) { leave(); return; }
+                    // 続きの最中は、抜ける前に確かめる（押し間違えると、みんなの続きがその場で終わる）
+                    ConfirmOpen("部屋を出ますか？", Lang.Tr("いま <b>{0}面</b> まで遊んだところです。<br>出ると、<b>みんなの続きがここで終わります</b>（お金・アイテム・強化もなくなります）。", g.runDone).Replace("<br>", "\n"),
+                                "部屋を出る", "出ない（続ける）", "Wait", leave);
+                }, null, true, "back", 14);
+                var goB = BtnAt(row, bx + bw + gap, 0, bw, 48, host ? "始める" : "ホスト待ち", "go", RoomStart,
+                                "ホストが全部計算して、みんなに配ります。始めると、部屋の人数ぶんのロボが出て、いっしょに遊べます。途中で入り直すことはできません。",
+                                false, "go", 17);
+                if (!host || Lobby.rpick == null || rOne) Off(goB);
+            }
         }
 
         List<string[]> SeatOpts()

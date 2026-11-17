@@ -18,8 +18,10 @@ namespace Nekorobo
         static CanvasGroup cg;
         static int shownAt = -10;
 
-        /// <summary>target を囲む。sub … target の中の範囲だけ囲む（target の左上からの px。HTML版 data-fr）</summary>
-        public static void Show(RectTransform target, float tan, bool box, Rect? sub = null)
+        /// <summary>target を囲む。sub … target の中の範囲だけ囲む（target の左上からの px。HTML版 data-fr）。
+        /// widen … target の箱はまっすぐで、絵がその箱を真ん中を軸に傾けた形（タイトルのボタン）。傾けたぶん箱を横へ広げてから囲む
+        /// （HTML版は傾けた要素の外接の箱を測るので同じになる）。板の絵のボタン（箱はまっすぐで絵が斜め）は広げない</summary>
+        public static void Show(RectTransform target, float tan, bool box, Rect? sub = null, bool widen = false)
         {
             if (target == null || !target.gameObject.activeInHierarchy) { Hide(); return; }
             var canvas = target.GetComponentInParent<Canvas>();
@@ -39,6 +41,7 @@ namespace Nekorobo
                 var s = sub.Value;
                 left += s.x * k; top -= s.y * k; w = s.width * k; h = s.height * k;
             }
+            if (widen && !box) { float ex = Mathf.Abs(tan) * h; left -= ex / 2; w += ex; }
             float pad = Mathf.Clamp(h * 0.08f, 4, 9);                       // ボタンから少し離す
             float W = w + pad * 2, H = h + pad * 2;
             fr.sizeDelta = new Vector2(W, H);

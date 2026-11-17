@@ -627,7 +627,7 @@ namespace Nekorobo
                 l |= gp.dpad.left.isPressed; r |= gp.dpad.right.isPressed; u |= gp.dpad.up.isPressed; d |= gp.dpad.down.isPressed;
                 ok |= gp.buttonSouth.isPressed; lb |= gp.leftShoulder.isPressed; rb |= gp.rightShoulder.isPressed;
             }
-            if ((l && !pL) || (r && !pR) || (u && !pU) || (d && !pD)) Ptr.Hide();
+            Nav.Apply(ref u, ref d, ref l, ref r);
             // 札：LB / RB はいつでも。↑で札の段へ入ると ← → で替わる、↓でボタンへ戻る
             if (lb && !pLB) SetTab(tab - 1);
             if (rb && !pRB) SetTab(tab + 1);
@@ -653,6 +653,8 @@ namespace Nekorobo
                 for (int k = 0; k < 4; k++)
                     if (tabRt[k] != null && RectTransformUtility.RectangleContainsScreenPoint(tabRt[k], mp, null)) { SetTab(k); break; }
             }
+            // 選んでいる物を選択枠で囲む（ラウンド詳細の札は傾きが小さい）
+            if (onTabs && tabRt[tab] != null) SelFrame.Show(tabRt[tab], -0.15f, false); else SelFrame.Show(btnRt[cur], -0.35f, false);
             if (fire) { Game.SeUi("ok"); b1[cur].color = Color.white; goT = 0; }
         }
     }

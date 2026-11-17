@@ -5,7 +5,10 @@ using UnityEngine.UI;
 namespace Nekorobo
 {
     /// <summary>
-    /// 指カーソル。JS版の PTR（ptrTick / ptrShow / ptrHide）を写したもの。
+    /// マウスの所（メニューの画面）。**スティックで動く指はやめた**（HTML版 11/17。担当「ショップ・面選択・ユーザー選択以外は
+    /// マウスカーソル無し。選択枠有りのスティック・十字キーで選択」）。スティックは十字キーと同じく選択枠を1つずつ動かす（Nav）。
+    /// マウスはふつうのカーソルで押す（Steam 版。担当「通常のマウスカーソルはあってボタンをクリックできても良い」）。
+    /// 下は前の説明（指カーソル。JS版の PTR を写したもの）：
     ///
     /// **スティックでマウスのように動かす指。**十字キーは今までどおり「1つずつ移す」。
     /// 指が乗った物を「選んでいる物」にするだけで、決定は各画面の今までの処理（A・Enter）が拾う。
@@ -38,7 +41,8 @@ namespace Nekorobo
             bool fresh = usedFrame < Time.frameCount - 1;      // 開いたばかり（前のフレームは使っていない）
             usedFrame = Time.frameCount;
             Moved = false;
-            FingerCursor(true);
+            FingerCursor(false);                                    // ふつうのマウスのカーソル
+            Cursor.visible = true;
 
             var ms = Mouse.current;
             if (ms != null)
@@ -59,6 +63,7 @@ namespace Nekorobo
             }
             if (Mathf.Abs(s.x) <= DEAD) s.x = 0;
             if (Mathf.Abs(s.y) <= DEAD) s.y = 0;
+            s = Vector2.zero;                                       // スティックは選択枠（Nav）が使う。指は動かさない
             if (s.x != 0 || s.y != 0)
             {
                 if (!On)

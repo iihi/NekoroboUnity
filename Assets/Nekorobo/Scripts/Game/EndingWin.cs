@@ -109,7 +109,7 @@ namespace Nekorobo
             bool l = false, r = false, ok = false;
             if (kb != null) { l = kb.leftArrowKey.isPressed || kb.upArrowKey.isPressed; r = kb.rightArrowKey.isPressed || kb.downArrowKey.isPressed; ok = kb.enterKey.isPressed || kb.spaceKey.isPressed; }
             foreach (var gp in Gamepad.all) { l |= gp.dpad.left.isPressed; r |= gp.dpad.right.isPressed; ok |= gp.buttonSouth.isPressed; }
-            if ((l && !pL) || (r && !pR)) Ptr.Hide();
+            { bool u0 = false, d0 = false; Nav.Apply(ref u0, ref d0, ref l, ref r); l |= u0; r |= d0; }
             if (l && !pL) Focus(cur - 1);
             if (r && !pR) Focus(cur + 1);
             if (!ok) armed = true;
@@ -126,6 +126,7 @@ namespace Nekorobo
                 for (int k = 0; k < 2; k++)
                     if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null)) { Focus(k); fire = true; }
             }
+            SelFrame.Show(btnRt[cur], -0.35f, false);                      // 選んでいるボタンを選択枠で囲む
             if (fire) { Game.SeUi("ok"); b1[cur].color = Color.white; goT = 0; }
         }
     }

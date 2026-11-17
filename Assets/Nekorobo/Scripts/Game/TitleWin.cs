@@ -50,12 +50,13 @@ namespace Nekorobo
             public RectTransform anim; public float bob, scale = 1; public int grid = -1;
             // 選択枠の形（SelFrame）。frameTan … 斜めのボタンの傾き（高さ1あたりの横のずれ。マイナスは上が右）、frameBox … 角丸の四角、
             // frameSub … ボタンの中のその範囲だけ囲む（HTML版 data-fr）、frameNone … 出さない
-            public float frameTan; public bool frameBox, frameNone; public Rect? frameSub;
+            public float frameTan; public bool frameBox, frameNone, frameWiden; public Rect? frameSub;
             // 板の画面（設定・実績）：onFocus … キー・パッドで乗ったらすぐ動く（札）、grp・on … 札の並びと、いま選んである札、
             // vadj … ↑↓で中を送る（送れたら true）、backFn … B でこのボタンだけの戻り方、hold … マウスで押している間、wheel … ホイール
             public System.Action onFocus; public string grp; public bool on;
             public System.Func<int, bool> vadj; public System.Action backFn;
             public System.Action<Vector2> hold; public System.Action<int> wheel;
+            public System.Action<string> devFire;      // ユーザー選択（ローカル）：押した指（key・pad0〜3）ごとの働き
         }
         readonly List<Item> items = new List<Item>();
         int idx;
@@ -146,7 +147,7 @@ namespace Nekorobo
             Go(pg ?? "Top");
         }
 
-        public void Close() { Open = false; root.gameObject.SetActive(false); SsClose(); BoardHide(); }
+        public void Close() { Open = false; root.gameObject.SetActive(false); SsClose(); BoardHide(); LocClose(); }
 
         // ================================================================ ページ
         void Go(string pg)
@@ -173,6 +174,7 @@ namespace Nekorobo
                 return;
             }
             BoardHide();
+            if (pg != "Local") LocClose();               // ユーザー選択の人ごとの指は、ほかの画面へ行ったら畳む
             // 同じ画面の描き直し（部屋サーバーの知らせ）なら、カーソルを同じボタンへ戻す
             bool redraw = pg == page && Open && items.Count > 0;
             string keepKey = redraw && idx < items.Count ? items[idx].key : null;
@@ -333,69 +335,6 @@ namespace Nekorobo
                 Tile("協力", "green", "coop", () => pk("coop"), "全員でお店ひとつ。みんなで利益を上げます。", "coop"));
             Btn(st, "戻る", "sec", () => Go(toMake ? "Private" : "Multi"), null, true);
             return toMake ? Lobby.mode : mode;
-        }
-
-        void PageLocal(Stack st)
-        {
-            bool team = mode == "team";
-            int pads = Gamepad.all.Count;
-            Head(st, Lang.Tr("ローカル　{0}", Lang.Tr(Game.ModeName(mode))));
-            Note(st, Lang.Tr("枠を押すと、キーボード・パッド・NPCを選べます。")
-                   + (pads > 0 ? Lang.Tr("パッドは <b>{0}台</b> つながっています。", pads) : Lang.Tr("パッドは未接続です（つないでボタンを1回押すと出ます）。")));
-            // 1P〜4Pの札（色は足元のリングと同じ並び）
-            var row = st.Row(92);
-            float sw = (1098 - 3 * 10) / 4f;
-            for (int i = 0; i < 4; i++)
-            {
-                int ii = i; var v = slots[i];
-                string col = v == "off" ? "grey" : team ? (teams[i] == 1 ? "red" : "blue") : SEAT_COL[i];
-                Seat(row, i * (sw + 10), sw, (i + 1) + "P" + (team && v != "off" ? "・" + Game.TEAM_NAME[teams[i]] : ""),
-                     SlotIc(v), SlotLabel(v) + PadHint(v), col,
-                     () => PickOpen(Lang.Tr("{0}P を選ぶ", ii + 1), "同じパッドを2人に割り当てたときは、あとの枠が外れます。",
-                                    SlotOptsWithHint(), v, "Local", x => slots[ii] = x),
-                     Lang.Tr("{0}P は「{1}」です。押すと、キーボード・パッド・NPCから選べます。", i + 1, Lang.Tr(SlotLabel(v))), "s" + i);
-            }
-            var live = Live();
-            int n0 = live.FindAll(s => s.team == 0).Count, n1 = live.FindAll(s => s.team == 1).Count;
-            bool oneSide = team && live.Count > 0 && (n0 == 0 || n1 == 0);
-            // チーム分け。使う枠だけ並べる。押すと青と赤が入れ替わる
-            if (team)
-            {
-                var bs = new List<System.Action<RectTransform, float, float>>();
-                var tb = new List<int>();
-                for (int i = 0; i < 4; i++) if (slots[i] != "off") tb.Add(i);
-                if (tb.Count > 0)
-                {
-                    var r2 = st.Row(36);
-                    float bw = 160, gap = 13, x0 = (1098 - (tb.Count * bw + (tb.Count - 1) * gap)) / 2;
-                    for (int k = 0; k < tb.Count; k++)
-                    {
-                        int i = tb[k], t = teams[i];
-                        BtnAt(r2, x0 + k * (bw + gap), 0, bw, 34, (i + 1) + "P：" + (t == 1 ? "赤" : "青"), t == 1 ? "tm1" : "tm0",
-                              () => { teams[i] = 1 - t; Go("Local"); }, null, false, "t" + i, 14);
-                    }
-                }
-            }
-            Btn(st, Lang.Tr("ルール：{0}　▾", Lang.Tr(Game.ModeName(mode))), "sec", () => PickOpen("ルールを選ぶ", null, new List<string[]>
-            {
-                new[] { "versus", "個人戦（売上も修理費も個人ごと）", "versus" },
-                new[] { "team", "チーム戦（青と赤。売上も修理費もチームごと）", "team" },
-                new[] { "coop", "協力（売上も修理費も店舗ぜんぶ）", "coop" },
-            }, mode, "Local", x => mode = x), null, false, "mode");
-            {
-                var opts = new List<string[]> { new[] { "0", Game.LenName(0), "free" } };
-                foreach (var n in Game.MATCH_LENS) opts.Add(new[] { n.ToString(), Game.LenName(n), "cup" });
-                Btn(st, Lang.Tr("遊び方：{0}　▾", Game.LenName(rounds)), "sec",
-                    () => PickOpen("遊び方を選ぶ", null, opts, rounds.ToString(), "Local", x => rounds = int.Parse(x)), null, false, "len");
-            }
-            Note(st, live.Count == 0 ? "枠が全部「なし」です。1つ以上選んでください。"
-                   : oneSide ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（上の 1P：青 などを押すと入れ替わります）。"
-                   : team ? Lang.Tr("<b>{0}人</b>（{1}）　青 <b>{2}人</b> 対 赤 <b>{3}人</b>で遊びます。次の画面で面を選びます。",
-                                    live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), n0, n1)
-                   : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray())));
-            BtnRow(st, new[] { "面を選ぶ ▶", "戻る" }, new[] { "go", "sec" },
-                   new System.Action[] { () => { from = "Local"; next = false; Go("Free"); }, () => Go("Len") },
-                   new[] { live.Count == 0 || oneSide, false });
         }
 
         string PagePick(Stack st)
@@ -694,6 +633,8 @@ namespace Nekorobo
             if (!Open || SS.open) return;            // ステージ選択の間は、そちらが入力を見る（SsTick）
             MmTick();                                // 自動マッチング
             if (goLater != null) { var pg = goLater; goLater = null; Go(pg); }
+            if (page == "Local") { LocTick(dt); return; }   // ユーザー選択（ローカル）は人ごとの指（TitleWin.Local.cs）
+            OlSpinTick(dt);
             if (lockT > 0) lockT -= dt;
             var kb = Keyboard.current;
             bool up = false, down = false, left = false, right = false, ok = false, back = false;
@@ -718,6 +659,7 @@ namespace Nekorobo
                 ok |= gp.buttonSouth.isPressed; back |= gp.buttonEast.isPressed;
                 tabL |= gp.leftShoulder.isPressed; tabR |= gp.rightShoulder.isPressed;    // LB / RB … 札（タブ）を替える（設定・実績）
             }
+            Nav.Apply(ref up, ref down, ref left, ref right);          // スティックも1つずつ。押し続けたら続けて動く
             bool board = IsBoard(page) && cfgB != null && cfgB.Active;
             if (board)
             {
@@ -775,7 +717,7 @@ namespace Nekorobo
             if (Ptr.Moved)
             {
                 int hi = HitAt(Ptr.Pos);
-                if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi);
+                if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi, true);
             }
             var ms = Mouse.current;
             if (ms != null)
@@ -799,6 +741,7 @@ namespace Nekorobo
                 it.anim.anchoredPosition = new Vector2(0, -bob);
                 it.anim.localScale = Vector3.one * (on ? it.scale : 1f);
             }
+            ShowFrame();
         }
 
         bool pTabL, pTabR;
@@ -807,7 +750,7 @@ namespace Nekorobo
         {
             if (idx >= items.Count || items[idx].frameNone || items[idx].rt == null) { SelFrame.Hide(); return; }
             var it = items[idx];
-            SelFrame.Show(it.rt, it.frameTan, it.frameBox, it.frameSub);
+            SelFrame.Show(it.anim != null ? it.anim : it.rt, it.frameTan, it.frameBox, it.frameSub, it.frameWiden);   // 選んでいる物は少し浮くので、その動きに付いていく
         }
 
         void Remember(bool up, bool down, bool left, bool right, bool ok, bool back)
@@ -1042,7 +985,7 @@ namespace Nekorobo
         void BigTile(RectTransform row, float x, float w, float h, TileSpec t, int n)
         {
             var c = TC[t.col];
-            var it = new Item { fire = t.fire, desc = t.desc, key = t.key, off = t.off, bob = 5, scale = 1.04f };
+            var it = new Item { fire = t.fire, desc = t.desc, key = t.key, off = t.off, bob = 5, scale = 1.04f, frameTan = -0.158f, frameWiden = true };
             var clip = n == 0 ? CLIP_TILE_L : CLIP_TILE_R;
             var hold = UiKit.Rect(row, "Tile_" + t.key);
             hold.anchorMin = hold.anchorMax = new Vector2(0, 1); hold.pivot = new Vector2(0, 1);
@@ -1051,7 +994,7 @@ namespace Nekorobo
             RectTransform pr;
             var img = Panel(anim, w, h, -9, clip, Mats.Hex(c[0]), Mats.Hex(c[1]), 152, 0.13f, new Color(1, 1, 1, 0.95f), 3, Mats.Hex(c[2]), 7, "Bg", out pr);
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.pivot = new Vector2(0.5f, 0.5f); pr.anchoredPosition = new Vector2(0, -3.5f);
-            var foc = Panel(anim, w, h, -9, clip, Brighten(Mats.Hex(c[0])), Brighten(Mats.Hex(c[1])), 152, 0.13f, GOLD, 3, Mats.Hex(c[2]), 7, "Foc", out var fr);
+            var foc = Panel(anim, w, h, -9, clip, Brighten(Mats.Hex(c[0])), Brighten(Mats.Hex(c[1])), 152, 0.13f, new Color(1, 1, 1, 0.95f), 3, Mats.Hex(c[2]), 7, "Foc", out var fr);
             fr.anchorMin = fr.anchorMax = new Vector2(0.5f, 0.5f); fr.pivot = new Vector2(0.5f, 0.5f); fr.anchoredPosition = new Vector2(0, -3.5f);
             float t9 = Mathf.Tan(9 * Mathf.Deg2Rad);
             var fl = FocusLine(anim, w, h, -9, 5);
@@ -1065,21 +1008,21 @@ namespace Nekorobo
             var sh = lb.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.4f); sh.effectDistance = new Vector2(0, -3);
             it.rt = hold; it.anim = anim;
             var cg = hold.gameObject.AddComponent<CanvasGroup>(); cg.alpha = t.off ? 0.45f : 1f;
-            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(on); if (on) hold.SetAsLastSibling(); };
+            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(false); if (on) hold.SetAsLastSibling(); };
             items.Add(it);
         }
 
         void WideTile(RectTransform row, float x, float w, float h, TileSpec t)
         {
             var c = TC[t.col];
-            var it = new Item { fire = t.fire, desc = t.desc, key = t.key, off = t.off, bob = 5, scale = 1.04f };
+            var it = new Item { fire = t.fire, desc = t.desc, key = t.key, off = t.off, bob = 5, scale = 1.04f, frameTan = -0.158f, frameWiden = true };
             var hold = UiKit.Rect(row, "Wide_" + t.key);
             hold.anchorMin = hold.anchorMax = new Vector2(0, 1); hold.pivot = new Vector2(0, 1);
             hold.anchoredPosition = new Vector2(x, 0); hold.sizeDelta = new Vector2(w, h);
             var anim = UiKit.Rect(hold, "Anim"); UiKit.Stretch(anim);
             var img = Panel(anim, w, h, -9, CLIP_WIDE, Mats.Hex(c[0]), Mats.Hex(c[1]), 152, 0.13f, new Color(1, 1, 1, 0.95f), 3, Mats.Hex(c[2]), 7, "Bg", out var pr);
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.anchoredPosition = new Vector2(0, -3.5f);
-            var foc = Panel(anim, w, h, -9, CLIP_WIDE, Brighten(Mats.Hex(c[0])), Brighten(Mats.Hex(c[1])), 152, 0.13f, GOLD, 3, Mats.Hex(c[2]), 7, "Foc", out var fr);
+            var foc = Panel(anim, w, h, -9, CLIP_WIDE, Brighten(Mats.Hex(c[0])), Brighten(Mats.Hex(c[1])), 152, 0.13f, new Color(1, 1, 1, 0.95f), 3, Mats.Hex(c[2]), 7, "Foc", out var fr);
             fr.anchorMin = fr.anchorMax = new Vector2(0.5f, 0.5f); fr.anchoredPosition = new Vector2(0, -3.5f);
             var fl = FocusLine(anim, w, h, -9, 5);
             // 絵と字を横に並べてまん中へ
@@ -1090,7 +1033,7 @@ namespace Nekorobo
             var sh = lb.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.4f); sh.effectDistance = new Vector2(0, -3);
             it.rt = hold; it.anim = anim;
             var cg = hold.gameObject.AddComponent<CanvasGroup>(); cg.alpha = t.off ? 0.45f : 1f;
-            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(on); if (on) hold.SetAsLastSibling(); };
+            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(false); if (on) hold.SetAsLastSibling(); };
             items.Add(it);
         }
 
@@ -1145,14 +1088,14 @@ namespace Nekorobo
                 case "pk": top = Mats.Hex(0x6a5a2a); bot = Mats.Hex(0x463a16); edge = Mats.Hex(0x241d09); clip = CLIP_PICK; break;
                 default: top = Mats.Hex(0x39445a); bot = Mats.Hex(0x222a3a); edge = Mats.Hex(0x0d1220); if (key != null && key.StartsWith("o")) clip = CLIP_PICK; break;
             }
-            var it = new Item { fire = fire, desc = desc, back = back, key = key, bob = 3, scale = 1f };
+            var it = new Item { fire = fire, desc = desc, back = back, key = key, bob = 3, scale = 1f, frameTan = -0.105f, frameWiden = true };
             var hold = UiKit.Rect(row, "Btn_" + key);
             hold.anchorMin = hold.anchorMax = new Vector2(0, 1); hold.pivot = new Vector2(0, 1);
             hold.anchoredPosition = new Vector2(x, -y); hold.sizeDelta = new Vector2(w, h);
             var anim = UiKit.Rect(hold, "Anim"); UiKit.Stretch(anim);
             var img = Panel(anim, w, h, -6, clip, top, bot, 180, 0.10f, new Color(1, 1, 1, 0.95f), 3, edge, 4, "Bg", out var pr);
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0.5f); pr.anchoredPosition = new Vector2(0, -2);
-            var foc = Panel(anim, w, h, -6, clip, Brighten(top), Brighten(bot), 180, 0.10f, GOLD, 3, edge, 4, "Foc", out var fr);
+            var foc = Panel(anim, w, h, -6, clip, Brighten(top), Brighten(bot), 180, 0.10f, new Color(1, 1, 1, 0.95f), 3, edge, 4, "Foc", out var fr);
             fr.anchorMin = fr.anchorMax = new Vector2(0.5f, 0.5f); fr.anchoredPosition = new Vector2(0, -2);
             var fl = FocusLine(anim, w, h, -6, 4);
             var lb = UiKit.Label(anim, label, fs, Color.white, true, TextAnchor.MiddleCenter);
@@ -1160,7 +1103,7 @@ namespace Nekorobo
             UiKit.Stretch(lb.rectTransform);
             var sh = lb.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.3f); sh.effectDistance = new Vector2(0, -2);
             it.rt = hold; it.anim = anim;
-            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(on); if (on) hold.SetAsLastSibling(); };
+            it.look = on => { foc.gameObject.SetActive(on); img.gameObject.SetActive(!on); fl.SetActive(false); if (on) hold.SetAsLastSibling(); };
             // ラベルを Find で引けるように、ボタンの直下にも名前を置く
             lb.transform.SetParent(hold, true);
             items.Add(it);
@@ -1171,7 +1114,7 @@ namespace Nekorobo
         void Seat(RectTransform row, float x, float w, string pn, string ic, string label, string col, System.Action fire, string desc, string key, string tag = null)
         {
             var c = TC[col];
-            var it = new Item { fire = fire, desc = desc, key = key, bob = 3, scale = 1f };
+            var it = new Item { fire = fire, desc = desc, key = key, bob = 3, scale = 1f, frameBox = true };
             var hold = UiKit.Rect(row, "Seat_" + key);
             hold.anchorMin = hold.anchorMax = new Vector2(0, 1); hold.pivot = new Vector2(0, 1);
             hold.anchoredPosition = new Vector2(x, 0); hold.sizeDelta = new Vector2(w, 92);
@@ -1204,7 +1147,7 @@ namespace Nekorobo
         /// <summary>面のマス（見取り図の上に名前）。選んである面は金、指が乗っている面は白で囲う。</summary>
         Item ThumbBtn(RectTransform row, float x, float y, float w, float h, FreeE e, string name, bool picked, System.Action fire, string key, bool off)
         {
-            var it = new Item { fire = fire, key = key, off = off };
+            var it = new Item { fire = fire, key = key, off = off, frameBox = true };
             var hold = UiKit.Rect(row, "Thumb_" + key);
             hold.anchorMin = hold.anchorMax = new Vector2(0, 1); hold.pivot = new Vector2(0, 1);
             hold.anchoredPosition = new Vector2(x, -y); hold.sizeDelta = new Vector2(w, h);

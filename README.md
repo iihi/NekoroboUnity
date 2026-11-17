@@ -201,6 +201,9 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Items.cs` | アイテム・爆風・財布（JS版 ITEMS / UPGRADES と同じ値） |
 | `Scripts/Game/Game.Shop.cs` | 値段と買う処理・NPC の裏の買い物・面の送り（JS版 afterResult / nextStage / buyUpgrade / buyItem / npcShop） |
 | `Scripts/Game/TitleWin.cs` | タイトルとメニュー（JS版 TITLE_PAGE。斜めの板は CSS と同じ形を絵にして描く） |
+| `Scripts/Game/TitleWin.Board.cs` | 設定（CONFIG）と実績（ACHIEVEMENT）の画面。清書1111 の板（HTML版 setDraw・achDraw。絵は HTML版の assets/ui/cfg・ach）。札は LB / RB、上下左右は画面の上の位置で隣のボタンへ。設定はサウンド（棒。← → で 10%・マウスは押した所）・言語（5つ）・操作説明（コントローラー／キーボード）・著作権表示。実績は札を選ぶと中身が替わり、決定で一覧へ（B で札へ、もう一度 B でもどる） |
+| `Scripts/Game/TitleWin.Local.cs` | ユーザー選択（仮。担当の画面案）。ローカルは 1P〜4P の行に「参加」「NPC」と、コントローラーごと（キーボードも1つ）の指（参加すると「1P」などの札）。オンライン（部屋の待機・自動マッチング）も同じ行で「OK」／回る印と「接続中…」（HTML版 olGrid）。ホストは行の右で空いた席に NPC を入れる |
+| `Scripts/Game/SelFrame.cs` / `Nav.cs` | 選択枠（HTML版 selFrame）：選んでいるボタンを黄色い2重の枠で囲む（斜めのボタンは平行四辺形、ほかは角丸の四角）。Nav：スティックも十字キーと同じく1つずつ動かし、押し続けると 0.38 秒待ってから 0.12 秒ごとに送る。ショップ・面選択・ユーザー選択以外の画面はこれ（指は出さない。マウスはふつうのカーソル） |
 | `Scripts/Game/Thumb.cs` | 面の見取り図（JS版 thumb.js） |
 | `Scripts/Game/ResultWin.cs` | 結果の画面（順位・準備OK） |
 | `Scripts/Game/StoryUi.cs` / `Game.Story.cs` | 会話・遊んでいる間の案内（hints）と矢印（画面に重ねる平面の⇩）・出来事への店主のひとこと（面とコースの react。hit:guest / hit:furni / hit:car / hit:train と until と同じ条件）・「STAGE CLEAR!」・続きから |
@@ -208,7 +211,7 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/EndingWin.cs` | エンディング（全ステージ終了） |
 | `Resources/Shaders/Overlay.shader` | 何にも隠れずに手前へ描く色だけのシェーダー（案内の矢印） |
 | `Scripts/Game/PostFx.cs`・`Resources/Shaders/Finish.shader` | 仕上げの処理（JS版 CAM.post の露出・ブルーム・トーンマッピング）。URP のポストエフェクトは式が違うので使わず、同じ式を描画の最後に差し込む |
-| `Scripts/Game/Ptr.cs` | メニューの指カーソル（JS版 PTR / ptrTick）。スティックで動かし、乗った物を選ぶ。メニューの間はマウスのカーソルも指の絵（絵は Tools/shop_icons/ptr_icon.mjs で作る） |
+| `Scripts/Game/Ptr.cs` | メニューのマウスの所。**スティックで動く指はやめた**（HTML版 11/17。スティックは選択枠を動かす）。マウスはふつうのカーソルで、乗った物を選ぶ。ショップ・面選び・ユーザー選択（人ごとの指の画面）は本物のカーソルを消す（NoCursor） |
 | `Scripts/Game/ShopWin.cs` | 強化ショップの画面と指カーソル（JS版 #shopwin。位置と大きさは CSS と同じ数値） |
 | `Resources/Ui/*.png` | 品物の絵・指・店主とロボの顔・タイトルの板の絵（`Ui/Title`）。HTML版の SVG を Chrome で PNG にした物（作り方は `Tools/shop_icons`）。上の帯の絵は `Ui/Hud`（`Tools/shop_icons/hud_icons.mjs` が HTML版の H2_ICONS から作る） |
 | `Scripts/Game/Game.Npc.cs` | NPC（JS版 NPC_LV・findPath・driveNpc）。道探しに教えるマス（動く床・いかだ・置き物）と、通りにくいマス（家具とそのまわり。JS版 npcAvoidMap、強さは T.npcAvoid） |
@@ -225,7 +228,9 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.NetSync.cs` | ゲーム中の同期（JS版 npPayload / npApply / npSendInput）と、結果・ショップの便り。物は面を組んだ順の通し番号（nid）で指す |
 | `Editor/NetReset.cs` | 再生を止めるとき・コンパイルし直す前に、通信を畳む |
 | `Scripts/Game/HudBar.cs` | 上の帯（清書 1020。JS版 #hud2）。絵は HTML版の `assets/ui/hud/`（面の札・人の札・HP・アイテム・順位・クロッシュ）、座標は PSD の 1280×720 のまま。人の札は 263px おきで前の人が上。字は変わる物だけ重ねる。金額は増えたときだけ数え上げて跳ねる |
-| `Scripts/Game/Game.Ach.cs` / `AchToast.cs` | 実績（JS版 ACHS など。39個＋準備中1つ）。取ったら画面の下にメダルと★の知らせ。記録は PlayerPrefs の nekorobo.ach（JS版と同じ形）。タイトルの「実績」に一覧（仕分けの札・★2・★3 は取るまで？？？） |
+| `Scripts/Game/Game.Ach.cs` / `AchToast.cs` | 実績（JS版 ACHS など。39個＋準備中1つ）。取ったら画面の下に清書1111 の「実績獲得」の帯（左から飛び込み、光が広がり、帯に光が走り、★が1つずつ付く）。記録は PlayerPrefs の nekorobo.ach（JS版と同じ形）。一覧はタイトルの「実績」（TitleWin.Board.cs） |
+| `Scripts/Game/Game.TutHelp.cs` | 研修（ストーリー）の手助け：水に1秒落ちていたら店主がひとこと言ってクレーンで引き上げる（タダ）、故障・体力0%は100%まで直す（遊んでいる人だけ・オンラインでは出さない） |
+| `Editor/LangFontSync.cs` | 中国語・韓国語の書体（HTML版 assets/fonts の Noto Sans SC・TC・KR。使う字だけに削った物）を Resources/Fonts へ写す（開いた時・メニュー「Nekorobo/言語の書体を写し直す」）。その言語では字を全部その書体で出す（Fonts.ForLang） |
 | `Scripts/Net/EosAch.cs` | 実績を EOS の実績にも送る（Connect の端末IDでログイン、ログイン時に端末の記録と合わせる）。Dev Portal での登録は `Tools/eos_achievements/README.md` |
 | `Scripts/Game/FinalWin.cs` | ラウンドマッチの最終結果（JS版 showFinal）。清書1113（HTML版の assets/ui/fin。tools/psd/cut1113.py）。個人戦は表彰台（台の上のロボは、それぞれの機体を層31だけ映すカメラでその場で撮る。1位は笑顔）と4位・リタイアの行、チーム戦は WIN／LOSE、1人・協力は合計の利益。右は「ラウンド詳細」：累積売上・ラウンド売上（どちらも順位と同じ利益で描く）・店舗ダメージ・昇天数の札のグラフと、王冠の帯のひとこと。札は LB / RB・↑で札の段へ入って ← →・クリック |
 | `Scripts/Game/Game.Emote.cs` | 煽り（JS版 emoTick など）。L2・Q／R2・E の板と右スティック・X / C で選び、頭の上にフキダシ。絵文字は `Resources/Ui/Emo` の PNG（Chrome で描いた物）。オンラインはホストが配る |
