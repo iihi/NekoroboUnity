@@ -858,7 +858,7 @@ namespace Nekorobo
 
         // ================================================================ 設定（JS版 TITLE_PAGE.Settings）
         // タイトル・バージョン・コピーライトは決まったらここを書き換える（JS版 GAME_INFO）
-        public const string GAME_TITLE = "爆配！ネコロボ！", GAME_VER = "0.1.0", GAME_COPY = "© 2026 （会社名）  All Rights Reserved.";
+        public const string GAME_TITLE = "爆配！ネコロボ！", GAME_VER = "1.0.0", GAME_COPY = "© 2027 SERIALGAMES Inc. All Rights Reserved.";   // 年号と会社名はクレジットと同じ（HTML版 GAME_INFO）
         static int achTab;
         // 著作権表示（この版で使っている物）
         static readonly string[][] LICENSES =
