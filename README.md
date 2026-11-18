@@ -201,9 +201,9 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Items.cs` | アイテム・爆風・財布（JS版 ITEMS / UPGRADES と同じ値） |
 | `Scripts/Game/Game.Shop.cs` | 値段と買う処理・NPC の裏の買い物・面の送り（JS版 afterResult / nextStage / buyUpgrade / buyItem / npcShop） |
 | `Scripts/Game/TitleWin.cs` | タイトルとメニュー（JS版 TITLE_PAGE。斜めの板は CSS と同じ形を絵にして描く） |
-| `Scripts/Game/TitleWin.Board.cs` | 設定（CONFIG）と実績（ACHIEVEMENT）の画面。清書1111 の板（HTML版 setDraw・achDraw。絵は HTML版の assets/ui/cfg・ach）。札は LB / RB、上下左右は画面の上の位置で隣のボタンへ。設定はサウンド（棒。← → で 10%・マウスは押した所）・言語（5つ）・操作説明（コントローラー／キーボード）・著作権表示。実績は札を選ぶと中身が替わり、決定で一覧へ（B で札へ、もう一度 B でもどる） |
+| `Scripts/Game/TitleWin.Board.cs` | 設定（CONFIG）と実績（ACHIEVEMENT）の画面。清書1111 の板（HTML版 setDraw・achDraw。絵は HTML版の assets/ui/cfg・ach）。札は LB / RB、上下左右は画面の上の位置で隣のボタンへ。設定はサウンド（棒。← → で 10%・マウスは押した所）・言語（5つ）・操作説明（コントローラー／キーボード）・著作権表示（上は動かず、一覧は上下に送る箱。↑↓・ホイール・右の棒）。札から ↓ はその札の中身の最初のボタンへ、← → は同じ段の中だけ、いちばん下の段で ↓ はもう一方へ。左下の「CREDITS」で黒い幕の上にスタッフロールを流す（credits.json。最後の「開発・販売」から下は、上が抜けきってから真ん中で止まる。右下の「もどる」・B・Esc でいつでも戻る）。実績は札を選ぶと中身が替わり、決定で一覧へ（B で札へ、もう一度 B でもどる） |
 | `Scripts/Game/TitleWin.Local.cs` | ユーザー選択（仮。担当の画面案）。ローカルは 1P〜4P の行に「参加」「NPC」と、コントローラーごと（キーボードも1つ）の指（参加すると「1P」などの札）。オンライン（部屋の待機・自動マッチング）も同じ行で「OK」／回る印と「接続中…」（HTML版 olGrid）。ホストは行の右で空いた席に NPC を入れる |
-| `Scripts/Game/SelFrame.cs` / `Nav.cs` | 選択枠（HTML版 selFrame）：選んでいるボタンを黄色い2重の枠で囲む（斜めのボタンは平行四辺形、ほかは角丸の四角）。Nav：スティックも十字キーと同じく1つずつ動かし、押し続けると 0.38 秒待ってから 0.12 秒ごとに送る。ショップ・面選択・ユーザー選択以外の画面はこれ（指は出さない。マウスはふつうのカーソル） |
+| `Scripts/Game/SelFrame.cs` / `Nav.cs` | 選択枠（HTML版 selFrame）：選んでいるボタンを、清書1111 の「選択」の絵（HTML版 assets/ui/sel の skew.png・box.png）で囲む。斜めのボタンは角と斜めの辺を伸ばさず上下の辺だけ伸ばし、傾きの違うボタンはずらして同じ傾きに。板の上の絵のボタンは PSD の札と枠の位置の差で置く。四角いボタンは角を残して伸ばす。メッシュで描く（線の太さは PSD のまま）。Nav：スティックも十字キーと同じく1つずつ動かし、押し続けると 0.38 秒待ってから 0.12 秒ごとに送る。ショップ・面選択・ユーザー選択以外の画面はこれ（指は出さない。マウスはふつうのカーソル） |
 | `Scripts/Game/Thumb.cs` | 面の見取り図（JS版 thumb.js） |
 | `Scripts/Game/ResultWin.cs` | 結果の画面（順位・準備OK） |
 | `Scripts/Game/StoryUi.cs` / `Game.Story.cs` | 会話・遊んでいる間の案内（hints）と矢印（画面に重ねる平面の⇩）・出来事への店主のひとこと（面とコースの react。hit:guest / hit:furni / hit:car / hit:train と until と同じ条件）・「STAGE CLEAR!」・続きから |

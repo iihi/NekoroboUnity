@@ -126,7 +126,7 @@ namespace Nekorobo
                 for (int k = 0; k < 2; k++)
                     if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], mp, null)) { Focus(k); fire = true; }
             }
-            SelFrame.Show(btnRt[cur], -0.35f, false);                      // 選んでいるボタンを選択枠で囲む
+            SelFrame.Show(btnRt[cur], -0.35f, false, img: true);                      // 選んでいるボタンを選択枠で囲む
             if (fire) { Game.SeUi("ok"); b1[cur].color = Color.white; goT = 0; }
         }
     }

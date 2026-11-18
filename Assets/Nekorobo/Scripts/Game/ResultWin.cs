@@ -374,7 +374,7 @@ namespace Nekorobo
             }
             if (redraw) Refresh();
             // 1人のときは「ショップへ」ボタンを選択枠で囲む（同じ画面で2人以上は各自のボタンなので出さない）
-            if (!multi && btnRt != null) SelFrame.Show(btnRt, -0.35f, false);
+            if (!multi && btnRt != null) SelFrame.Show(btnRt, -0.35f, false, img: true);
             RokSend();
             // ---- ショップへ。**みんなそろって同時に入る。**押した絵が見えるよう、そろってから少しだけ待つ
             bool all = true; for (int i = 0; i < ok.Count; i++) if (!OkOrGone(i)) all = false;

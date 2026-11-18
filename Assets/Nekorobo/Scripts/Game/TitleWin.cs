@@ -51,9 +51,12 @@ namespace Nekorobo
             // 選択枠の形（SelFrame）。frameTan … 斜めのボタンの傾き（高さ1あたりの横のずれ。マイナスは上が右）、frameBox … 角丸の四角、
             // frameSub … ボタンの中のその範囲だけ囲む（HTML版 data-fr）、frameNone … 出さない
             public float frameTan; public bool frameBox, frameNone, frameWiden; public Rect? frameSub;
+            // frameImg … 板の上の絵のボタン（PSD の札と枠の位置の差で置く）、framePad … ボタンから離す幅（HTML版 data-pad。マイナスは高さから決める）
+            public bool frameImg; public float framePad = -1;
             // 板の画面（設定・実績）：onFocus … キー・パッドで乗ったらすぐ動く（札）、grp・on … 札の並びと、いま選んである札、
             // vadj … ↑↓で中を送る（送れたら true）、backFn … B でこのボタンだけの戻り方、hold … マウスで押している間、wheel … ホイール
             public System.Action onFocus; public string grp; public bool on;
+            public string down;                         // 札から ↓ の行き先（その札の中身の最初のボタン。HTML版 _down）
             public System.Func<int, bool> vadj; public System.Action backFn;
             public System.Action<Vector2> hold; public System.Action<int> wheel;
             public System.Action<string> devFire;      // ユーザー選択（ローカル）：押した指（key・pad0〜3）ごとの働き
@@ -665,8 +668,8 @@ namespace Nekorobo
             {
                 BoardTick(dt);
                 if (page == null || !IsBoard(page)) return;               // 戻った
-                if (tabL && !pTabL) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(-1); else AchTabStep(-1); return; }
-                if (tabR && !pTabR) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(1); else AchTabStep(1); return; }
+                if (tabL && !pTabL && !CredOn) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(-1); else AchTabStep(-1); return; }
+                if (tabR && !pTabR && !CredOn) { pTabL = tabL; pTabR = tabR; Remember(up, down, left, right, ok, back); if (page == "Settings") SetTabStep(1); else AchTabStep(1); return; }
             }
             pTabL = tabL; pTabR = tabR;
             if (back && !pBack)
@@ -750,7 +753,7 @@ namespace Nekorobo
         {
             if (idx >= items.Count || items[idx].frameNone || items[idx].rt == null) { SelFrame.Hide(); return; }
             var it = items[idx];
-            SelFrame.Show(it.anim != null ? it.anim : it.rt, it.frameTan, it.frameBox, it.frameSub, it.frameWiden);   // 選んでいる物は少し浮くので、その動きに付いていく
+            SelFrame.Show(it.anim != null ? it.anim : it.rt, it.frameTan, it.frameBox, it.frameSub, it.frameWiden, it.frameImg, it.framePad);   // 選んでいる物は少し浮くので、その動きに付いていく
         }
 
         void Remember(bool up, bool down, bool left, bool right, bool ok, bool back)

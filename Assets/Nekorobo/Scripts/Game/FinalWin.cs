@@ -654,7 +654,7 @@ namespace Nekorobo
                     if (tabRt[k] != null && RectTransformUtility.RectangleContainsScreenPoint(tabRt[k], mp, null)) { SetTab(k); break; }
             }
             // 選んでいる物を選択枠で囲む（ラウンド詳細の札は傾きが小さい）
-            if (onTabs && tabRt[tab] != null) SelFrame.Show(tabRt[tab], -0.15f, false); else SelFrame.Show(btnRt[cur], -0.35f, false);
+            if (onTabs && tabRt[tab] != null) SelFrame.Show(tabRt[tab], -0.15f, false); else SelFrame.Show(btnRt[cur], -0.35f, false, img: true);
             if (fire) { Game.SeUi("ok"); b1[cur].color = Color.white; goT = 0; }
         }
     }
