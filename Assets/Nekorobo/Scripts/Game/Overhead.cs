@@ -129,7 +129,9 @@ namespace Nekorobo
             }
         }
 
-        static Image Img(Transform parent, Color c, Vector2 size, bool rounded = true)
+        /// <summary>角の丸い板。radius … 角の丸み（px）。PILL_R なら高さの半分（両端が丸い札。CSS の border-radius:999px）。
+        /// 丸みを高さの半分より大きくすると、Unity は縦横を別々に縮めて楕円になるので、ちょうど半分にする</summary>
+        static Image Img(Transform parent, Color c, Vector2 size, bool rounded = true, float radius = 3.75f)
         {
             var go = new GameObject("Img", typeof(RectTransform), typeof(Image));
             var r = go.GetComponent<RectTransform>();
@@ -137,7 +139,7 @@ namespace Nekorobo
             r.sizeDelta = size;
             var im = go.GetComponent<Image>();
             im.color = c; im.raycastTarget = false;
-            if (rounded) { im.sprite = Round; im.type = Image.Type.Sliced; im.pixelsPerUnitMultiplier = 4f; }
+            if (rounded) { im.sprite = Round; im.type = Image.Type.Sliced; im.pixelsPerUnitMultiplier = 15f / Mathf.Max(0.01f, radius >= PILL_R ? size.y / 2 : radius); }
             return im;
         }
 
@@ -150,6 +152,7 @@ namespace Nekorobo
             t.font = Fonts.UI; t.fontSize = size; t.fontStyle = st; t.color = c; t.text = Lang.Tr(s);
             t.alignment = TextAnchor.MiddleCenter; t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
+            TextMid.Add(t);                          // 字の見た目の真ん中を札の真ん中に（Text のままだと 2〜3px 下がる）
             return t;
         }
 
@@ -157,10 +160,10 @@ namespace Nekorobo
         static Bar MakeBar(Transform parent, Vector2 size, Color bg, Color border)
         {
             var b = new Bar();
-            var outer = Img(parent, border, size + new Vector2(2, 2));
+            var outer = Img(parent, border, size + new Vector2(2, 2), true, PILL_R);
             b.r = outer.rectTransform;
-            var inner = Img(outer.transform, bg, size);
-            var fill = Img(inner.transform, GREEN, size);
+            var inner = Img(outer.transform, bg, size, true, PILL_R);
+            var fill = Img(inner.transform, GREEN, size, true, PILL_R);
             var fr = fill.rectTransform;
             fr.anchorMin = new Vector2(0, 0); fr.anchorMax = new Vector2(1, 1);
             fr.pivot = new Vector2(0, 0.5f); fr.offsetMin = fr.offsetMax = Vector2.zero;
@@ -326,8 +329,9 @@ namespace Nekorobo
             m.r = go.GetComponent<RectTransform>();
             m.r.SetParent(layer, false);
             // 名前の札（丸い札に載せる。影だけだと明るい床の上で読めない）
-            var pill = Img(m.r, PILL, new Vector2(60, 16));
+            var pill = Img(m.r, PILL, new Vector2(60, 16), true, PILL_R);
             pill.rectTransform.anchoredPosition = new Vector2(0, 9);
+            PillEdge(pill);
             m.nm = Label(pill.transform, P.Label, 12, Mats.Hex(P.col));
             m.hp = MakeBar(m.r, new Vector2(44, 7), Mats.Hex(0x2b313c), new Color(0, 0, 0, 0.55f));
             m.hp.r.anchoredPosition = new Vector2(0, -4);
@@ -364,14 +368,16 @@ namespace Nekorobo
                 m.itp.gameObject.SetActive(false);
             }
             // セリフの吹き出し（枠の色でどの機体か分かる）。下の端を頭の上に合わせる
-            var border = Img(layer, Mats.Hex(P.col), new Vector2(80, 30));
+            var border = Img(layer, Mats.Hex(P.col), new Vector2(80, 30), true, 14);
             m.msg = border.rectTransform;
             m.msg.pivot = new Vector2(0.5f, 0);
-            var inner = Img(border.transform, Mats.Hex(0xfffdf6), new Vector2(74, 24));
+            { var sh = border.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.15f); sh.effectDistance = new Vector2(0, -3); }
+            var inner = Img(border.transform, Mats.Hex(0xfffdf6), new Vector2(74, 24), true, 11);
             m.msgText = Label(inner.transform, "", 14, Mats.Hex(0x2b2f38));
             m.msg.gameObject.SetActive(false);
             // 配膳先の印
-            var tg = Img(layer, PILL, new Vector2(96, 22));
+            var tg = Img(layer, PILL, new Vector2(96, 22), true, PILL_R);
+            PillEdge(tg);
             m.tgt = tg.rectTransform;
             m.tgtText = Label(tg.transform, many ? "▼ " + P.Label : "▼ Target!", P == g.me ? 17 : 13,
                               many ? Mats.Hex(P.col) : Mats.Hex(0xffe07a));
@@ -380,10 +386,20 @@ namespace Nekorobo
             return m;
         }
 
+        /// <summary>札のまわりの白く薄い縁と影（CSS の border:1px solid rgba(255,255,255,.22) と box-shadow）</summary>
+        static void PillEdge(Image im)
+        {
+            var o = im.gameObject.AddComponent<Outline>(); o.effectColor = new Color(1, 1, 1, 0.22f); o.effectDistance = new Vector2(1, -1);
+            var sh = im.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.35f); sh.effectDistance = new Vector2(0, -2);
+        }
+
+        const float PILL_R = 999;
         static void FitPill(Text t)
         {
             var r = (RectTransform)t.transform.parent;
             r.sizeDelta = new Vector2(t.preferredWidth + 18, t.preferredHeight + 2);
+            var im = r.GetComponent<Image>();
+            if (im != null) im.pixelsPerUnitMultiplier = 15f / Mathf.Max(1, r.sizeDelta.y / 2);     // 両端が丸いまま
         }
 
         static void FitBubble(RobotMark m)

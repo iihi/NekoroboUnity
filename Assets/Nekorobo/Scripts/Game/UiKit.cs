@@ -119,6 +119,7 @@ namespace Nekorobo
             t.alignment = al; t.raycastTarget = false; t.supportRichText = true;
             t.horizontalOverflow = HorizontalWrapMode.Overflow; t.verticalOverflow = VerticalWrapMode.Overflow;
             t.lineSpacing = 1f;
+            TextMid.Add(t);                          // 真ん中寄せの字は、字の見た目の真ん中で合わせる（Text のままだと 2〜3px 下がる）
             return t;
         }
 

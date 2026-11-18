@@ -217,7 +217,8 @@ three.js は右手系、Unity は左手系です。**z の符号を反転する�
 | `Scripts/Game/Game.Npc.cs` | NPC（JS版 NPC_LV・findPath・driveNpc）。道探しに教えるマス（動く床・いかだ・置き物）と、通りにくいマス（家具とそのまわり。JS版 npcAvoidMap、強さは T.npcAvoid） |
 | `Scripts/Game/Game.Fx.cs` | 演出（飛沫・モクモク・閃光・光の柱・矢印・客の虹）と落ちた料理 |
 | `Scripts/Game/Scenery.cs` | ステージのまわりの飾り（JS版 scenery.js） |
-| `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久・1位の王冠（名前の左）・故障の札（名前の右）・速達の倍率・持ち替えたアイテムの札・セリフ・▼Target!） |
+| `Scripts/Game/Overhead.cs` | 頭の上の表示（客の HP・ロボの名前と耐久・1位の王冠（名前の左）・故障の札（名前の右）・速達の倍率・持ち替えたアイテムの札・セリフ・▼Target!）。名前・Target・耐久の棒は両端が丸い札（丸みは高さの半分ちょうど。大きくすると楕円になる）、吹き出しは角の丸み 14・縁 3px（HTML版 .rmk .nm・.tgt・.pmsg） |
+| `Scripts/Game/TextMid.cs` | 真ん中寄せの字を、字の見た目の真ん中で枠の真ん中に合わせる（Text は書体の上下の余白で真ん中を決めるので、Segoe UI だと 2〜3px 下がる）。書体と大きさごとに「Hあ」を一度測る。UiKit.Label・Overhead の字に付く |
 | `Scripts/Game/Hud.cs` | 画面の表示（カウントダウン・数字の吹き出し・結果（仮）・面選び） |
 | `Scripts/Net/Net.cs` | オンラインの通信口（JS版 net.js）。**差し替え口**で、決まりと「どの中身を使うか」だけを持つ。ゲーム側はここしか見ない。中身は起動の引数 `-net=名前` か PlayerPrefs `nekorobo.net` で選ぶ（既定 ws） |
 | `Scripts/Net/INetBackend.cs` | 中身が守る形（つなぐ・畳む・毎フレーム回す・部屋の出入り・送る、結果は Net.Report〜 で知らせる）。ほかの仕組みを足すときは、これを満たす物を作って Net.Backends に1行足す |
