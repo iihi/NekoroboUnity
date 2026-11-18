@@ -447,9 +447,20 @@ namespace Nekorobo
                              false, 1000, 0.9f, 0f, kinematic: true);
             var mg = Vis(e.transform, "Look");
             Part.Add(mg.transform, MeshGen.Box(2.9f, 0.2f, 0.9f), Mats.Get(0xb08a5a), Vector3.zero);
-            ApplyModel(e, mg, "mover");                         // オーバークック風の動く床（models.json の mover）
+            var mdl = ApplyModel(e, mg, "mover");               // オーバークック風の動く床（models.json の mover）
             if (!Mathf.Approximately(mw, 0.9f))                 // 見た目も幅に合わせて伸ばす（差し替えたモデルごと）
-            { var ls = mg.transform.localScale; ls.z *= mw / 0.9f; mg.transform.localScale = ls; }
+            {
+                var ls = mg.transform.localScale; ls.z *= mw / 0.9f; mg.transform.localScale = ls;
+                // 差し替えたモデルは Look の外（床の直下）に置かれるので、伸ばす箱に入れ直す
+                // （HTML版はモデルもグループの中なので一緒に伸びる。モデルは向きを回してあるので、その外で伸ばす）
+                if (mdl != null)
+                {
+                    var wide = new GameObject("Wide").transform;
+                    wide.SetParent(e.transform, false);
+                    wide.localScale = new Vector3(1, 1, mw / 0.9f);
+                    mdl.SetParent(wide, false);
+                }
+            }
             var d = Coord.Dir(o.rot);
             var raw = o.raw;
             movers.Add(new Mover
