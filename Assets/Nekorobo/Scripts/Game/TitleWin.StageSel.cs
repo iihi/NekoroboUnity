@@ -36,7 +36,7 @@ namespace Nekorobo
         }
         readonly SsState SS = new SsState();
         UiBoard ssB;
-        Text ssSec, ssSecL, ssSecR; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
+        Text ssSec, ssSecL, ssSecR; ClockFill ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
         const int SS_START = FREE_SLOTS + 1, SS_BACK = FREE_SLOTS + 2;
         // 決まった面を光らせておく秒数（前は 1.5秒。担当「長い。半分に。ビカビカの速度も上げる」）
         const float SS_WIN_SEC = 0.75f;
@@ -158,16 +158,14 @@ namespace Nekorobo
             {
                 // 残り時間の棒は今までどおり。ROUND の字が下に入るぶん上げた。「残り N 秒」は1つの並び（ショップと同じ）
                 var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
-                UiBoard.Img(ck, "ui/shop/bar.png", 643, 43, 432, 25);
-                var fb = UiBoard.Box(ck, 655, 50.5f, 409, 10, "Fill"); fb.gameObject.AddComponent<RectMask2D>();
-                ssBar = UiBoard.Img(fb, "ui/shop/fill.png", 0, 0, 409, 10);
+                ssBar = ClockBar.Add(ck, 643, 43, 432);        // ショップと同じ棒を短く（両端の形は同じ）
                 ssSecL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 60.5f, 24, Color.white);
                 ssSec = UiBoard.T(ck, "", 1086.5f, 30.5f, 58, Mats.Hex(0x68ff00));
                 ssSecR = UiBoard.T(ck, Lang.Tr("秒"), 1086.5f, 60.5f, 24, Color.white);
                 ssSec.text = Mathf.CeilToInt(Mathf.Max(0, SS.t)).ToString();          // 描き直したときも今の秒（決まったあとは数えないので）
                 ssSec.color = SS.t <= 10 ? Mats.Hex(0xff4b4b) : Mats.Hex(0x68ff00);
                 UiBoard.Row(1086.5f, 7, ssSecL, ssSec, ssSecR);
-                ssBar.rectTransform.sizeDelta = new Vector2(409 * Mathf.Clamp01(SS.t / Mathf.Max(1, g.T.stageSelTime)), 10);
+                ssBar.Ratio = SS.t / Mathf.Max(1, g.T.stageSelTime);
                 ssB.In(ck, "right", 1);
             }
             for (int i = 0; i <= FREE_SLOTS; i++)
@@ -646,7 +644,7 @@ namespace Nekorobo
                     string sn = Mathf.CeilToInt(Mathf.Max(0, SS.t)).ToString();
                     if (ssSec.text != sn) { ssSec.text = sn; UiBoard.Row(1086.5f, 7, ssSecL, ssSec, ssSecR); }
                     ssSec.color = SS.t <= 10 ? Mats.Hex(0xff4b4b) : Mats.Hex(0x68ff00);
-                    ssBar.rectTransform.sizeDelta = new Vector2(409 * Mathf.Clamp01(SS.t / Mathf.Max(1, g.T.stageSelTime)), 10);
+                    ssBar.Ratio = SS.t / Mathf.Max(1, g.T.stageSelTime);
                 }
                 if (SS.t <= 0 && SS.net != "guest") SsDecide();   // 時間切れで決めるのはホスト
             }

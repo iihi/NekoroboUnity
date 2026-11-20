@@ -31,7 +31,7 @@ namespace Nekorobo
         readonly List<Cur> cur = new List<Cur>();
         readonly List<CardUi> cards = new List<CardUi>();
         Rect rdyRect;
-        Text secText, msgText, secL, secR; RawImage clockFill; float clockW;
+        Text secText, msgText, secL, secR; ClockFill clockFill;
         readonly List<PpUi> pps = new List<PpUi>();
         readonly List<Text> descRows = new List<Text>();
         RawImage btnOn, btnOff; float pressT; Texture btnOffTex;
@@ -176,11 +176,8 @@ namespace Nekorobo
             var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
             if (timed)
             {
-                UiBoard.Img(ck, U + "bar.png", 302, 61.5f, 773.5f, 25);
-                var fillBox = UiBoard.Box(ck, 323, 69, 742.5f, 10, "Fill");
-                fillBox.gameObject.AddComponent<RectMask2D>();
-                clockFill = UiBoard.Img(fillBox, U + "fill.png", 0, 0, 742.5f, 10);
-                clockW = 742.5f;
+                clockFill = ClockBar.Add(ck, 302, 61.5f, 773.5f);
+                clockFill.Ratio = Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime);
                 // 「残り N 秒」は1つの並び。「残り」の左を棒の右に固定し、間をそろえて下の線で合わせる（担当。前は数字の桁で間が変わっていた）
                 secL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 79, 24, Color.white);
                 secText = UiBoard.T(ck, "", 1086.5f, 49, 58, GREEN);
@@ -633,7 +630,7 @@ namespace Nekorobo
                 string sn = Mathf.CeilToInt(Mathf.Max(0, t)).ToString();
                 if (secText.text != sn) { secText.text = sn; UiBoard.Row(1086.5f, 7, secL, secText, secR); }
                 secText.color = t <= 10 ? Mats.Hex(0xff4b4b) : GREEN;
-                if (clockFill != null) clockFill.rectTransform.sizeDelta = new Vector2(clockW * Mathf.Clamp01(Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime)), 10);
+                if (clockFill != null) clockFill.Ratio = Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime);
             }
             // この画面の人が全員「購入完了」なら、品物を選べない見た目に
             bool lockAll = viewers.Count > 0 && viewers.TrueForAll(P => { var c = cur.Find(x => x.P == P); return c != null && c.ready; });
