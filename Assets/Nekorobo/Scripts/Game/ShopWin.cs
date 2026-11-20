@@ -176,7 +176,7 @@ namespace Nekorobo
             var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
             if (timed)
             {
-                clockFill = ClockBar.Add(ck, 302, 61.5f, 773.5f);
+                clockFill = ClockBar.Add(ck, U + "bar.png", 302, 61.5f, 773.5f);
                 clockFill.Ratio = Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime);
                 // 「残り N 秒」は1つの並び。「残り」の左を棒の右に固定し、間をそろえて下の線で合わせる（担当。前は数字の桁で間が変わっていた）
                 secL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 79, 24, Color.white);

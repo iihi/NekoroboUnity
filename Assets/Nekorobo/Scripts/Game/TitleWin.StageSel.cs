@@ -158,7 +158,7 @@ namespace Nekorobo
             {
                 // 残り時間の棒は今までどおり。ROUND の字が下に入るぶん上げた。「残り N 秒」は1つの並び（ショップと同じ）
                 var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
-                ssBar = ClockBar.Add(ck, 643, 43, 432);        // ショップと同じ棒を短く（両端の形は同じ）
+                ssBar = ClockBar.Add(ck, "ui/shop/bar_ss.png", 643, 43, 432);        // ショップと同じ棒を短く（両端の形は同じ）
                 ssSecL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 60.5f, 24, Color.white);
                 ssSec = UiBoard.T(ck, "", 1086.5f, 30.5f, 58, Mats.Hex(0x68ff00));
                 ssSecR = UiBoard.T(ck, Lang.Tr("秒"), 1086.5f, 60.5f, 24, Color.white);
