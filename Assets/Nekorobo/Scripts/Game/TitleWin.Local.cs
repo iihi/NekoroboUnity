@@ -8,10 +8,12 @@ namespace Nekorobo
 {
     /// <summary>
     /// ユーザー選択（HTML版 11/17。担当の画面案。仮で、画面の作りはあとで変わる）。
-    ///   ローカル … 1P〜4P の行に「参加」「NPC」（チーム戦は 青／赤）。つながっているコントローラーごと（Steam 版のためにキーボードにも1つ）に
+    ///   ローカル … 1P〜4P の行に「参加」「NPC」「なし」（チーム戦は 青／赤）。選んでいるものに席の色の縁（空いた席は「なし」が光る）。つながっているコントローラーごと（Steam 版のためにキーボードにも1つ）に
     ///              同じ指が出て、参加した指には「1P」などの札（席の色）。自分の指で「参加」を押すとその席で遊ぶ
     ///              （もう一度押すとやめる。人の居る席には入れない。ほかの席に居たら移る）。「NPC」はその席を NPC に（もう一度でやめる）。
-    ///              B・Esc は、参加していればやめる、していなければ前の画面へ。「スタート」は1人以上参加で押せる（HTML版 LOC・locTick）
+    ///              「なし」はその席を空ける（人の居る席は、その人の指でだけ）。前は「なし」のボタンが無く、選んでいない席が「なし」で分かりにくかった（担当）。
+    ///              B・Esc は、参加していればやめる、していなければ前の画面へ。「スタート」は「参加」か「NPC」で1人以上入れれば押せる
+    ///              （全員 NPC でもよい。見ているだけ。担当）（HTML版 LOC・locTick）
     ///   オンライン … 部屋の待機と自動マッチングも同じ行（HTML版 olGrid）。人が居る席・NPC の席は緑の「OK」、空いた席は灰色に回る印と「接続中…」。
     ///              部屋のホストは行の右の「NPC」で空いた席に NPC を入れる（チーム戦は、その右の 青／赤）
     /// </summary>
@@ -34,8 +36,8 @@ namespace Nekorobo
             Head(st, Lang.Tr("ローカル　{0}", Lang.Tr(Game.ModeName(mode))));
             Note(st, Lang.Tr("コントローラーごとに指が出ます。自分の指で「参加」を押すと、その番号で遊びます（もう一度押すとやめます）。")
                    + (Gamepad.all.Count > 0 ? "" : Lang.Tr("パッドは未接続です（つないでボタンを1回押すと出ます）。")));
-            // 1P〜4P の行。番号（席の色）・参加・NPC（・チーム）
-            float W = 70 + 16 + 230 + 16 + 230 + (team ? 16 + 130 : 0), x0 = (st.w - W) / 2;
+            // 1P〜4P の行。番号（席の色）・参加・NPC・なし（・チーム）
+            float W = 70 + 16 + 230 + 16 + 230 + 16 + 230 + (team ? 16 + 130 : 0), x0 = (st.w - W) / 2;
             for (int i = 0; i < 4; i++)
             {
                 int ii = i; var v = slots[i]; bool human = LocHuman(v), npc = v != null && v.StartsWith("npc-");
@@ -49,7 +51,11 @@ namespace Nekorobo
                 x += 230 + 16;
                 var nb = BtnAt(row, x, 0, 230, 40, "NPC", "sec", () => LocNpc(ii, "key"), null, false, "n" + i, 15);
                 nb.devFire = d => LocNpc(ii, d);
-                if (npc) OnRing(nb.rt, 230, 40, Color.white);
+                if (npc) OnRing(nb.rt, 230, 40, Mats.Hex(Player.PCOL[i]));        // NPC の席も、白ではなくその席の色（担当）
+                x += 230 + 16;
+                var xb = BtnAt(row, x, 0, 230, 40, Lang.Tr("なし"), "sec", () => LocNone(ii, "key"), null, false, "x" + i, 15);
+                xb.devFire = d => LocNone(ii, d);
+                if (v == "off") OnRing(xb.rt, 230, 40, Mats.Hex(Player.PCOL[i]));
                 x += 230 + 16;
                 if (team && v != "off")
                 {
@@ -60,7 +66,7 @@ namespace Nekorobo
             var live = Live();
             int n0 = live.FindAll(s => s.team == 0).Count, n1 = live.FindAll(s => s.team == 1).Count;
             bool oneSide = team && live.Count > 0 && (n0 == 0 || n1 == 0);
-            bool anyHuman = System.Array.Exists(slots, LocHuman);
+            // 全員 NPC でも遊べる（見ているだけ。担当）。誰も入っていないときだけスタートできない
             // ルールと遊び方（横に並べる）
             {
                 var r = st.Row(36, 14);
@@ -76,14 +82,14 @@ namespace Nekorobo
                 BtnAt(r, bx + bw + gap, 0, bw, 34, Lang.Tr("遊び方：{0}　▾", Game.LenName(rounds)), "sec",
                       () => PickOpen("遊び方を選ぶ", null, opts, rounds.ToString(), "Local", x => rounds = int.Parse(x)), null, false, "len", 14);
             }
-            Note(st, !anyHuman ? "「参加」を押した人が居ません。1人以上参加してください。"
+            Note(st, live.Count == 0 ? "「参加」か「NPC」を押して、1人以上入れてください。"
                    : oneSide ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（右の 青／赤 を押すと入れ替わります）。"
                    : team ? Lang.Tr("<b>{0}人</b>（{1}）　青 <b>{2}人</b> 対 赤 <b>{3}人</b>で遊びます。次の画面で面を選びます。",
                                     live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), n0, n1)
                    : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray())));
             BtnRow(st, new[] { "キャンセル", "スタート" }, new[] { "sec", "go" },
                    new System.Action[] { () => Go("Len"), () => { from = "Local"; next = false; Go("Free"); } },
-                   new[] { false, !anyHuman || oneSide });
+                   new[] { false, live.Count == 0 || oneSide });
         }
 
         /// <summary>席の番号（席の色。右に寄せる）</summary>
@@ -121,6 +127,17 @@ namespace Nekorobo
             if (LocHuman(v) && v != dev) { Game.SeUi("ng"); return; }
             slots[i] = v != null && v.StartsWith("npc-") ? "off" : "npc-normal";
             Game.SeUi(slots[i] == "off" ? "back" : "ok");
+            Go("Local");
+        }
+
+        // その席を空ける（「なし」。人が居る席は、その人の指でだけ空けられる）
+        void LocNone(int i, string dev)
+        {
+            var v = slots[i];
+            if (LocHuman(v) && v != dev) { Game.SeUi("ng"); return; }
+            if (v == "off") { Game.SeUi("cur", 0.6f); return; }
+            slots[i] = "off";
+            Game.SeUi("back");
             Go("Local");
         }
 

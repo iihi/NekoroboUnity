@@ -17,7 +17,7 @@ namespace Nekorobo
         public bool Open { get; private set; }
         readonly RawImage[] b0 = new RawImage[2], b1 = new RawImage[2]; readonly Texture[] b0Tex = new Texture[2];
         readonly RectTransform[] btnRt = new RectTransform[2]; System.Action[] act;
-        int cur; float lockT, goT = -1; bool armed, pL, pR, pOk;
+        int cur, hov = -1; float lockT, goT = -1; bool armed, pL, pR, pOk;
         const string U = "ui/story/";
         static readonly Color GREEN = Mats.Hex(0x68ff00), NEG = Mats.Hex(0xff6b5b), GREY = Mats.Hex(0x9a9a9a);
 
@@ -90,7 +90,7 @@ namespace Nekorobo
             if (i != cur && Open) Game.SeUi("cur");
             cur = i;
             // 選んでいるときは地を少し明るく（光彩は付けない。担当）
-            for (int k = 0; k < 2; k++) if (b0Tex[k] != null) b0[k].texture = k == cur ? UiBoard.Bright(b0Tex[k]) : b0Tex[k];
+            for (int k = 0; k < 2; k++) if (b0Tex[k] != null) b0[k].texture = k == cur || k == hov ? UiBoard.Bright(b0Tex[k]) : b0Tex[k];   // マウスが乗っている方も
         }
 
         public void Tick(float dt)
@@ -115,11 +115,14 @@ namespace Nekorobo
             if (!ok) armed = true;
             bool fire = ok && !pOk && armed && lockT <= 0;
             pL = l; pR = r; pOk = ok;
-            // 指カーソル（マウスかスティック）。乗った方を選ぶ
+            // マウスは乗せただけでは選ばない（少し明るくするだけ。押したら選んで決める。担当）
             Ptr.Tick(dt, () => Ptr.Center(btnRt[cur]));
-            if (Ptr.Moved)
-                for (int k = 0; k < 2; k++) if (Ptr.Over(btnRt[k]) && cur != k) Focus(k);
             var ms = Mouse.current;
+            {
+                int hv = -1;
+                if (ms != null) for (int k = 0; k < 2; k++) if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], ms.position.ReadValue(), null)) hv = k;
+                if (hv != hov) { hov = hv; Focus(cur); }
+            }
             if (ms != null && ms.leftButton.wasPressedThisFrame && lockT <= 0)
             {
                 var mp = ms.position.ReadValue();

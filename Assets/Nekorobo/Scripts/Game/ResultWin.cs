@@ -31,7 +31,7 @@ namespace Nekorobo
         readonly List<float> npcT = new List<float>();
         float shownAt, autoT, goT, pressT;
         bool went;
-        RectTransform oks; RawImage btnOn; Text okNote;
+        RectTransform oks; RawImage btnOn;
 
         static readonly string[] RES_COLS = { "blue", "red", "green", "orange" };
         static readonly float[] ROW_Y = { 190.5f, 312.5f, 435.5f, 558.5f };
@@ -52,7 +52,7 @@ namespace Nekorobo
             int i = System.Array.IndexOf(Player.PCOL, P.col);
             return i >= 0 ? RES_COLS[i] : "blue";
         }
-        string Tag(Player P) { return P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P"; }
+        string Tag(Player P) { return (P.idx + 1) + "P"; }               // NPC も「〇P」（担当）
         string DownOf(Player P) { return !P.down ? "" : P.quit ? Lang.Tr("途中で抜けた") : P.revT > 0 ? Lang.Tr("復帰 {0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア"); }
         /// <summary>OK か、もう部屋に居ない人（抜けた人は待たない。JS版 resOkOrGone）</summary>
         bool OkOrGone(int i) { return ok[i] || g.SeatGone(i); }
@@ -196,9 +196,7 @@ namespace Nekorobo
                                  new[] { "倒れた客", Lang.Tr("{0}人", g.guests.FindAll(x => x.hp <= 50).Count) } };
                 float[] ty = { 386, 432, 477 };
                 for (int i = 0; i < 3; i++) { UiBoard.T(sb, Lang.Tr(kv[i][0]), 916, ty[i], 27, Color.white); UiBoard.T(sb, kv[i][1], 1220, ty[i], 27, GREEN, 1); }
-                UiBoard.T(sb, Lang.Tr(g.mode == "team" && many ? "修理費と救急車の代金は壊した人のチームが支払っています。"
-                                     : ranked ? "修理費と救急車の代金は壊した人が支払っています。" : "修理費と救急車の代金は売上から引いています。"),
-                          1068, 523, 17, Color.white, 2);
+                // 下の「修理費と救急車の代金は壊した人が支払っています」は出さない（担当「システム的な説明の文字はいらない」）
                 B.In(sb, "right", 3);
             }
             // ---- ラウンドマッチは、いま何ラウンド目を終えたかを右上に
@@ -219,7 +217,7 @@ namespace Nekorobo
             btnRt = btn;
             B.In(btn, "pop", 5);
             oks = UiBoard.Box(bx, 1067, 556, 0, 26, "Oks");
-            okNote = UiBoard.T(bx, "", 1067, 681, 13, Mats.Hex(0xc8c8c8), 2);
+            // ボタンの下の「全員が OK になると、みんなで進みます（あと N 人）」は出さない（担当「システム的な説明の文字はいらない」）
             // 同じ画面で2人以上のとき：各自のボタン（A・B。キーボードは Enter・スペース・Esc）で、その人の OK（HTML版 resKeysOpen）。
             // 前は人ごとの指を「ショップへ」ボタンへ動かして押していた（担当「結果画面は A, B ボタンで終了してショップへ」）
             keysLockT = 0.35f;
@@ -287,8 +285,6 @@ namespace Nekorobo
             for (int i = 0; i < g.players.Count; i++) if (OwnSlot(i) && g.players[i].src.kind != "npc") mine.Add(i);
             bool on = mine.Count > 0 && mine.TrueForAll(i => ok[i]);
             if (btnOn != null) btnOn.color = new Color(1, 1, 1, on || pressT > 0 ? 1 : 0);
-            int left = 0; for (int i = 0; i < ok.Count; i++) if (!OkOrGone(i)) left++;   // 抜けた人は数えない
-            okNote.text = g.players.Count < 2 ? "" : left > 0 ? Lang.Tr("全員が OK になると、みんなで進みます（あと {0} 人）", left) : "";
         }
 
         /// <summary>

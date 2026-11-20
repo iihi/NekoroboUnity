@@ -178,9 +178,10 @@ namespace Nekorobo
         // 面が終わったとき（Finish から。所持金とボーナスを入れたあと）
         void AchStageEnd(bool cleared)
         {
+            // 遊んでいる人が居ない（全員 NPC で見ているだけ）ときは、遊んだ面にも数えない
+            if (!players.Exists(AchMine)) return;
             var key = AchStageKey(stage);
             if (key != null && !AchStore.stages.Contains(key)) { AchStore.stages.Add(key); AchStore.Save(); }
-            if (!players.Exists(AchMine)) return;
             var all = TitleWin.FreeKeys();
             if (all.Count > 0 && all.TrueForAll(k => AchStore.stages.Contains(k))) AchGive("allstage");
             bool ice = false; foreach (var ch in map.Values) if (Tiles.IsSlippery(ch)) { ice = true; break; }

@@ -51,6 +51,7 @@ namespace Nekorobo
             public Player P; public int ci; public RectTransform r;
             public RawImage panel, hp, rk, cl, pic; public Texture2D tex;
             public Text who, sales, cost, tot, dl, pz, em, downAr, downTx; public RectTransform down;
+            public RawImage halo;                       // リタイアした人の天使の輪
             public readonly List<Tile> tiles = new List<Tile>();
             public Roll rS, rT; public string hpK = ""; public int rkN = -1;
             public string key = ""; public Order obj; public float tier, downT = -1;
@@ -186,6 +187,11 @@ namespace Nekorobo
             c.pz = UiBoard.T(c.r, "", 437, 92.6f, 9, Mats.Hex(0xe5001b), 2);
             c.em = UiBoard.T(c.r, "", 437, 56, 8, Mats.Hex(0x4a5262), 2);
             c.em.lineSpacing = 1.15f;
+            // リタイアは字ではなく天使の輪の絵（担当「お客さんの昇天と同じ物」。HTML版 HALO_SVG。Resources/Ui/halo.png は 3倍で描いた物）
+            c.halo = UiBoard.Box(c.r, 437 - 20, 76 - 12.5f, 40, 25, "Halo").gameObject.AddComponent<RawImage>();
+            c.halo.texture = Resources.Load<Texture2D>("Ui/halo"); c.halo.raycastTarget = false;
+            var hg = c.halo.gameObject.AddComponent<Outline>(); hg.effectColor = new Color(1, 214 / 255f, 64 / 255f, 0.45f); hg.effectDistance = new Vector2(1.5f, 1.5f);
+            c.halo.gameObject.SetActive(false);
             // 値段が下がったとき（▼ DOWN!）
             c.down = UiBoard.Box(c.r, 410, 60, 54, 30, "DishDown");
             c.downAr = UiBoard.T(c.down, "▼", 27, 0, 18, DOWN, 2);
@@ -347,7 +353,11 @@ namespace Nekorobo
             var cd = P.carried;
             c.pic.gameObject.SetActive(cd != null); c.pz.gameObject.SetActive(cd != null);
             c.cl.gameObject.SetActive(cd == null && !P.down);
-            c.em.gameObject.SetActive(cd == null && P.down);
+            // 復帰を待つ間は残り秒。リタイアは天使の輪の絵（ふわふわ上下。1.6秒）
+            bool halo = cd == null && P.down && !(P.revT > 0);
+            c.em.gameObject.SetActive(cd == null && P.down && !halo);
+            c.halo.gameObject.SetActive(halo);
+            if (halo) c.halo.rectTransform.anchoredPosition = new Vector2(437 - 20, -(76 - 12.5f) - (1 - 3 * (0.5f - 0.5f * Mathf.Cos(Time.unscaledTime / 1.6f * Mathf.PI * 2))));
             if (cd != null)
             {
                 float tier = Dishes.PriceTier(cd.integ);
@@ -363,7 +373,7 @@ namespace Nekorobo
             {
                 c.key = "";
                 c.obj = null;                                                  // 落とした料理をまた拾ったときも、取ったと分かるように
-                if (P.down) c.em.text = P.revT > 0 ? Lang.Tr("復帰まで\n{0}", Mathf.CeilToInt(P.revT)) : Lang.Tr("リタイア");
+                if (P.down && P.revT > 0) c.em.text = Lang.Tr("復帰まで\n{0}", Mathf.CeilToInt(P.revT));
             }
             // 値段が下がったときの演出（▼ DOWN! が落ちてきて、絵が揺れ、値段が跳ねる）
             if (c.downT >= 0)

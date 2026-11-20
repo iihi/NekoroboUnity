@@ -19,7 +19,7 @@ namespace Nekorobo
         public bool Open { get; private set; }
         string view = "main";
         RectTransform[] btnRt; Image[] btnBg, btnEdge; bool[] btnSec; System.Action[] act;
-        int cur; float lockT; bool armed, pUp, pDown, pOk, pBack;
+        int cur, hov = -1; float lockT; bool armed, pUp, pDown, pOk, pBack;   // hov … マウスが乗っているボタン（明るくするだけ）
 
         static readonly Color CREAM = Mats.Hex(0xfffdf6), INK = Mats.Hex(0x3a352c), SUB = Mats.Hex(0x8a8274), GOLD = Mats.Hex(0xf2b52c);
         static readonly Color BTN = Mats.Hex(0x2e3749), BTN_ON = Mats.Hex(0x45526b), SEC = Mats.Hex(0x7b766a), SEC_ON = Mats.Hex(0x968f80);
@@ -112,7 +112,7 @@ namespace Nekorobo
             cur = i;
             for (int k = 0; k < 2; k++)
             {
-                bool f = k == cur;
+                bool f = k == cur || k == hov;
                 btnEdge[k].color = Color.white;          // 金の縁はやめた（選択枠と二重になる）
                 btnBg[k].color = btnSec[k] ? (f ? SEC_ON : SEC) : (f ? BTN_ON : BTN);
             }
@@ -142,11 +142,14 @@ namespace Nekorobo
             bool fire = ok && !pOk && armed && lockT <= 0;
             bool backHit = back && !pBack;
             pUp = up; pDown = down; pOk = ok; pBack = back;
-            // 指カーソル（マウスかスティック）。乗った方を選ぶ
+            // マウスは乗せただけでは選ばない（少し明るくするだけ。押したら選んで決める。担当）
             Ptr.Tick(dt, () => Ptr.Center(btnRt[cur]));
-            if (Ptr.Moved)
-                for (int k = 0; k < 2; k++) if (Ptr.Over(btnRt[k]) && cur != k) Focus(k);
             var ms = Mouse.current;
+            {
+                int hv = -1;
+                if (ms != null) for (int k = 0; k < 2; k++) if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], ms.position.ReadValue(), null)) hv = k;
+                if (hv != hov) { hov = hv; Focus(cur, false); }
+            }
             if (ms != null && ms.leftButton.wasPressedThisFrame && lockT <= 0)
             {
                 var mp = ms.position.ReadValue();

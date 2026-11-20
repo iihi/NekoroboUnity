@@ -11,13 +11,16 @@ namespace Nekorobo
     /// 1280×720 の板（UiBoard）に、PSD から切り出した絵（HTML版の assets/ui/cfg・ach）を置く。字はゲームが書く（訳すため）。
     /// 位置は PSD（2560×1440）の座標の半分（HTML版と同じ数値）。緑の枠の中の説明の字は黄色。
     /// 選ぶ・決めるはタイトルと同じ items（上下左右は画面の上の位置で隣のボタンへ。BoardNav）。
-    /// 札（タブ）は LB / RB でも替わる。キー・パッドで札に乗ったら、すぐその札の中身を出す（マウスは押したとき）。
+    /// 札（タブ）には選択枠を当てず、LB / RB で替える（マウスは札を押す）。替えたら中身の「いま選ばれている物」に枠が入る
+    /// （サウンドは BGM、言語は今の言語、操作説明は今のコントローラー／キーボード、著作権表示は一覧。担当）。開くたびにサウンドの札から。
     ///   サウンド   … BGM・効果音の棒。← → で 10% ずつ（マウスは押した所。押したまま左右に動かせる）。いちばん左（0%）が音なし
     ///   言語       … 5つの言語のボタン。決定で切り替える。名前はその言語の書体で書く
     ///   操作説明   … コントローラー（Xbox の並び）／キーボードの絵と、何をするか
     ///   著作権表示 … ゲームの名前・バージョン・コピーライト（動かない）と、使っているライブラリ・書体の一覧（上下に送る箱。
-    ///                 箱に乗って ↑↓・ホイール・右の棒を押した所へ。担当「増えても大丈夫なように、上下のスクロールに」）
-    /// 札から ↓ は、その札の中身の最初のボタンへ（音の棒・今の言語・コントローラー・一覧）。
+    ///                 箱に乗って ↑↓・ホイール。マウスは字の所を押したまま上下に動かすと字が付いてくる、右の棒（白）は押した高さへ送り、
+    ///                 押したまま動かすと付いてくる。担当「増えても大丈夫なように、上下のスクロールに」）
+    /// 中身で B を押すと、すぐ閉じずに下の段の「もどる」へ枠が抜ける。そこでもう一度 B で閉じる。
+    /// 下の段（CREDITS・もどる）から ↑ は、抜ける前に選んでいた中身へ戻る（札ごとに覚える setLast。開き直すと忘れる）。
     /// 左下の「CREDITS」（もどると同じ絵。札を替えても常に出す）で、黒い幕の上にスタッフロールを流す（credits.json。HTML版 creditsShow）。
     /// 実績：左の札で仕分けを選び（決定で一覧へ）、右に一覧（一度に4行。▲▼・ホイール・一覧に乗って↑↓で送る。B で札へ戻る）。
     /// 取った行は金で日付つき。まだの行は灰色。★1 は取る前から中身が見え、★2・★3 は取るまで「？？？」
@@ -57,7 +60,9 @@ namespace Nekorobo
         static readonly float[][] ACH_IC = { new[] { 26f, 38.5f }, new[] { 48f, 36 }, new[] { 40f, 40 }, new[] { 44f, 44 }, new[] { 47f, 45 }, new[] { 45f, 38 }, new[] { 47f, 30.5f } };
         static readonly float[] ACH_CAT_Y = { 131.5f, 209, 287, 364.5f, 442, 520.5f, 597.5f };
         const float ACH_ROW_H = 82; const int ACH_VIS = 4;
-        static string boardSetTab = "ctrl", boardCtrl = "pad";
+        static string boardSetTab = "snd", boardCtrl = "pad";
+        // 札ごとに、B・↓で抜ける前に選んでいた中身（下の段から ↑ で戻る先。HTML版 SET.last）
+        static readonly Dictionary<string, string> setLast = new Dictionary<string, string>();
         static int achTop;
         RectTransform achIn; RawImage achUp, achDn; float achY;
 
@@ -70,15 +75,16 @@ namespace Nekorobo
             bool first = boardPage != pg || cfgB == null || !cfgB.Active;
             string keep = !first && idx < items.Count ? items[idx].key : null;
             boardPage = pg;
+            if (first && pg == "Settings") { boardSetTab = "snd"; setLast.Clear(); }   // 設定は開くたびにサウンドの札から（担当）
             if (cfgB == null) cfgB = new UiBoard(root, "CfgBoard", true, CFGU + "bg.jpg");
             cfgB.Active = true;
             cfgB.Clear();
-            items.Clear(); gridItems.Clear(); freeDesc = null; cap = null;
+            items.Clear(); gridItems.Clear(); freeDesc = null; cap = null; hov = -1;
             achIn = null; achUp = achDn = null;
             crRoot = null; crOutT = -1; licIn = null; licThumb = null;
             string def = pg == "Settings" ? SetDraw() : AchDraw();
             if (first) { cfgB.StartIn(); lockT = g.T.menuLock; armed = false; }
-            string want = focus ?? keep ?? def;
+            string want = focus == "tab" ? def : focus ?? keep ?? def;     // "tab" … 札を替えた（中身の「いま選ばれている物」へ）
             int d = want != null ? items.FindIndex(x => x.key == want) : -1;
             if (d < 0) d = items.FindIndex(x => x.key == def);
             idx = Mathf.Max(0, d);
@@ -96,7 +102,7 @@ namespace Nekorobo
         {
             if (items.Count == 0) return;
             idx = Mathf.Clamp(i, 0, items.Count - 1);
-            for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx);
+            Looks();
         }
 
         // 字。y は字の真ん中（HTML版 .t.l / .t.r / .t.c は translateY(-50%)）。al … l（x から右へ）・r（x で終わる）・c（真ん中）。
@@ -158,16 +164,17 @@ namespace Nekorobo
             return it;
         }
         /// <summary>もどる（押した絵を少し見せてから戻る）</summary>
-        void BBack()
+        void BBack(System.Func<string> up = null)
         {
             var it = BBackLike("back", 976.5f, Lang.Tr("もどる"), () => backLater = 0.11f);
-            it.back = true;
+            it.back = true; it.upFn = up;
             cfgB.In(it.rt, "fade", 3);
         }
         /// <summary>左下の「CREDITS」（設定の札を替えても常に出す。名前は英語で全言語同じ）</summary>
-        void BCredit()
+        void BCredit(System.Func<string> up = null)
         {
             var it = BBackLike("credit", 43.5f, "CREDITS", CreditsOpen);
+            it.upFn = up;
             cfgB.In(it.rt, "fade", 3);
         }
         float backLater = -1;
@@ -178,7 +185,7 @@ namespace Nekorobo
             int i = System.Array.IndexOf(SET_TAB_K, boardSetTab);
             boardSetTab = SET_TAB_K[(i + dir + SET_TAB_K.Length) % SET_TAB_K.Length];
             Game.SeUi("cur");
-            BoardDraw("Settings", "tab_" + boardSetTab);
+            BoardDraw("Settings", "tab");
         }
         static float VolOf(string k) { return k == "Bgm" ? (Sound.BgmMuted ? 0 : Sound.BgmVolume) : (Sound.Muted ? 0 : Sound.Volume); }
         RawImage barBgm, barSe;
@@ -210,12 +217,13 @@ namespace Nekorobo
             for (int i = 0; i < SET_TAB_K.Length; i++)
             {
                 string k = SET_TAB_K[i]; var o = SET_TAB_OFF[i];
-                System.Action go = () => { if (boardSetTab != k) { boardSetTab = k; BoardDraw("Settings", "tab_" + k); } };
+                // 札にはカーソル（選択枠）を当てない。LB/RB で替える（マウスは押せる）。替えたら中身の「いま選ばれている物」へ（担当）
+                System.Action go = () => { if (boardSetTab != k) { boardSetTab = k; Game.SeUi("cur"); BoardDraw("Settings", "tab"); } };
                 var it = BBtn("tab_" + k, o[0], o[1], o[2], o[3], go);
-                it.onFocus = go; it.grp = "tab"; it.on = k == tab;
+                it.nofocus = true; it.grp = "tab"; it.on = k == tab;
                 BT(it.rt, Lang.Tr(SET_TAB_N[i]), o[2] / 2 - 2, o[3] / 2, 19, Color.white, "c");
             }
-            string def = "tab_" + tab, down = null;
+            string def = null;
             barBgm = barSe = null;
             if (tab == "snd")
             {
@@ -239,7 +247,7 @@ namespace Nekorobo
                         VolTo(k, (lp.x - bar.rect.xMin - 35.5f) / 889.5f, true);
                     };
                 }
-                def = down = "slBgm";
+                def = "slBgm";
             }
             else if (tab == "lang")
             {
@@ -257,7 +265,7 @@ namespace Nekorobo
                     if (cur) UiBoard.Img(it.rt, CFGU + "lang_on.png", -3 * S, -4 * S, 469.5f * S, 87 * S);
                     else UiBoard.Img(it.rt, CFGU + "lang.png", 0, 0, W, H);
                     BT(it.rt, Lang.LANGS[i][1], 231.5f * S, 38.5f * S, 22, Color.white, "c", 0, Fonts.OfLang(lk));
-                    if (cur) def = down = "lang" + i;
+                    if (cur) def = "lang" + i;
                 }
             }
             else if (tab == "ctrl")
@@ -284,13 +292,27 @@ namespace Nekorobo
                     float w = Mathf.Max(t1.preferredWidth, t2.preferredWidth);
                     if (w > 235) { t1.fontSize = Mathf.Max(7, Mathf.FloorToInt(13 * 235 / w)); t2.fontSize = Mathf.Max(6, Mathf.FloorToInt(9.5f * 235 / w)); }
                 }
-                def = down = pad ? "cPad" : "cKey";
+                def = pad ? "cPad" : "cKey";
             }
-            else { LicDraw(b); down = "licList"; }
-            // 札から ↓ は、その札の中身の最初のボタンへ（担当。操作説明は「コントローラー」、著作権表示は一覧）
-            foreach (var t in items) if (t.grp == "tab") t.down = down;
-            BCredit();                         // 左下の「CREDITS」（札を替えても常に出す）
-            BBack();
+            else { LicDraw(b); def = "licList"; }
+            // 中身のボタン：B で下の段の「もどる」へ抜ける（すぐ設定を閉じない。担当）。抜けたボタンは ↑ で戻る先として覚える。
+            // 下の段（CREDITS・もどる）：↑ で覚えた中身へ（無ければ「いま選ばれている物」）。そこで B を押すと「もどる」
+            string tabNow = tab, defNow = def;
+            foreach (var it in items)
+            {
+                if (it.grp == "tab") continue;
+                string k = it.key;
+                it.leave = () => setLast[tabNow] = k;
+                it.backFn = () =>
+                {
+                    setLast[tabNow] = k;
+                    int bi = items.FindIndex(x => x.key == "back");
+                    if (bi >= 0) Focus(bi);
+                };
+            }
+            System.Func<string> up = () => { string s; return setLast.TryGetValue(tabNow, out s) ? s : defNow; };
+            BCredit(up);                       // 左下の「CREDITS」（札を替えても常に出す）
+            BBack(up);
             return def;
         }
 
@@ -328,30 +350,53 @@ namespace Nekorobo
             licMx = Mathf.Max(0, licH - LIC_VH);
             // 右の棒（送れるときだけ出す）
             var bar = UiBoard.Box(b, 1166, 240, 7, LIC_VH, "LicBar");
-            licBarBg = bar.gameObject.AddComponent<RawImage>(); licBarBg.color = new Color(1, 228 / 255f, 90 / 255f, 0.2f); licBarBg.raycastTarget = false;
+            // 右の棒はいったん白（担当「黄色だと分かりにくい」）
+            licBarBg = bar.gameObject.AddComponent<RawImage>(); licBarBg.color = new Color(1, 1, 1, 0.25f); licBarBg.raycastTarget = false;
             var th = UiBoard.Box(bar, 0, 0, 7, 28, "Thumb");
-            licThumb = th.gameObject.AddComponent<RawImage>(); licThumb.color = YEL; licThumb.raycastTarget = false;
+            licThumb = th.gameObject.AddComponent<RawImage>(); licThumb.color = Color.white; licThumb.raycastTarget = false;
             licY = licTop = Mathf.Clamp(licTop, 0, licMx);
             LicScroll(0, true);
-            // 一覧の箱（選ぶ所）。決定・クリックは、右の棒の上ならその高さへ送る（ほかの所は何もしない）
-            var it = BBtn("licList", 86, 230, 1106, 306, () =>
-            {
-                var ms = Mouse.current;
-                if (ms == null || !ms.leftButton.wasPressedThisFrame || licMx <= 0) return;
-                Vector2 lp;
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(bar, ms.position.ReadValue(), null, out lp);
-                if (lp.x < -14 || lp.x > 7 + 14) return;
-                licTop = Mathf.Round(Mathf.Clamp01(-lp.y / LIC_VH) * licMx);
-                LicScroll(0);
-            }, "box");
+            // 一覧の箱（選ぶ所）。マウスは押したまま上下に動かすと送る（担当）。
+            //   字の所 … 字が指に付いてくる（スマホと同じ向き）
+            //   右の棒 … 押した高さへ送り、そのまま動かすと付いてくる
+            // 枠の外へ出ても離すまでは効く（BoardMouse の hold）
+            var it = BBtn("licList", 86, 230, 1106, 306, null, "box");
             it.vadj = d => LicScroll(d);
             it.wheel = d => LicScroll(d);
+            it.hold = LicDrag;
+        }
+        bool licDrag, licDragBar; float licDragY0, licDragT0;
+        void LicDrag(Vector2 sp)
+        {
+            if (licIn == null || licMx <= 0) return;
+            var ms = Mouse.current;
+            var view = (RectTransform)licIn.parent;
+            Vector2 lp;
+            if (!licDrag || (ms != null && ms.leftButton.wasPressedThisFrame))
+            {
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(licBarBg.rectTransform, sp, null, out lp);
+                licDragBar = lp.x >= -14 && lp.x <= 7 + 14;
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(view, sp, null, out lp);
+                licDragY0 = lp.y; licDragT0 = licTop; licDrag = true;
+            }
+            float t;
+            if (licDragBar)
+            {
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(licBarBg.rectTransform, sp, null, out lp);
+                t = Mathf.Clamp01(-lp.y / LIC_VH) * licMx;
+            }
+            else
+            {
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(view, sp, null, out lp);
+                t = licDragT0 + (lp.y - licDragY0);
+            }
+            LicScroll(0, true, Mathf.Round(t));
         }
         /// <summary>一覧を送る（dir … 1 下へ・-1 上へ・0 今の位置を合わせ直すだけ）。送れたら true（送れないときは ↑↓ で隣のボタンへ）</summary>
-        bool LicScroll(int dir, bool quiet = false)
+        bool LicScroll(int dir, bool quiet = false, float? to = null)
         {
             if (licIn == null) return false;
-            float t = Mathf.Clamp(licTop + dir * LIC_STEP, 0, licMx);
+            float t = Mathf.Clamp(to ?? licTop + dir * LIC_STEP, 0, licMx);     // to … 送った量をじかに（マウスで押したまま動かすとき）
             bool moved = !Mathf.Approximately(t, licTop);
             licTop = t;
             if (licBarBg != null)
@@ -561,12 +606,19 @@ namespace Nekorobo
                 int di = items.FindIndex(x => x.key == cur.down);
                 if (di >= 0) { Focus(di); return; }
             }
+            // 下の段（設定の「CREDITS」「もどる」）から ↑ は、抜ける前に選んでいた中身へ
+            if (dy < 0 && cur.upFn != null)
+            {
+                int ui = items.FindIndex(x => x.key == cur.upFn());
+                if (ui >= 0) { Focus(ui); return; }
+            }
+            if (cur.leave != null) cur.leave();             // 中身から動く（設定：↑ で戻る先として覚える）
             Rect r0 = BoxRect(cur.rt);
             float cx = r0.center.x, cy = r0.center.y;
             int best = -1; float bs = float.MaxValue;
             for (int i = 0; i < items.Count; i++)
             {
-                if (i == idx || items[i].off) continue;
+                if (i == idx || items[i].off || items[i].nofocus) continue;
                 var r = BoxRect(items[i].rt); var c = r.center;
                 float p = (c.x - cx) * dx + (c.y - cy) * dy;
                 if (p <= 4) continue;
@@ -582,7 +634,7 @@ namespace Nekorobo
             {
                 for (int i = 0; i < items.Count; i++)
                 {
-                    if (i == idx || items[i].off || items[i].grp != null) continue;
+                    if (i == idx || items[i].off || items[i].nofocus || items[i].grp != null) continue;
                     var r = BoxRect(items[i].rt);
                     if (r.yMax < r0.yMin || r.yMin > r0.yMax) continue;
                     float d = Mathf.Abs(r.center.x - cx);
@@ -612,9 +664,10 @@ namespace Nekorobo
             CreditsTick(dt);
             if (page == null || !IsBoard(page)) return;
             // 著作権表示の一覧の送り（0.15 秒でなめらかに）
+            if (licDrag && (Mouse.current == null || !Mouse.current.leftButton.isPressed)) licDrag = false;
             if (licIn != null)
             {
-                licY = Mathf.Lerp(licY, licTop, 1 - Mathf.Exp(-dt * 22));
+                licY = licDrag ? licTop : Mathf.Lerp(licY, licTop, 1 - Mathf.Exp(-dt * 22));     // 押したまま動かしている間は遅れずに付いてくる
                 if (Mathf.Abs(licY - licTop) < 0.3f) licY = licTop;
                 licIn.anchoredPosition = new Vector2(0, licY);
             }
@@ -648,7 +701,7 @@ namespace Nekorobo
                 if (achUp != null && RectTransformUtility.RectangleContainsScreenPoint(achUp.rectTransform, mp, null)) { AchScroll(-1); return true; }
                 if (achDn != null && RectTransformUtility.RectangleContainsScreenPoint(achDn.rectTransform, mp, null)) { AchScroll(1); return true; }
                 int hi = HitAt(mp);
-                if (hi >= 0 && items[hi].hold != null) { Focus(hi, true); holdItem = items[hi]; holdItem.hold(mp); return true; }
+                if (hi >= 0 && items[hi].hold != null) { Focus(hi, true); holdItem = items[hi]; licDrag = false; holdItem.hold(mp); return true; }
             }
             float wy = ms.scroll.ReadValue().y;
             if (Mathf.Abs(wy) > 0.01f)

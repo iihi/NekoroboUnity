@@ -60,9 +60,13 @@ namespace Nekorobo
             public System.Func<int, bool> vadj; public System.Action backFn;
             public System.Action<Vector2> hold; public System.Action<int> wheel;
             public System.Action<string> devFire;      // ユーザー選択（ローカル）：押した指（key・pad0〜3）ごとの働き
+            // nofocus … マウスで押せるだけで、選択枠は当たらない（設定の札。LB/RB で替える）。
+            // leave … キー・パッドでこのボタンから動くとき、upFn … ↑ の行き先（設定の下の段から、抜ける前の中身へ。HTML版 _leave・_up）
+            public bool nofocus; public System.Action leave; public System.Func<string> upFn;
         }
         readonly List<Item> items = new List<Item>();
         int idx;
+        int hov = -1;                                   // マウスが乗っているボタン（少し明るくするだけ。選択枠は押すまで動かない）
         float lockT; bool armed;
         bool pUp, pDown, pLeft, pRight, pOk, pBack;
         Text cap;
@@ -162,7 +166,7 @@ namespace Nekorobo
             {
                 page = pg;
                 if (box != null) Object.Destroy(box.gameObject);
-                box = null; items.Clear(); gridItems.Clear(); freeDesc = null;
+                box = null; items.Clear(); gridItems.Clear(); freeDesc = null; hov = -1;
                 SsOpen();
                 return;
             }
@@ -183,7 +187,7 @@ namespace Nekorobo
             string keepKey = redraw && idx < items.Count ? items[idx].key : null;
             page = pg;
             if (box != null) Object.Destroy(box.gameObject);
-            items.Clear(); gridItems.Clear(); freeDesc = null;
+            items.Clear(); gridItems.Clear(); freeDesc = null; hov = -1;
             box = UiKit.Rect(root, "Box");
             box.anchorMin = box.anchorMax = new Vector2(0.5f, 0.5f); box.pivot = new Vector2(0.5f, 0.5f);
             box.sizeDelta = new Vector2(1280, 720);
@@ -693,11 +697,16 @@ namespace Nekorobo
                     if (bm != null)
                     {
                         var mp = bm.position.ReadValue();
-                        if (bm.delta.ReadValue().sqrMagnitude > 0.01f) { int hi = HitAt(mp); if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi, true); }
+                        HoverAt(mp);                            // 乗せただけでは枠を動かさない（担当）。少し明るくするだけ
                         if (bm.leftButton.wasPressedThisFrame)
                         {
                             int hi = HitAt(mp);
-                            if (hi >= 0 && !items[hi].off && items[hi].fire != null) { Focus(hi, true); Game.SeUi(items[hi].back ? "back" : "ok"); items[hi].fire(); return; }
+                            if (hi >= 0 && !items[hi].off && items[hi].fire != null)
+                            {
+                                // 札（nofocus）は枠を当てず、替えるだけ（音は替えたときの「カーソル」）
+                                if (!items[hi].nofocus) { Focus(hi, true); Game.SeUi(items[hi].back ? "back" : "ok"); }
+                                items[hi].fire(); return;
+                            }
                         }
                     }
                 }
@@ -717,7 +726,10 @@ namespace Nekorobo
             Remember(up, down, left, right, ok, back);
             // 指カーソル（マウスかスティック）：動かしたら指の下の物を選ぶ。決定は A・Enter・クリック
             Ptr.Tick(dt, () => idx < items.Count ? Ptr.Center(items[idx].rt) : null);
-            if (Ptr.Moved)
+            // マウスは**乗せただけでは選択枠を動かさない**（担当「乗せただけで枠が移ると、選んだように見えて分かりにくい。
+            // 外しても枠がそこに残る」）。押したときに枠も移る。乗っている間は絵が少し明るくなる（HoverAt）。
+            // 面選び（Free）だけは前のまま、乗ったマスに枠が移って説明が出る（マウスで見ているだけ。選ぶのは押したとき）
+            if (Ptr.Moved && page == "Free")
             {
                 int hi = HitAt(Ptr.Pos);
                 if (hi >= 0 && hi != idx && !items[hi].off) Focus(hi, true);
@@ -726,6 +738,7 @@ namespace Nekorobo
             if (ms != null)
             {
                 var mp = ms.position.ReadValue();
+                if (page != "Free") HoverAt(mp);
                 if (ms.leftButton.wasPressedThisFrame)
                 {
                     int hi = HitAt(mp);
@@ -761,6 +774,21 @@ namespace Nekorobo
             pUp = up; pDown = down; pLeft = left; pRight = right; pOk = ok; pBack = back;
         }
 
+        /// <summary>選んでいるボタンと、マウスが乗っているボタンを明るく（HTML版 .mfoc と :hover）</summary>
+        void Looks()
+        {
+            for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx || k == hov);
+        }
+        /// <summary>マウスが乗っているボタン（明るくするだけ。選択枠は動かさない）</summary>
+        void HoverAt(Vector2 mp)
+        {
+            int hi = HitAt(mp);
+            if (hi >= 0 && items[hi].off) hi = -1;
+            if (hi == hov) return;
+            hov = hi;
+            Looks();
+        }
+
         int HitAt(Vector2 mp)
         {
             for (int i = items.Count - 1; i >= 0; i--)
@@ -794,7 +822,7 @@ namespace Nekorobo
             if (i < 0 || i >= items.Count) return;
             if (i != idx && items.Count > 0) Game.SeUi("cur");    // 開いたとき（同じ所に立てるだけ）は鳴らさない
             idx = i;
-            for (int k = 0; k < items.Count; k++) if (items[k].look != null) items[k].look(k == idx);
+            Looks();
             if (cap != null) cap.text = Lang.Tr(items[idx].desc ?? "");
             if (!byMouse && idx != was && items[idx].onFocus != null) { items[idx].onFocus(); return; }
             // 面選びの説明。一覧から外れたら、いま選んである面に戻す

@@ -250,9 +250,11 @@ namespace Nekorobo
                 m.crown.gameObject.SetActive(crown);
                 m.crown.rectTransform.anchoredPosition = new Vector2(-pw / 2 - 2 - 10, 9);
                 // 故障は対戦で読み合いの材料になるので、名前の右に札で並べる（担当）
+                // リタイアしたら出さない（「リタイア」だけ。担当）。落ちて復帰を待つ間は出す
                 var bad = new List<string>();
-                if (P.broken != null) bad.Add(Lang.Tr(P.broken == "left" ? "⚠左" : "⚠右"));
-                if (P.brokenDrive) bad.Add(Lang.Tr("⚠駆動"));
+                bool retired = P.down && !(P.revT > 0);
+                if (P.broken != null && !retired) bad.Add(Lang.Tr(P.broken == "left" ? "⚠左" : "⚠右"));
+                if (P.brokenDrive && !retired) bad.Add(Lang.Tr("⚠駆動"));
                 string bk = string.Join(" ", bad.ToArray());
                 m.brkBg.gameObject.SetActive(bk != "");
                 if (m.brk.text != bk) { m.brk.text = bk; m.brkBg.rectTransform.sizeDelta = new Vector2(m.brk.preferredWidth + 8, 14); }

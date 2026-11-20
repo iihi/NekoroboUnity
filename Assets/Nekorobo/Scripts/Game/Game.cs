@@ -1656,7 +1656,8 @@ namespace Nekorobo
                 while (runTimes.Count <= courseIndex) runTimes.Add(0);
                 runTimes[courseIndex] = frames;               // やり直したら上書き（足し込まない）
             }
-            if (cleared && !timeUp)
+            // 全員 NPC（見ているだけ）のときは、ベストタイムに残さない
+            if (cleared && !timeUp && players.Exists(AchMine))
             {
                 int best = PlayerPrefs.GetInt(BestKey(), 0);
                 if (best == 0 || frames < best) { result.rec = true; PlayerPrefs.SetInt(BestKey(), frames); }

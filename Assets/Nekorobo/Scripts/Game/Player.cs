@@ -71,7 +71,7 @@ namespace Nekorobo
             get
             {
                 return kind == "pad" ? "パッド" + (index + 1)
-                     : kind == "npc" ? "NPC・" + NpcLevels.Get(lv).name
+                     : kind == "npc" ? NpcLevels.Get(lv).name          // HTML版 slotName と同じ（前は「NPC・NPC」と重なっていた）
                      : kind == "net" ? "オンライン" : "キーボード";
             }
         }
@@ -164,7 +164,7 @@ namespace Nekorobo
         public NpcBrain npc;             // NPC のときだけ入る
 
         /// <summary>頭の上・一覧に出す名前（NPC は「NPC」）。</summary>
-        public string Label { get { return src.kind == "npc" ? "NPC" : name; } }
+        public string Label { get { return name; } }        // NPC も人と同じく 1P・2P…（担当。前は「NPC」）
 
         // 見た目
         public RobotLook look;

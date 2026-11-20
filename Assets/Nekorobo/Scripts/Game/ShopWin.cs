@@ -31,10 +31,10 @@ namespace Nekorobo
         readonly List<Cur> cur = new List<Cur>();
         readonly List<CardUi> cards = new List<CardUi>();
         Rect rdyRect;
-        Text secText, msgText; RawImage clockFill; float clockW;
+        Text secText, msgText, secL, secR; RawImage clockFill; float clockW;
         readonly List<PpUi> pps = new List<PpUi>();
         readonly List<Text> descRows = new List<Text>();
-        RawImage btnOn, btnOff; Text undoText; float pressT; Texture btnOffTex;
+        RawImage btnOn, btnOff; float pressT; Texture btnOffTex;
         RectTransform root { get { return B.root; } }
 
         static readonly Color GREEN = Mats.Hex(0x68ff00), POOR = Mats.Hex(0xff5a45), UPC = Mats.Hex(0x45c3ff), ITC = Mats.Hex(0x4ac15d);
@@ -65,6 +65,7 @@ namespace Nekorobo
             public float nx = -1, ny = -1; public bool netSeen;          // オンラインの相手の指（割合で届く）
             public float lockT, buyT; public bool pOk, pUse;
             public string navK = ""; public float navT;   // 矢印キー・十字キーの押しっぱなし（少し待ってから続けて跳ぶ）
+            public bool npcGo; public float npcT; public int npcN;   // NPC の買い物（次の1つまでの秒・買った数）
             public RectTransform el; public Text tag; public Image tagBg; public Image tagCant; public Text cantT;
         }
         class CardUi
@@ -180,14 +181,15 @@ namespace Nekorobo
                 fillBox.gameObject.AddComponent<RectMask2D>();
                 clockFill = UiBoard.Img(fillBox, U + "fill.png", 0, 0, 742.5f, 10);
                 clockW = 742.5f;
-                UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 61, 24, Color.white);
-                secText = UiBoard.T(ck, "", 1199.5f, 49, 58, GREEN, 1);
-                UiBoard.T(ck, Lang.Tr("秒"), 1238.5f, 61, 24, Color.white, 1);
+                // 「残り N 秒」は1つの並び。「残り」の左を棒の右に固定し、間をそろえて下の線で合わせる（担当。前は数字の桁で間が変わっていた）
+                secL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 79, 24, Color.white);
+                secText = UiBoard.T(ck, "", 1086.5f, 49, 58, GREEN);
+                secR = UiBoard.T(ck, Lang.Tr("秒"), 1086.5f, 79, 24, Color.white);
             }
             else
             {
+                // 1人のとき（残り時間なし）の「1人のときは時間制限なし（右パネルで付けられます）」は出さない（担当「システム的な説明の文字はいらない」）
                 secText = null; clockFill = null;
-                UiBoard.T(ck, Lang.Tr("1人のときは時間制限なし（右パネルで付けられます）"), 302, 66, 16, Mats.Hex(0xb8b8b8));
             }
             B.In(ck, "right", 1);
             // ---- 指カーソルの動ける箱（板いっぱい）
@@ -249,7 +251,7 @@ namespace Nekorobo
                 UiBoard.Lbl(pp.r, "shop/pp_" + ck2, 0, 0);
                 pp.pu = UiBoard.Img(pp.r, U + "pi_up_" + ck2 + ".png", 40, 33.5f, 84.5f, 11.5f);
                 pp.pi = UiBoard.Img(pp.r, U + "pi_it_" + ck2 + ".png", 28, 67.5f, 174.5f, 12);
-                UiBoard.T(pp.r, P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P", 61.5f, 1.25f, 18, Mats.Hex(0x06223a), 2);
+                UiBoard.T(pp.r, (P.idx + 1) + "P", 61.5f, 1.25f, 18, Mats.Hex(0x06223a), 2);      // NPC も「〇P」（担当）
                 pp.cs = UiBoard.T(pp.r, "", 163, 0.5f, 18, Color.white);
                 for (int j = 0; j < 4; j++) pp.n.Add(UiBoard.T(pp.r, "", PP_UP_X[j], 51, 11, Color.white, 2));
                 for (int j = 0; j < 8; j++) pp.n.Add(UiBoard.T(pp.r, "", PP_IT_X[j], 85, 11, Color.white, 2));
@@ -272,7 +274,7 @@ namespace Nekorobo
                 btnOff = UiBoard.Img(btn, U + "btn.png", 0, 0, 260, 83); btnOffTex = null;
                 btnOn = UiBoard.Img(btn, U + "btn_on.png", 0, 0, 260, 83);
                 UiBoard.Lbl(btn, "shop/btn", 0, 0);
-                undoText = UiBoard.T(btn, Lang.Tr("もう一度押すと取り消し"), 130, 86, 11, Mats.Hex(0xc8c8c8), 2);
+                // 下の「もう一度押すと取り消し」は出さない（担当「システム的な説明の文字はいらない」）
                 B.In(btn, "pop", 7);
                 rdyRect = new Rect(978, 591, 260, 83);
             }
@@ -535,36 +537,35 @@ namespace Nekorobo
             if (c.ready) return;
             // 協力は財布がひとつなので、NPC に人の金を使わせない
             if (!g.NpcMayShop(c.P)) { c.ready = true; return; }
-            // **悩まずに、開いたらすぐまとめて買って「購入完了」にする**（HTML版と同じ。担当「NPC が悩んでる演出いらない。
-            // 人間が買い終わってるのに NPC の買い物を待っている状況が起きるのは良くない」）。
-            // 前は 0.5〜1.2秒ごとに1つずつ買っていた。指は最後に買った物の上に置く（何を取ったか見えるように）
+            // **悩まずに、さっさと1つずつ買う**（NPC_BUY_GAP 秒おき）。指をその品物へ跳ばして、光らせて、買う音。
+            // 何を買ったか見えるように（担当「悩まずサッサと買うのは入れて欲しい。何を買ったかわからないから」）。
+            // 前は開いた瞬間にまとめて買って「購入完了」（「NPC が悩んでる演出いらない」「人間が買い終わってるのに
+            // NPC を待つのは良くない」）、その前は 0.5〜1.2秒ごとに迷うように買っていた。買える物が無くなったら「購入完了」
+            if (!c.npcGo) { c.npcGo = true; c.npcT = NPC_BUY_FIRST; c.npcN = 0; }
+            if ((c.npcT -= dt) > 0) return;
+            c.npcT = NPC_BUY_GAP;
             var W = g.WalletOf(c.P);
-            int last = -1;
-            for (int guard = 0; guard < 16; guard++)
-            {
-                var can = new List<int>();
-                for (int i = 0; i < goods.Count; i++) if (!goods[i].Full(W) && goods[i].Cost(W) <= W.cash) can.Add(i);
-                if (can.Count == 0) break;
-                // 3回に1回はアイテム。強化は半分は「いちばん高い＝効きの大きい」物、半分は適当に
-                var items = can.FindAll(i => goods[i].kind == "it");
-                var ups = can.FindAll(i => goods[i].kind == "up");
-                ups.Sort((a, b) => goods[b].Cost(W).CompareTo(goods[a].Cost(W)));
-                int pickI = (items.Count > 0 && Random.value < 0.34f) ? items[Random.Range(0, items.Count)]
-                          : ups.Count > 0 ? (Random.value < 0.5f ? ups[0] : ups[Random.Range(0, ups.Count)]) : items[0];
-                var gd = goods[pickI];
-                if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
-                last = pickI;
-            }
-            if (last >= 0)
-            {
-                var cd = cards[last];
-                c.x = cd.hitX + cd.hitW / 2; c.y = cd.hitY + cd.hitH / 2;
-                c.idx = last;
-                if (IsViewer(c.P)) cd.flash = 0.2f;
-                Game.SeUi("buy", 0.5f);
-            }
-            c.ready = true;
+            // 買えるものだけを候補にする。借金はしない（人間だけの手札にしておく）
+            var can = new List<int>();
+            for (int i = 0; i < goods.Count; i++) if (!goods[i].Full(W) && goods[i].Cost(W) <= W.cash) can.Add(i);
+            if (can.Count == 0 || c.npcN >= 16) { c.ready = true; return; }
+            // 3回に1回はアイテム。強化は半分は「いちばん高い＝効きの大きい」物、半分は適当に（高い順だけだと全員が同じ強化に寄る）
+            var items = can.FindAll(i => goods[i].kind == "it");
+            var ups = can.FindAll(i => goods[i].kind == "up");
+            ups.Sort((a, b) => goods[b].Cost(W).CompareTo(goods[a].Cost(W)));
+            int pickI = (items.Count > 0 && Random.value < 0.34f) ? items[Random.Range(0, items.Count)]
+                      : ups.Count > 0 ? (Random.value < 0.5f ? ups[0] : ups[Random.Range(0, ups.Count)]) : items[0];
+            var gd = goods[pickI];
+            if (gd.kind == "up") g.BuyUpgrade(gd.k, W); else g.BuyItem(gd.k, W);
+            c.npcN++;
+            var cd = cards[pickI];
+            c.x = cd.hitX + cd.hitW / 2; c.y = cd.hitY + cd.hitH / 2;
+            c.idx = pickI;
+            cd.flash = 0.2f;                                     // 買った物の絵を一瞬光らせる（NPC の指は出さないので、何を買ったかはこれで見る）
+            Game.SeUi("buy", 0.5f);
         }
+        // NPC の買い物：開いてから1つ目までの秒数と、そのあと1つごとの秒数（悩まずにさっさと。担当）
+        const float NPC_BUY_FIRST = 0.6f, NPC_BUY_GAP = 0.3f;
 
         /// <summary>
         /// 指を、(dx, dy) の向きにある**いちばん近い品物（か「購入完了」）**の真ん中へ跳ばす（JS版 shopJump）。
@@ -629,7 +630,8 @@ namespace Nekorobo
             B.Tick(Time.unscaledDeltaTime);
             if (secText != null)
             {
-                secText.text = Mathf.CeilToInt(Mathf.Max(0, t)).ToString();
+                string sn = Mathf.CeilToInt(Mathf.Max(0, t)).ToString();
+                if (secText.text != sn) { secText.text = sn; UiBoard.Row(1086.5f, 7, secL, secText, secR); }
                 secText.color = t <= 10 ? Mats.Hex(0xff4b4b) : GREEN;
                 if (clockFill != null) clockFill.rectTransform.sizeDelta = new Vector2(clockW * Mathf.Clamp01(Mathf.Max(0, t) / Mathf.Max(1, g.T.shopTime)), 10);
             }
@@ -744,7 +746,6 @@ namespace Nekorobo
             btnOn.color = new Color(1, 1, 1, rdy || pressT > 0 ? 1 : 0);
             if (btnOffTex == null) btnOffTex = btnOff.texture;
             if (btnOffTex != null) btnOff.texture = hov ? UiBoard.Bright(btnOffTex) : btnOffTex;   // 選んでいるときは地を少し明るく
-            undoText.gameObject.SetActive(rdy);
             // 説明の行
             for (int i = 0; i < descRows.Count; i++)
             {
@@ -764,9 +765,8 @@ namespace Nekorobo
         {
             string head = "<color=" + UiKit.Hex(Mats.Hex(c.P.col)) + ">●</color> ";
             const string DS = "#c8d0d8";
-            if (c.onRdy) return head + Lang.Tr("買い終わり") + "  <color=" + DS + ">"
-                + Lang.Tr(c.ready ? "決定でもう一度押すと、買い物に戻れます。" : "決定で「買い終わり」になります（全員そろうと次のステージへ）。") + "</color>";
-            if (c.idx < 0) return head + "<color=" + DS + ">" + Lang.Tr(c.ready ? "買い終わり" : "品物の上へカーソルを動かしてください") + "</color>";
+            // 品物の説明だけ。「購入完了」に乗ったときの「決定で…」、品物に乗っていないときの案内は出さない（担当「システム的な説明の文字はいらない」）
+            if (c.onRdy || c.idx < 0) return "";
             var gd = goods[c.idx]; var W = g.WalletOf(c.P);
             int lv = gd.Lv(W), cost = gd.Cost(W); bool maxed = gd.Full(W);
             return head + Lang.Tr(gd.n) + (gd.sub.Length > 0 ? Lang.Paren(Lang.Tr(gd.sub)) : "") + "  "

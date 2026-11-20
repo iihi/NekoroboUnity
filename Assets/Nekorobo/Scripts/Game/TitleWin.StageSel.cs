@@ -31,15 +31,17 @@ namespace Nekorobo
         class SsState
         {
             public bool open; public SsCtx ctx; public List<SsVoter> cur = new List<SsVoter>();
-            public float t, lockT, winT; public bool timed, went, anyPad; public int win = -1; public FreeE go; public string why = "";
+            public float t, lockT, winT, banT = -1; public bool timed, went, anyPad; public int win = -1; public FreeE go; public string why = "";
             public string net, key = "", sig = "", mine = "", shut = ""; public float sendT, gapT;
         }
         readonly SsState SS = new SsState();
         UiBoard ssB;
-        Text ssSec; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
+        Text ssSec, ssSecL, ssSecR; RawImage ssBar; RectTransform ssFingRoot, ssWait, ssGoBtn; Text ssWaitT;
         const int SS_START = FREE_SLOTS + 1, SS_BACK = FREE_SLOTS + 2;
         // 決まった面を光らせておく秒数（前は 1.5秒。担当「長い。半分に。ビカビカの速度も上げる」）
         const float SS_WIN_SEC = 0.75f;
+        // そのあと面の名前を出しておく秒数（担当「スタートを押したら面のタイトルをドンと出して、数秒で自動で始める」）
+        const float SS_BAN_SEC = 2.2f;
         /// <summary>自動マッチングの部屋の面選びか。「もどる」を出さない（ホストが戻ると、そろった全員の対戦が崩れるため）。</summary>
         bool SsAuto { get { return SS.net != null && Net.Room != null && (bool?)Net.Room["auto"] == true; } }
         bool SsNoBack { get { return SS.net == "guest" || SsAuto; } }
@@ -54,7 +56,8 @@ namespace Nekorobo
             bool cont = goNext || goOn, multi = from == "Local";
             // ラウンドマッチ。部屋の面選びはホストの決めたラウンド数、続きは遊んでいる試合のもの
             int rn = cont ? (g.IsMatch ? g.matchRounds : 0) : forRoom ? Lobby.rounds : rounds;
-            string head = rn > 0 ? "ROUND " + (cont ? g.runDone + 1 : 1) + " / " + rn : cont ? Lang.Tr("次のステージ") : "";
+            // ラウンドマッチだけ「ROUND 2 / 3」。ショップのあとの「次のステージ」の字は出さない（担当）
+            string head = rn > 0 ? "ROUND " + (cont ? g.runDone + 1 : 1) + " / " + rn : "";
             return new SsCtx { forRoom = forRoom, goNext = goNext, goOn = goOn, cont = cont, multi = multi, head = head };
         }
         SsVoter SsNewVoter(int n, PlayerSrc src, int id, bool local)
@@ -123,7 +126,8 @@ namespace Nekorobo
         void SsShow()
         {
             SS.anyPad = SS.cur.Exists(c => c.src.kind == "pad");
-            SS.win = -1; SS.winT = 0; SS.went = false; SS.go = null; SS.why = ""; SS.lockT = g.T.menuLock;
+            SS.win = -1; SS.winT = 0; SS.banT = -1; SS.went = false; SS.go = null; SS.why = ""; SS.lockT = g.T.menuLock;
+            SsBanHide();
             SS.sig = ""; SS.sendT = 0; SS.mine = ""; SS.gapT = 0;
             SS.open = true;
             if (ssB == null) ssB = new UiBoard(root.parent, "StageSel", true, "ui/ss/bg.jpg");   // 背景は清書1109 の面選びの絵
@@ -136,6 +140,7 @@ namespace Nekorobo
             SS.open = false;
             SS.shut = SS.key;
             if (ssB != null) ssB.Active = false;
+            SsBanHide();
         }
 
         // ---- 描く
@@ -145,17 +150,24 @@ namespace Nekorobo
             var bx = ssB.box;
             var title = UiBoard.Img(bx, "ui/ss/title.png", 49, 45.5f, 549.5f, 56.5f, "Title");   // STAGE SELECT（絵）
             ssB.In(title.rectTransform, "slam", 0);
-            if (!string.IsNullOrEmpty(SS.ctx.head)) ssB.In(UiBoard.T(bx, SS.ctx.head, 50, 116, 17, Mats.Hex(0xffd400)), "left", 1);
+            // 「ROUND 2 / 3」：「STAGE SELECT」の右、残り時間の棒の下（棒の左端から）に、同じ書体で黄色。
+            // 残り時間が無いときも同じ所（担当「タイマー有り無しで同じに」「白じゃない方が良い」「もう少しだけ小さく」）
+            if (!string.IsNullOrEmpty(SS.ctx.head)) ssB.In(UiBoard.T(bx, SS.ctx.head, 645, 71, 32, Mats.Hex(0xffd400)), "left", 1);
             ssSec = null; ssBar = null;
             if (SS.timed)
             {
+                // 残り時間の棒は今までどおり。ROUND の字が下に入るぶん上げた。「残り N 秒」は1つの並び（ショップと同じ）
                 var ck = UiBoard.Box(bx, 0, 0, 1280, 140, "Clock");
-                UiBoard.Img(ck, "ui/shop/bar.png", 643, 61.5f, 432, 25);
-                var fb = UiBoard.Box(ck, 655, 69, 409, 10, "Fill"); fb.gameObject.AddComponent<RectMask2D>();
+                UiBoard.Img(ck, "ui/shop/bar.png", 643, 43, 432, 25);
+                var fb = UiBoard.Box(ck, 655, 50.5f, 409, 10, "Fill"); fb.gameObject.AddComponent<RectMask2D>();
                 ssBar = UiBoard.Img(fb, "ui/shop/fill.png", 0, 0, 409, 10);
-                UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 61, 24, Color.white);
-                ssSec = UiBoard.T(ck, "", 1199.5f, 49, 58, Mats.Hex(0x68ff00), 1);
-                UiBoard.T(ck, Lang.Tr("秒"), 1238.5f, 61, 24, Color.white, 1);
+                ssSecL = UiBoard.T(ck, Lang.Tr("残り"), 1086.5f, 60.5f, 24, Color.white);
+                ssSec = UiBoard.T(ck, "", 1086.5f, 30.5f, 58, Mats.Hex(0x68ff00));
+                ssSecR = UiBoard.T(ck, Lang.Tr("秒"), 1086.5f, 60.5f, 24, Color.white);
+                ssSec.text = Mathf.CeilToInt(Mathf.Max(0, SS.t)).ToString();          // 描き直したときも今の秒（決まったあとは数えないので）
+                ssSec.color = SS.t <= 10 ? Mats.Hex(0xff4b4b) : Mats.Hex(0x68ff00);
+                UiBoard.Row(1086.5f, 7, ssSecL, ssSec, ssSecR);
+                ssBar.rectTransform.sizeDelta = new Vector2(409 * Mathf.Clamp01(SS.t / Mathf.Max(1, g.T.stageSelTime)), 10);
                 ssB.In(ck, "right", 1);
             }
             for (int i = 0; i <= FREE_SLOTS; i++)
@@ -210,12 +222,13 @@ namespace Nekorobo
             if (wait.Count > 0 && goImg.texture != null) goImg.texture = UiBoard.Dull(goImg.texture);
             UiBoard.T(ssGoBtn, Lang.Tr("スタート"), 231.75f, 37 - 15, 30, wait.Count > 0 ? Mats.Hex(0xc9cec6) : Color.white, 2);
             ssB.In(ssGoBtn, "fade", 5);
-            if (wait.Count > 0)
+            // 下は、まだ選んでいない人の札だけ（2人以上のとき）。「全員が選ぶとスタートできます」の字は出さない（担当「システム的な説明の文字はいらない」）
+            if (wait.Count > 0 && SS.cur.Count > 1)
             {
                 ssWait = UiBoard.Box(bx, 474, 679, 439, 22, "Wait");
-                string s = Lang.Tr(SS.cur.Count > 1 ? "全員が選ぶとスタートできます" : "ステージを選ぶとスタートできます");
-                if (SS.cur.Count > 1) foreach (var v in wait) s += "  <color=#" + ColorUtility.ToHtmlStringRGB(Mats.Hex(v.col)) + ">" + v.lb + "</color>";
-                ssWaitT = UiBoard.T(ssWait, s, 219.5f, 0, 17, Mats.Hex(0xe6e6e6), 2);
+                var parts = new List<string>();
+                foreach (var v in wait) parts.Add("<color=#" + ColorUtility.ToHtmlStringRGB(Mats.Hex(v.col)) + ">" + v.lb + "</color>");
+                ssWaitT = UiBoard.T(ssWait, string.Join("  ", parts.ToArray()), 219.5f, 0, 17, Mats.Hex(0xe6e6e6), 2);
             }
             else { ssWait = null; ssWaitT = null; }
             if (!SsNoBack)                               // 参加者と、自動マッチングの面選びには「もどる」を出さない
@@ -225,7 +238,7 @@ namespace Nekorobo
                 UiBoard.T(back, Lang.Tr(SS.ctx.cont ? "やめる" : "もどる"), 128.25f, 37 - 15, 30, Color.white, 2);
                 ssB.In(back, "fade", 5.5f);
             }
-            if (SS.why != "") UiBoard.T(bx, SS.why, 52, 618, 19, Mats.Hex(0xffd400));
+            // 決め方の一言（「ランダムで決めました」など）は出さない（担当「システム的な説明の文字はいらない」）。SS.why は通信で配るので残す
             // 人ごとの指
             ssFingRoot = UiBoard.Box(bx, 0, 0, 1280, 720, "Fingers");
             foreach (var c in SS.cur)
@@ -449,6 +462,111 @@ namespace Nekorobo
             g.hud.Wipe(() => { SsClose(); FreeStart(x.multi, live); });
         }
 
+        // ---- 面の名前の帯（決まった面が光り終わったら出す。HTML版 ssBanShow）。横から帯が入り、反対から面の名前が飛んできて
+        // 真ん中で止まる（ドン）。帯は画面の横いっぱい（板の外まで）。字は板と同じ倍率。そのまま SS_BAN_SEC 待って始める。音は帯が入る「シュッ」（se.json の stage）
+        RectTransform ssBan, banBar, banTt, banName; CanvasGroup banBk; float banT, banBarW, banTtW;
+        static Texture2D banStripe;
+        bool SsBanShow()
+        {
+            var e = SS.go;
+            if (e == null || ssB == null) return false;
+            SsBanHide();
+            float k = ssB.box.localScale.x;
+            var rr = ssB.root.rect;
+            ssBan = UiKit.Rect(ssB.root, "Ban"); UiKit.Stretch(ssBan); ssBan.SetAsLastSibling();
+            // 暗い幕
+            var bk = UiKit.Rect(ssBan, "Bk"); UiKit.Stretch(bk);
+            var bki = bk.gameObject.AddComponent<RawImage>(); bki.color = new Color(0, 0, 0, 0.78f);      // HTML版の 50% の黒（UI はリニアで重なるので、同じ暗さになる濃さ） bki.raycastTarget = false;
+            banBk = bk.gameObject.AddComponent<CanvasGroup>(); banBk.alpha = 0;
+            // 帯：画面の横いっぱい＋左右5%。高さ 150 に上下 6 の黄色い線（板の倍率）。少し傾ける（HTML版 skewY(-3deg)）
+            banBarW = rr.width * 1.1f;
+            float bh = 162 * k;
+            banBar = UiKit.Rect(ssBan, "Bar");
+            banBar.anchorMin = banBar.anchorMax = new Vector2(0.5f, 0.5f); banBar.pivot = new Vector2(0.5f, 0.5f);
+            banBar.sizeDelta = new Vector2(banBarW, bh); banBar.localRotation = Quaternion.Euler(0, 0, 3);
+            var yl = banBar.gameObject.AddComponent<RawImage>(); yl.color = Mats.Hex(0xffd400); yl.raycastTarget = false;
+            var sh = banBar.gameObject.AddComponent<Shadow>(); sh.effectColor = new Color(0, 0, 0, 0.45f); sh.effectDistance = new Vector2(0, -8 * k);
+            var dk = UiKit.Rect(banBar, "In"); UiKit.Stretch(dk); dk.offsetMin = new Vector2(0, 6 * k); dk.offsetMax = new Vector2(0, -6 * k);
+            var dki = dk.gameObject.AddComponent<RawImage>(); dki.color = Mats.Hex(0x15181f); dki.raycastTarget = false;
+            // 斜めの縞（黄色 14px・すき間 20px。-60度。薄く）
+            var st = UiKit.Rect(dk, "Stripe"); UiKit.Stretch(st);
+            var sti = st.gameObject.AddComponent<RawImage>(); sti.raycastTarget = false; sti.color = new Color(1, 1, 1, 0.045f);   // HTML版の 18%（リニアで重なるので薄く）
+            sti.texture = BanStripe();
+            const float TW = 34 / 0.8660254f, TH = 34 / 0.5f;                 // 縞の1周期（横・縦。板の px）
+            sti.uvRect = new Rect(0, 0, banBarW / (TW * k), (bh - 12 * k) / (TH * k));
+            // 字（ROUND は小さく黄色、面の名前は大きく白。黒い影）。板と同じ倍率の箱に置いて、少し傾ける
+            banTt = UiKit.Rect(ssBan, "Tt");
+            banTt.anchorMin = banTt.anchorMax = new Vector2(0.5f, 0.5f); banTt.pivot = new Vector2(0.5f, 0.5f);
+            banTt.sizeDelta = new Vector2(1280, 118); banTt.localScale = Vector3.one * k; banTt.localRotation = Quaternion.Euler(0, 0, 3);
+            banTtW = rr.width / k;
+            bool hd = SS.ctx != null && !string.IsNullOrEmpty(SS.ctx.head);
+            float ny = hd ? 34 : 17;
+            if (hd)
+            {
+                var ht = UiBoard.T(banTt, SS.ctx.head, 640, 0, 26, Mats.Hex(0xffd400), 2);
+                var hs = ht.gameObject.AddComponent<Shadow>(); hs.effectColor = Color.black; hs.effectDistance = new Vector2(0, -2);
+            }
+            var nm = UiBoard.T(banTt, Lang.Tr(e.n), 640, ny, 84, Color.white, 2);
+            var ns = nm.gameObject.AddComponent<Shadow>(); ns.effectColor = Color.black; ns.effectDistance = new Vector2(0, -4);
+            banName = nm.rectTransform;
+            // 大きくして弾ませるので、字の真ん中を軸に
+            var p = banName.anchoredPosition; banName.pivot = new Vector2(0.5f, 0.5f);
+            banName.anchoredPosition = new Vector2(p.x, p.y - banName.sizeDelta.y / 2);
+            banT = 0;
+            SsBanTick(0);
+            Game.SeUi("stage");
+            return true;
+        }
+        void SsBanHide() { if (ssBan != null) { Object.Destroy(ssBan.gameObject); ssBan = null; } }
+        void SsBanTick(float dt)
+        {
+            if (ssBan == null) return;
+            banT += dt;
+            banBk.alpha = 1 - Mathf.Pow(1 - Mathf.Clamp01(banT / 0.25f), 2);                                 // ease-out
+            float b = Bez(0.2f, 0.9f, 0.3f, 1, Mathf.Clamp01(banT / 0.3f));                                    // 帯は左から
+            banBar.anchoredPosition = new Vector2(-banBarW * 1.1f * (1 - b), 0);
+            float t2 = Bez(0.2f, 1.3f, 0.4f, 1, Mathf.Clamp01((banT - 0.14f) / 0.32f));                        // 字は右から（少し行き過ぎて戻る）
+            banTt.anchoredPosition = new Vector2(banTtW * ssB.box.localScale.x * 1.1f * (1 - t2), 0);
+            float u = (banT - 0.44f) / 0.35f, sc = 1;                                                           // ドン（1 → 1.14 → 1）
+            if (u > 0 && u < 1) { float e = 1 - Mathf.Pow(1 - u, 2); sc = e < 0.3f ? 1 + 0.14f * e / 0.3f : 1.14f - 0.14f * (e - 0.3f) / 0.7f; }
+            banName.localScale = Vector3.one * sc;
+        }
+        /// <summary>CSS の cubic-bezier(x1, y1, x2, y2) の値（x＝時間の割合から y を出す）</summary>
+        static float Bez(float x1, float y1, float x2, float y2, float x)
+        {
+            if (x <= 0) return 0; if (x >= 1) return 1;
+            float lo = 0, hi = 1, s = x;
+            for (int i = 0; i < 24; i++)
+            {
+                s = (lo + hi) / 2;
+                float bx = 3 * (1 - s) * (1 - s) * s * x1 + 3 * (1 - s) * s * s * x2 + s * s * s;
+                if (bx < x) lo = s; else hi = s;
+            }
+            return 3 * (1 - s) * (1 - s) * s * y1 + 3 * (1 - s) * s * s * y2 + s * s * s;
+        }
+        /// <summary>帯の斜めの縞の1周期（横 39.3・縦 68 の板の px に当たる絵。くり返して貼る）</summary>
+        static Texture2D BanStripe()
+        {
+            if (banStripe != null) return banStripe;
+            const int W = 157, H = 272;                                             // 1周期の4倍の細かさ
+            var px = new Color32[W * H];
+            for (int j = 0; j < H; j++)
+                for (int i = 0; i < W; i++)
+                {
+                    int on = 0;
+                    for (int a = 0; a < 4; a++)                                       // 4点で縁をなめらかに
+                    {
+                        float u = (i + (a & 1) * 0.5f + 0.25f) / W, v = (j + (a >> 1) * 0.5f + 0.25f) / H;
+                        float ph = u - v; ph -= Mathf.Floor(ph);
+                        if (ph * 34 < 14) on++;
+                    }
+                    px[j * W + i] = new Color32(255, 212, 0, (byte)(on * 255 / 4));
+                }
+            banStripe = new Texture2D(W, H, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat };
+            banStripe.SetPixels32(px); banStripe.Apply(false);
+            return banStripe;
+        }
+
         /// <summary>毎フレーム（Hud から。タイトルが閉じていても、オンラインの参加者の画面で動く）</summary>
         public void SsTick(float dt)
         {
@@ -463,7 +581,11 @@ namespace Nekorobo
             if (SS.win >= 0)
             {
                 SS.winT -= dt;
-                if (SS.winT <= 0 && !SS.went) { SS.went = true; SsGo(); }
+                SsBanTick(dt);
+                if (SS.winT > 0 || SS.went) return;
+                if (SS.banT < 0) SS.banT = SsBanShow() ? SS_BAN_SEC : 0;    // 光り終わったら面の名前の帯
+                if ((SS.banT -= dt) > 0) return;
+                SS.went = true; SsGo();
                 return;
             }
             if (SS.lockT > 0) SS.lockT -= dt;
@@ -521,7 +643,8 @@ namespace Nekorobo
                 if (SS.t > 0 && SS.t <= 5 && Mathf.CeilToInt(SS.t) != was) Game.SeUi("tick");
                 if (ssSec != null)
                 {
-                    ssSec.text = Mathf.CeilToInt(Mathf.Max(0, SS.t)).ToString();
+                    string sn = Mathf.CeilToInt(Mathf.Max(0, SS.t)).ToString();
+                    if (ssSec.text != sn) { ssSec.text = sn; UiBoard.Row(1086.5f, 7, ssSecL, ssSec, ssSecR); }
                     ssSec.color = SS.t <= 10 ? Mats.Hex(0xff4b4b) : Mats.Hex(0x68ff00);
                     ssBar.rectTransform.sizeDelta = new Vector2(409 * Mathf.Clamp01(SS.t / Mathf.Max(1, g.T.stageSelTime)), 10);
                 }

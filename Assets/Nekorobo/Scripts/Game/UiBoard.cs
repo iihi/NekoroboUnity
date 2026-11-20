@@ -213,6 +213,17 @@ namespace Nekorobo
             return t;
         }
 
+        /// <summary>字を横に並べる（左の字の左端を x に、間は gap。CSS の display:flex; gap）。「残り N 秒」で数字の桁が変わっても間がそろう</summary>
+        public static void Row(float x, float gap, params Text[] ts)
+        {
+            foreach (var t in ts)
+            {
+                var r = t.rectTransform;
+                r.anchoredPosition = new Vector2(x, r.anchoredPosition.y);
+                x += t.preferredWidth + gap;
+            }
+        }
+
         /// <summary>字のふち（CSS の -webkit-text-stroke の代わり）。</summary>
         public static void Stroke(Text t, Color c, float w)
         {

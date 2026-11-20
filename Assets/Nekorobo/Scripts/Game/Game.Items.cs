@@ -53,16 +53,17 @@ namespace Nekorobo
     /// </summary>
     public partial class Game
     {
+        // 値段は担当の指定で3倍にした（バナナ 500→1500、レーザー 10000→30000 など）
         public static readonly ItemDef[] ITEMS =
         {
-            new ItemDef { k = "banana", n = "バナナの皮", shortN = "バナナ", price = 500, rate = 1.5f, max = 3, col = 0xf5d020, ds = "うしろに1マス置く。踏むと激しく滑って回る" },
-            new ItemDef { k = "repair", n = "リペア", price = 1500, rate = 1.5f, max = 3, col = 0x5fd08a, ds = "体力を50%ぶん回復して、旋回・駆動の故障も直す" },
-            new ItemDef { k = "drone", n = "ドローン", price = 1800, rate = 1.5f, max = 2, col = 0x8fd4ff, ds = "運搬中の料理を、乱さずターゲットへ自動で届ける（使い捨て）" },
-            new ItemDef { k = "laser", n = "レーザービーム", shortN = "レーザー", sn = "エネルギーパック", price = 10000, max = 1, ammo = 20, col = 0x6be0ff, ds = "まっすぐ飛ぶ光線を20発。当たると爆発して周りが吹っ飛ぶ（車も）" },
-            new ItemDef { k = "ball", n = "ICBM", shortN = "ICBM", price = 20000, max = 1, col = 0xffcf3a, aim = true, ds = "上へ打ち上げて、狙った場所へ落とす。押しっぱなしで照準、離すと発射" },
-            new ItemDef { k = "missile", n = "追尾ミサイル", shortN = "追尾", price = 6000, rate = 1.5f, max = 2, col = 0xff6b4a, ds = "いちばん近い相手を追いかける。高いぶん当たりやすいが、急旋回でかわされる" },
-            new ItemDef { k = "boomerang", n = "ブーメラン", price = 3000, rate = 1.5f, max = 2, col = 0xe0913a, ds = "前へ投げると戻ってくる。運んでいる料理を奪う／受取口の料理を取ってくる（手ぶらのときだけ）" },
-            new ItemDef { k = "star", n = "無敵", price = 8000, rate = 1.5f, max = 2, col = 0xff7ad9, ds = "10秒間ダメージを受けない。ぶつけた客にもダメージを与えず、壊しても修理費がかからない" },
+            new ItemDef { k = "banana", n = "バナナの皮", shortN = "バナナ", price = 1500, rate = 1.5f, max = 3, col = 0xf5d020, ds = "うしろに1マス置く。踏むと激しく滑って回る" },
+            new ItemDef { k = "repair", n = "リペア", price = 4500, rate = 1.5f, max = 3, col = 0x5fd08a, ds = "体力を50%ぶん回復して、旋回・駆動の故障も直す" },
+            new ItemDef { k = "drone", n = "ドローン", price = 5400, rate = 1.5f, max = 2, col = 0x8fd4ff, ds = "運搬中の料理を、乱さずターゲットへ自動で届ける（使い捨て）" },
+            new ItemDef { k = "laser", n = "レーザービーム", shortN = "レーザー", sn = "エネルギーパック", price = 30000, max = 1, ammo = 20, col = 0x6be0ff, ds = "まっすぐ飛ぶ光線を20発。当たると爆発して周りが吹っ飛ぶ（車も）" },
+            new ItemDef { k = "ball", n = "ICBM", shortN = "ICBM", price = 60000, max = 1, col = 0xffcf3a, aim = true, ds = "上へ打ち上げて、狙った場所へ落とす。押しっぱなしで照準、離すと発射" },
+            new ItemDef { k = "missile", n = "追尾ミサイル", shortN = "追尾", price = 18000, rate = 1.5f, max = 2, col = 0xff6b4a, ds = "いちばん近い相手を追いかける。高いぶん当たりやすいが、急旋回でかわされる" },
+            new ItemDef { k = "boomerang", n = "ブーメラン", price = 9000, rate = 1.5f, max = 2, col = 0xe0913a, ds = "前へ投げると戻ってくる。運んでいる料理を奪う／受取口の料理を取ってくる（手ぶらのときだけ）" },
+            new ItemDef { k = "star", n = "無敵", price = 24000, rate = 1.5f, max = 2, col = 0xff7ad9, ds = "10秒間ダメージを受けない。ぶつけた客にもダメージを与えず、壊しても修理費がかからない" },
         };
         public static ItemDef ItemOf(string k) { foreach (var i in ITEMS) if (i.k == k) return i; return null; }
         /// <summary>持ち替えの順（L1・R1）。上の帯に並べる順と同じ（左から右へ）。JS版 ITEM_ORDER。</summary>
@@ -76,12 +77,14 @@ namespace Nekorobo
             return l;
         }
 
+        // 値段は担当の指定で初めを5倍（700→3500 など）。上がり方をそのままにすると最後の1段が5倍（加速 ¥9,800→¥49,000）に
+        // なって手が届かないので、上がり方をゆるくした（加速 1.34→1.22、ほか 1.5→1.32）。合計は加速で約2.8倍、ほかで約3.5倍
         public static readonly UpgradeDef[] UPGRADES =
         {
-            new UpgradeDef { k = "accel", n = "加速アップ", ds = "加速力・バック出力 +15% / Lv（Lv10で2.5倍・最高速10.5m/s）", bas = 700, rate = 1.34f, max = 10 },
-            new UpgradeDef { k = "armor", n = "耐久度アップ", ds = "受けるダメージ −10% / Lv", bas = 1400, rate = 1.50f, max = 5 },
-            new UpgradeDef { k = "jump", n = "ジャンプ性能アップ", ds = "高さ +10% / 飛距離 +15% / 連射間隔 −0.05秒 / Lv", bas = 1100, rate = 1.50f, max = 5 },
-            new UpgradeDef { k = "light", n = "重量軽量化", ds = "ぶつけた客の吹っ飛び・客のダメージ・店の損壊 −10% / Lv", bas = 1200, rate = 1.50f, max = 5 },
+            new UpgradeDef { k = "accel", n = "加速アップ", ds = "加速力・バック出力 +15% / Lv（Lv10で2.5倍・最高速10.5m/s）", bas = 3500, rate = 1.22f, max = 10 },
+            new UpgradeDef { k = "armor", n = "耐久度アップ", ds = "受けるダメージ −10% / Lv", bas = 7000, rate = 1.32f, max = 5 },
+            new UpgradeDef { k = "jump", n = "ジャンプ性能アップ", ds = "高さ +10% / 飛距離 +15% / 連射間隔 −0.05秒 / Lv", bas = 5500, rate = 1.32f, max = 5 },
+            new UpgradeDef { k = "light", n = "重量軽量化", ds = "ぶつけた客の吹っ飛び・客のダメージ・店の損壊 −10% / Lv", bas = 6000, rate = 1.32f, max = 5 },
         };
 
         // ---- 財布（人ごと。協力・チーム戦は対戦を移すときに分ける）

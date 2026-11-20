@@ -21,7 +21,7 @@ namespace Nekorobo
         public bool Open { get; private set; }
         readonly RawImage[] b0 = new RawImage[2], b1 = new RawImage[2]; readonly Texture[] b0Tex = new Texture[2];
         readonly RectTransform[] btnRt = new RectTransform[2]; System.Action[] act;
-        int cur; float lockT, goT = -1; bool armed, pL, pR, pU, pD, pOk, pLB, pRB, room, auto;   // auto … 自動マッチングの部屋
+        int cur, hov = -1; float lockT, goT = -1; bool armed, pL, pR, pU, pD, pOk, pLB, pRB, room, auto;   // auto … 自動マッチングの部屋
         bool onTabs;                 // ↑で札の段を選んでいる
         int tab;                     // いまの札
         RectTransform det;           // 札・グラフ・ひとこと（札を替えたら描き直す）
@@ -66,7 +66,7 @@ namespace Nekorobo
             }
             return n;
         }
-        static string Tag(Player P) { return P.src.kind == "npc" ? "NPC" : (P.idx + 1) + "P"; }
+        static string Tag(Player P) { return (P.idx + 1) + "P"; }        // NPC も「〇P」（担当）
         string ColKey(Player P)
         {
             if (g.mode == "team" && g.players.Count > 1) return RES_COLS[Mathf.Clamp(P.team, 0, 3)];
@@ -584,7 +584,8 @@ namespace Nekorobo
             if (i != cur && Open) Game.SeUi("cur");
             cur = i;
             // 選んでいるときは地を少し明るく（札の段を選んでいる間は、ボタンは明るくしない）
-            for (int k = 0; k < 2; k++) if (b0Tex[k] != null) b0[k].texture = k == cur && !onTabs ? UiBoard.Bright(b0Tex[k]) : b0Tex[k];
+            // マウスが乗っているボタンも明るく（選ぶのは押したとき）
+            for (int k = 0; k < 2; k++) if (b0Tex[k] != null) b0[k].texture = (k == cur && !onTabs) || k == hov ? UiBoard.Bright(b0Tex[k]) : b0Tex[k];
         }
 
         /// <summary>もう一度。ローカルは同じ人数・ルール・ラウンド数で ROUND 1 の面選びへ。オンラインは部屋の待機画面へ</summary>
@@ -638,13 +639,14 @@ namespace Nekorobo
             if (!ok) armed = true;
             bool fire = ok && !pOk && armed && lockT <= 0 && !onTabs;
             pL = l; pR = r; pU = u; pD = d; pOk = ok; pLB = lb; pRB = rb;
-            // 指カーソル（マウスかスティック）。乗った方を選ぶ
+            // マウスは乗せただけでは選ばない（少し明るくするだけ。押したら選んで決める。担当）
             Ptr.Tick(dt, () => Ptr.Center(onTabs && tabRt[tab] != null ? tabRt[tab] : btnRt[cur]));
-            if (Ptr.Moved)
-            {
-                for (int k = 0; k < 2; k++) if (Ptr.Over(btnRt[k]) && (cur != k || onTabs)) { if (onTabs) { onTabs = false; DrawDet(); } Focus(k); }
-            }
             var ms = Mouse.current;
+            {
+                int hv = -1;
+                if (ms != null) for (int k = 0; k < 2; k++) if (RectTransformUtility.RectangleContainsScreenPoint(btnRt[k], ms.position.ReadValue(), null)) hv = k;
+                if (hv != hov) { hov = hv; Focus(cur); }
+            }
             if (ms != null && ms.leftButton.wasPressedThisFrame && lockT <= 0)
             {
                 var mp = ms.position.ReadValue();
