@@ -21,6 +21,16 @@ namespace Nekorobo
     {
         // ================================================================ ローカル
         static bool LocHuman(string v) { return v == "key" || (v != null && v.Length == 4 && v.StartsWith("pad")); }
+        // **パッドの席が1つも無い間は、キーボードの席はパッドでも動かせる**（ゲームの中も同じ。Game の ReadInput）。
+        // 1人ならキーボード・マウス・どのパッドでも遊べる。2人目がパッドでほかの席に入ると、キーボードの席はキーボードだけになる（担当。HTML版 locKeyAny）
+        bool LocKeyAny() { return System.Array.FindIndex(slots, v => v != null && v.Length == 4 && v.StartsWith("pad")) < 0; }
+        // その指（dev）の席か。どのパッドでも動かせるキーボードの席は、パッドの指にとっても自分の席
+        bool LocMine(string v, string dev) { return v == dev || (v == "key" && LocKeyAny() && LocHuman(dev)); }
+        int LocSeatOf(string dev)
+        {
+            int i = System.Array.IndexOf(slots, dev);
+            return i >= 0 || !dev.StartsWith("pad") || !LocKeyAny() ? i : System.Array.IndexOf(slots, "key");
+        }
 
         class LocCur
         {
@@ -44,7 +54,9 @@ namespace Nekorobo
                 var row = st.Row(40, i == 0 ? 8 : 10);
                 SeatNo(row, x0, i);
                 float x = x0 + 70 + 16;
-                var jb = BtnAt(row, x, 0, 230, 40, human ? Lang.Tr("参加") + " (" + Lang.Tr(SlotLabel(v)) + ")" : Lang.Tr("参加"), "sec",
+                // パッドでも動かせるキーボードの席は「参加」だけ（カッコなし。担当）。2人目がパッドで入ると「参加 (キーボード)」
+                bool plain = !human || (v == "key" && LocKeyAny());
+                var jb = BtnAt(row, x, 0, 230, 40, plain ? Lang.Tr("参加") : Lang.Tr("参加") + " (" + Lang.Tr(SlotLabel(v)) + ")", "sec",
                                () => LocJoin(ii, "key"), null, false, "j" + i, 15);
                 jb.devFire = d => LocJoin(ii, d);
                 if (human) OnRing(jb.rt, 230, 40, Mats.Hex(Player.PCOL[i]));
@@ -64,6 +76,8 @@ namespace Nekorobo
                 }
             }
             var live = Live();
+            bool anyK = LocKeyAny();
+            System.Converter<PlayerSrc, string> nm = sc => Lang.Tr(sc.kind == "key" && anyK ? "キーボード・パッド" : sc.Name);
             int n0 = live.FindAll(s => s.team == 0).Count, n1 = live.FindAll(s => s.team == 1).Count;
             bool oneSide = team && live.Count > 0 && (n0 == 0 || n1 == 0);
             // 全員 NPC でも遊べる（見ているだけ。担当）。誰も入っていないときだけスタートできない
@@ -85,8 +99,8 @@ namespace Nekorobo
             Note(st, live.Count == 0 ? "「参加」か「NPC」を押して、1人以上入れてください。"
                    : oneSide ? "チーム戦は<b>青と赤に1人以上ずつ</b>入れてください（右の 青／赤 を押すと入れ替わります）。"
                    : team ? Lang.Tr("<b>{0}人</b>（{1}）　青 <b>{2}人</b> 対 赤 <b>{3}人</b>で遊びます。次の画面で面を選びます。",
-                                    live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray()), n0, n1)
-                   : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(s => Lang.Tr(s.Name)).ToArray())));
+                                    live.Count, string.Join(Lang.Sep, live.ConvertAll(nm).ToArray()), n0, n1)
+                   : Lang.Tr("<b>{0}人</b>（{1}）で遊びます。次の画面で面を選びます。", live.Count, string.Join(Lang.Sep, live.ConvertAll(nm).ToArray())));
             BtnRow(st, new[] { "キャンセル", "スタート" }, new[] { "sec", "go" },
                    new System.Action[] { () => Go("Len"), () => { from = "Local"; next = false; Go("Free"); } },
                    new[] { false, live.Count == 0 || oneSide });
@@ -114,6 +128,8 @@ namespace Nekorobo
         {
             var v = slots[i];
             if (v == dev) { slots[i] = "off"; Game.SeUi("back"); Go("Local"); return; }
+            // パッドでも動かせるキーボードの席をパッドの指で押した … もうその席で遊べるので、そのまま
+            if (LocMine(v, dev)) { Game.SeUi("ok"); return; }
             if (LocHuman(v)) { Game.SeUi("ng"); return; }
             for (int k = 0; k < 4; k++) if (slots[k] == dev) slots[k] = "off";
             slots[i] = dev;
@@ -124,7 +140,7 @@ namespace Nekorobo
         void LocNpc(int i, string dev)
         {
             var v = slots[i];
-            if (LocHuman(v) && v != dev) { Game.SeUi("ng"); return; }
+            if (LocHuman(v) && !LocMine(v, dev)) { Game.SeUi("ng"); return; }
             slots[i] = v != null && v.StartsWith("npc-") ? "off" : "npc-normal";
             Game.SeUi(slots[i] == "off" ? "back" : "ok");
             Go("Local");
@@ -134,7 +150,7 @@ namespace Nekorobo
         void LocNone(int i, string dev)
         {
             var v = slots[i];
-            if (LocHuman(v) && v != dev) { Game.SeUi("ng"); return; }
+            if (LocHuman(v) && !LocMine(v, dev)) { Game.SeUi("ng"); return; }
             if (v == "off") { Game.SeUi("cur", 0.6f); return; }
             slots[i] = "off";
             Game.SeUi("back");
@@ -269,7 +285,7 @@ namespace Nekorobo
                 if (hok) { int hi = LocHit(c.pos); if (hi >= 0) { LocPress(items[hi], c.dev); return; } }
                 if (hbk)
                 {
-                    int at = System.Array.IndexOf(slots, c.dev);
+                    int at = LocSeatOf(c.dev);
                     if (at >= 0) { slots[at] = "off"; Game.SeUi("back"); Go("Local"); return; }
                     Game.SeUi("back"); Go("Len"); return;
                 }
@@ -279,7 +295,7 @@ namespace Nekorobo
             foreach (var c in locCur)
             {
                 c.el.anchoredPosition = new Vector2(c.pos.x, -c.pos.y);
-                int at = System.Array.IndexOf(slots, c.dev);
+                int at = LocSeatOf(c.dev);
                 c.tgBg.gameObject.SetActive(at >= 0);
                 if (at >= 0)
                 {
